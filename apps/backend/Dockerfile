@@ -1,50 +1,48 @@
 # ════════════════════════════════════════════════════════════════
 # Stage 1 — Builder
-# Compile TypeScript, génère le client Prisma
+# Installe, génère Prisma, compile, puis élague les dépendances de
+# dev — tout en une seule étape séquentielle. Auparavant, le stage
+# runner relançait son propre `npm ci` indépendant, exécuté par
+# BuildKit en parallèle du builder ; sur le builder Railway ("Metal
+# builder") ça provoquait une erreur intermittente et non
+# reproductible en local ("No workspaces found"). En supprimant le
+# second `npm ci` indépendant, on élimine ce risque de concurrence.
 # ════════════════════════════════════════════════════════════════
-FROM node:20.18.0-alpine AS builder
+FROM node:22.12.0-alpine AS builder
+
+# OpenSSL explicite — sans ça, le moteur Prisma échoue à détecter la
+# version d'OpenSSL sur cette image Alpine et plante au démarrage
+# ("Could not parse schema engine response").
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Un seul COPY pour tout le contexte — des COPY séparés par sous-dossier
-# (prisma/, src/) se sont montrés instables sur le builder Railway
-# ("failed to compute cache key... not found" aléatoire d'un build à
-# l'autre, sur des instantanés pourtant frais). Un COPY unique élimine
-# ce risque ; le cache Docker est moins fin mais le repo est petit.
 COPY . .
 
 RUN npm ci --workspace=apps/backend
 RUN cd apps/backend && npx prisma generate
 RUN cd apps/backend && npm run build
+RUN npm prune --omit=dev
 
 
 # ════════════════════════════════════════════════════════════════
 # Stage 2 — Runner
-# Image de production allégée, utilisateur non-root
+# Image de production allégée, utilisateur non-root — copie
+# intégralement le résultat déjà élagué du builder, sans réinstaller
+# quoi que ce soit ici.
 # ════════════════════════════════════════════════════════════════
-FROM node:20.18.0-alpine AS runner
+FROM node:22.12.0-alpine AS runner
 
-# Utilisateur non-root pour la sécurité
+# Même raison qu'à l'étape builder — requis au runtime pour que le
+# moteur Prisma (migrate deploy + client) fonctionne correctement
+RUN apk add --no-cache openssl
+
 RUN addgroup -g 1001 -S warah && \
     adduser -u 1001 -S warah -G warah
 
 WORKDIR /app
 
-# Même principe qu'à l'étape builder — un seul COPY pour tout le contexte
-COPY . .
-
-# Installer uniquement les dépendances de production
-RUN npm ci --workspace=apps/backend --omit=dev && \
-    npm cache clean --force
-
-# Générer le client Prisma dans l'env de production
-RUN cd apps/backend && npx prisma generate
-
-# Remplacer le dist source par le dist compilé depuis le builder
-COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
-
-# Changer le propriétaire des fichiers
-RUN chown -R warah:warah /app
+COPY --from=builder --chown=warah:warah /app ./
 
 USER warah
 
