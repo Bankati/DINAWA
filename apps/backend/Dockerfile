@@ -6,21 +6,15 @@ FROM node:20.18.0-alpine AS builder
 
 WORKDIR /app
 
-# Copier les manifestes workspace en premier (cache layer)
-COPY package*.json ./
-COPY apps/backend/package*.json ./apps/backend/
+# Un seul COPY pour tout le contexte — des COPY séparés par sous-dossier
+# (prisma/, src/) se sont montrés instables sur le builder Railway
+# ("failed to compute cache key... not found" aléatoire d'un build à
+# l'autre, sur des instantanés pourtant frais). Un COPY unique élimine
+# ce risque ; le cache Docker est moins fin mais le repo est petit.
+COPY . .
 
-# Installer toutes les dépendances (dev incluses pour la compilation)
 RUN npm ci --workspace=apps/backend
-
-# Copier le schéma Prisma et générer le client
-COPY apps/backend/prisma ./apps/backend/prisma
 RUN cd apps/backend && npx prisma generate
-
-# Copier les sources et compiler
-COPY apps/backend/tsconfig*.json ./apps/backend/
-COPY apps/backend/nest-cli.json ./apps/backend/
-COPY apps/backend/src ./apps/backend/src
 RUN cd apps/backend && npm run build
 
 
@@ -36,21 +30,17 @@ RUN addgroup -g 1001 -S warah && \
 
 WORKDIR /app
 
-# Copier les manifestes workspace
-COPY package*.json ./
-COPY apps/backend/package*.json ./apps/backend/
+# Même principe qu'à l'étape builder — un seul COPY pour tout le contexte
+COPY . .
 
 # Installer uniquement les dépendances de production
 RUN npm ci --workspace=apps/backend --omit=dev && \
     npm cache clean --force
 
-# Copier le schéma et les migrations Prisma (requis pour migrate deploy)
-COPY apps/backend/prisma ./apps/backend/prisma
-
 # Générer le client Prisma dans l'env de production
 RUN cd apps/backend && npx prisma generate
 
-# Copier le code compilé depuis le builder
+# Remplacer le dist source par le dist compilé depuis le builder
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 
 # Changer le propriétaire des fichiers
