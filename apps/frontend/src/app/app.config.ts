@@ -1,19 +1,12 @@
-import { ApplicationConfig, provideZoneChangeDetection, ErrorHandler } from '@angular/core';
-import { provideRouter, withEnabledBlockingInitialNavigation } from '@angular/router';
-import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
-import * as Sentry from '@sentry/angular';
+import { ApplicationConfig } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/http';
 import { routes } from './app.routes';
+import { authInterceptor } from './core/interceptors/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(routes, withEnabledBlockingInitialNavigation()),
-    provideHttpClient(withInterceptorsFromDi()),
-
-    // Sentry error handler (no-op si Sentry n'est pas initialisé)
-    {
-      provide: ErrorHandler,
-      useValue: Sentry.createErrorHandler({ showDialog: false }),
-    },
-  ],
+    provideRouter(routes),
+    provideHttpClient(withInterceptors([authInterceptor]), withFetch())
+  ]
 };

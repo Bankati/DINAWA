@@ -1,60 +1,48 @@
 # ════════════════════════════════════════════════════════════════
 # Stage 1 — Builder
-# Compile TypeScript, génère le client Prisma
+# Installe, génère Prisma, compile, puis élague les dépendances de
+# dev — tout en une seule étape séquentielle. Auparavant, le stage
+# runner relançait son propre `npm ci` indépendant, exécuté par
+# BuildKit en parallèle du builder ; sur le builder Railway ("Metal
+# builder") ça provoquait une erreur intermittente et non
+# reproductible en local ("No workspaces found"). En supprimant le
+# second `npm ci` indépendant, on élimine ce risque de concurrence.
 # ════════════════════════════════════════════════════════════════
-FROM node:20.18.0-alpine AS builder
+FROM node:22.12.0-alpine AS builder
+
+# OpenSSL explicite — sans ça, le moteur Prisma échoue à détecter la
+# version d'OpenSSL sur cette image Alpine et plante au démarrage
+# ("Could not parse schema engine response").
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copier les manifestes workspace en premier (cache layer)
-COPY package*.json ./
-COPY apps/backend/package*.json ./apps/backend/
+COPY . .
 
-# Installer toutes les dépendances (dev incluses pour la compilation)
 RUN npm ci --workspace=apps/backend
-
-# Copier le schéma Prisma et générer le client
-COPY apps/backend/prisma ./apps/backend/prisma
 RUN cd apps/backend && npx prisma generate
-
-# Copier les sources et compiler
-COPY apps/backend/tsconfig*.json ./apps/backend/
-COPY apps/backend/nest-cli.json ./apps/backend/
-COPY apps/backend/src ./apps/backend/src
 RUN cd apps/backend && npm run build
+RUN npm prune --omit=dev
 
 
 # ════════════════════════════════════════════════════════════════
 # Stage 2 — Runner
-# Image de production allégée, utilisateur non-root
+# Image de production allégée, utilisateur non-root — copie
+# intégralement le résultat déjà élagué du builder, sans réinstaller
+# quoi que ce soit ici.
 # ════════════════════════════════════════════════════════════════
-FROM node:20.18.0-alpine AS runner
+FROM node:22.12.0-alpine AS runner
 
-# Utilisateur non-root pour la sécurité
+# Même raison qu'à l'étape builder — requis au runtime pour que le
+# moteur Prisma (migrate deploy + client) fonctionne correctement
+RUN apk add --no-cache openssl
+
 RUN addgroup -g 1001 -S warah && \
     adduser -u 1001 -S warah -G warah
 
 WORKDIR /app
 
-# Copier les manifestes workspace
-COPY package*.json ./
-COPY apps/backend/package*.json ./apps/backend/
-
-# Installer uniquement les dépendances de production
-RUN npm ci --workspace=apps/backend --omit=dev && \
-    npm cache clean --force
-
-# Copier le schéma et les migrations Prisma (requis pour migrate deploy)
-COPY apps/backend/prisma ./apps/backend/prisma
-
-# Générer le client Prisma dans l'env de production
-RUN cd apps/backend && npx prisma generate
-
-# Copier le code compilé depuis le builder
-COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
-
-# Changer le propriétaire des fichiers
-RUN chown -R warah:warah /app
+COPY --from=builder --chown=warah:warah /app ./
 
 USER warah
 
