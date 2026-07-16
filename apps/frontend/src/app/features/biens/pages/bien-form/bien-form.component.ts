@@ -138,14 +138,14 @@ import { CommonModule } from '@angular/common';
             @if (currentStep === 2) {
               <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Adresse</h2>
-                
-                <div class="space-y-4">
+
+                <div class="space-y-4" formGroupName="adresse">
                   <!-- Quartier -->
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Quartier *</label>
                     <input
                       type="text"
-                      formControlName="adresse.quartier"
+                      formControlName="quartier"
                       class="input-field"
                       placeholder="Ex: Centre"
                     />
@@ -158,7 +158,7 @@ import { CommonModule } from '@angular/common';
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Ville *</label>
                     <select
-                      formControlName="adresse.ville"
+                      formControlName="ville"
                       class="input-field"
                     >
                       <option value="">Sélectionnez une ville</option>
@@ -181,7 +181,7 @@ import { CommonModule } from '@angular/common';
                     <label class="block text-sm font-medium text-gray-700 mb-2">Adresse complète</label>
                     <input
                       type="text"
-                      formControlName="adresse.adresseComplete"
+                      formControlName="adresseComplete"
                       class="input-field"
                       placeholder="Ex: 123 Rue de la Paix, Lomé"
                     />

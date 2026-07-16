@@ -715,9 +715,10 @@ Dépendances approuvées pour ce projet :
 - `resend` — emails transactionnels
 - `web-push` — notifications push web (VAPID)
 - `tesseract.js` — OCR pour vérification CNI togolaise
+- `mrz` — parsing et validation des check digits ICAO 9303 de la zone MRZ (verso CNI) — signal secondaire, jamais gate sur `VERIFIED`/`REJECTED`
 - `pdfkit` — génération de PDFs à la volée (quittances, rapports, exports)
 - `exceljs` — export XLSX des paiements
-- `sharp` — compression d'images à l'upload
+- `sharp` — compression d'images à l'upload et rotation des images CNI avant OCR
 - `helmet` — headers de sécurité HTTP
 - `axios` — client HTTP pour les appels sortants (Cashpay) avec timeouts explicites
 - `p-retry` — retry avec backoff exponentiel borné pour les appels idempotents

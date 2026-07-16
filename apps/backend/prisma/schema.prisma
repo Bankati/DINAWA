@@ -178,11 +178,25 @@ model User {
   role                UserRole
   firstName           String
   lastName            String
+  // Ville de résidence — texte libre, aucune logique métier attachée
+  // (contrairement à OwnerProfile.residenceCountry qui pilote la distinction
+  // local/diaspora). Voir /architect révision inscription owner/manager.
+  city                String?
   accountStatus       AccountStatus       @default(ACTIVE)
   notificationConsent NotificationConsent @default(NOT_ASKED)
   reminderDaysBefore  Int                 @default(5)
   overdueGraceDays    Int                 @default(3)
   profilePhotoPath    String?
+  // Blocage temporaire après 5 échecs de connexion consécutifs (voir
+  // build-plan.md unité 10) — remis à zéro sur connexion réussie.
+  failedLoginAttempts Int                 @default(0)
+  lockedUntil         DateTime?           @db.Timestamptz(6)
+  // Anti-doublon pour les rappels d'inactivité (voir build-plan.md unité 11)
+  // — remis à `null` dès que le compte redevient actif, pour que le prochain
+  // cycle d'inactivité reparte de zéro.
+  inactivityWarning30SentAt DateTime?     @db.Timestamptz(6)
+  inactivityWarning7SentAt  DateTime?     @db.Timestamptz(6)
+  inactivityWarning1SentAt  DateTime?     @db.Timestamptz(6)
   anonymizedAt        DateTime?           @db.Timestamptz(6)
   createdAt           DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime            @updatedAt @db.Timestamptz(6)
@@ -197,6 +211,8 @@ model User {
   listingsPublished      Listing[]
   leasesAsOwner          Lease[]                @relation("LeaseOwner")
   leasesAsTenant         Lease[]                @relation("LeaseTenant")
+  tenantBlocksReceived   TenantPropertyBlock[]  @relation("TenantPropertyBlockTenant")
+  tenantBlocksAuthored   TenantPropertyBlock[]  @relation("TenantPropertyBlockAuthor")
   mandatesAsOwner        Mandate[]              @relation("MandateOwner")
   mandatesAsManager      Mandate[]              @relation("MandateManager")
   paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
@@ -280,6 +296,12 @@ model PasswordResetOtp {
   @@map("password_reset_otps")
 }
 
+// Contrainte non exprimable en Prisma : une seule IdentityVerification
+// PENDING par userId à la fois (voir invariant #15 — l'OCR tourne en
+// arrière-plan via IdentityVerificationListener, jamais dans le request
+// handler). À ajouter manuellement dans la migration générée : CREATE
+// UNIQUE INDEX identity_verifications_user_pending_unique ON
+// identity_verifications (user_id) WHERE status = 'PENDING'.
 model IdentityVerification {
   id          String               @id @default(cuid())
   userId      String
@@ -289,6 +311,17 @@ model IdentityVerification {
   reason      String?
   rawText     String?              @db.Text
   createdAt   DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @db.Timestamptz(6)
+
+  // Verso obligatoire à l'upload (voir IdentityService) mais jamais gate sur
+  // `status` — échec de lecture laisse simplement ces champs vides. Le
+  // checksum MRZ est un signal secondaire (bruit OCR fréquent sur cette
+  // police dense), jamais une autorité de décision à lui seul.
+  storagePathBack       String?
+  rawTextBack           String? @db.Text
+  emergencyContactRaw   String?
+  emergencyContactPhone String?
+  mrzChecksumValid      Boolean?
 
   @@index([userId])
   @@map("identity_verifications")
@@ -321,6 +354,7 @@ model Property {
   leases    Lease[]
   mandates  Mandate[]
   listings  Listing[]
+  tenantBlocks TenantPropertyBlock[]
 
   @@index([ownerId])
   @@index([status])
@@ -353,10 +387,31 @@ model PropertyDocument {
   @@map("property_documents")
 }
 
+// Blocage d'un locataire pour un bien précis (voir build-plan.md unité 14)
+// — jamais global au compte, jamais à l'échelle du propriétaire. Le même
+// locataire reste invitable par le même propriétaire pour un autre bien, ou
+// par n'importe quel autre propriétaire. Vérifié dès l'invitation
+// (AuthService.inviteTenant()), pas seulement à la création du bail.
+model TenantPropertyBlock {
+  id             String   @id @default(cuid())
+  propertyId     String
+  property       Property @relation(fields: [propertyId], references: [id])
+  tenantUserId   String
+  tenant         User     @relation("TenantPropertyBlockTenant", fields: [tenantUserId], references: [id])
+  blockedByUserId String
+  blockedBy      User     @relation("TenantPropertyBlockAuthor", fields: [blockedByUserId], references: [id])
+  reason         String
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([propertyId, tenantUserId])
+  @@index([tenantUserId])
+  @@map("tenant_property_blocks")
+}
+
 // Contrainte non exprimable en Prisma : un seul Lease ACTIVE par
-// tenantUserId à la fois. À ajouter manuellement dans la migration
-// générée : CREATE UNIQUE INDEX leases_tenant_active_unique ON
-// leases (tenant_user_id) WHERE status = 'ACTIVE'.
+// tenantUserId à la fois — déjà en base (migration
+// 20260701104113_partial_unique_active_constraints, unité 02),
+// `leases_tenant_active_unique`.
 model Lease {
   id                      String           @id @default(cuid())
   propertyId              String
@@ -375,6 +430,13 @@ model Lease {
   status                  LeaseStatus      @default(ACTIVE)
   terminatedAt            DateTime?        @db.Timestamptz(6)
   terminationReason       String?
+  // Réglages propres à ce bail (voir build-plan.md unité 15, /architect) —
+  // jamais liés à `User.reminderDaysBefore`/`overdueGraceDays` (réglages
+  // globaux distincts, non utilisés par cette unité). Optionnels : `null`
+  // signifie aucun rappel/alerte configuré pour ce bail. Stockage
+  // uniquement — l'envoi effectif reste pour les unités 24/25.
+  reminderDaysBefore     Int?
+  overdueAlertWindowDays Int?
   createdAt               DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt               DateTime         @updatedAt @db.Timestamptz(6)
 

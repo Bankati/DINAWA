@@ -23,7 +23,8 @@
       "@core/*": ["src/app/core/*"],
       "@shared/*": ["src/app/shared/*"],
       "@features/*": ["src/app/features/*"],
-      "@layouts/*": ["src/app/layouts/*"]
+      "@layouts/*": ["src/app/layouts/*"],
+      "@env/*": ["src/environments/*"]
     }
   },
   "angularCompilerOptions": {

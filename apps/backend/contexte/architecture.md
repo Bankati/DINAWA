@@ -57,8 +57,8 @@ Structure du projet, en respectant strictement la modularité NestJS.
 - `src/modules/identity/` — vérification automatique de la CNI togolaise via Tesseract.js
 - `src/modules/users/` — gestion du profil utilisateur (modification infos, photo, préférences de notification, suppression RGPD)
 - `src/modules/properties/` — CRUD biens immobiliers, statuts, photos et documents associés
-- `src/modules/tenants/` — gestion des locataires liés à un propriétaire, invitations, historique
-- `src/modules/leases/` — création et résiliation des baux, génération du calendrier d'échéances
+- `src/modules/tenants/` — blocage locataire↔bien (`TenantPropertyBlock`), historiques baux par bien et par locataire (la création/invitation du locataire reste dans `src/modules/auth/`, voir unité 14)
+- `src/modules/leases/` — création et résiliation des baux, génération du calendrier d'échéances (`POST /api/leases`, `POST /api/leases/:id/terminate`)
 - `src/modules/payments/` — initialisation Cashpay, webhook Cashpay, saisie manuelle propriétaire/gestionnaire, déclaration locataire, historique, export
 - `src/modules/receipts/` — génération à la volée des quittances PDF (jamais stockées)
 - `src/modules/listings/` — publication d'annonces, page publique, contact candidat, modération
@@ -102,7 +102,7 @@ Source de vérité pour toutes les données métier et techniques :
 - Abonnements push web (`PushSubscription`)
 - Journal d'audit (`AuditLog`) pour la traçabilité légale des transactions financières
 
-### Supabase Storage (5 buckets privés)
+### Supabase Storage (6 buckets privés)
 
 Stockage des fichiers binaires uploadés par les utilisateurs. Tous les buckets sont privés — accès uniquement via URL signée (expiration 15 minutes max).
 
@@ -113,6 +113,7 @@ Stockage des fichiers binaires uploadés par les utilisateurs. Tous les buckets 
 | `id-documents`       | Cartes nationales d'identité uploadées pour vérification OCR (qualité préservée, non compressée)                                  |
 | `manager-documents`  | Références professionnelles des gestionnaires                                                                                     |
 | `payment-proofs`     | Photos justificatives uploadées soit par le locataire (déclaration) soit par le propriétaire/gestionnaire (confirmation manuelle) |
+| `profile-photos`     | Photo de profil de l'utilisateur (tous rôles) — ajouté à l'étape 10, compressée via sharp comme `property-photos`                 |
 
 ### Supabase Auth
 
@@ -140,10 +141,11 @@ Aucun modèle Prisma `Receipt`, `MonthlyReport` ou `Invoice` ne stocke un binair
 
 ### Inscription et vérification
 
-- Inscription via Supabase Auth (`POST /api/auth/signup/owner` ou `/signup/manager` ou `/signup/tenant?token=...`) — création parallèle du `User` côté Prisma et du profil correspondant en une transaction
+- Inscription via Supabase Auth (`POST /api/auth/signup/owner` ou `/signup/manager` ou `/signup/tenant?token=...`) — création parallèle du `User` (avec `phone`/`city` obligatoires pour owner/manager) côté Prisma et du profil correspondant en une transaction
 - Le rôle de l'utilisateur (`OWNER`, `TENANT`, `MANAGER`, `ADMIN`) est figé à l'inscription et stocké côté Prisma
-- Pièce d'identité obligatoire pour propriétaire et gestionnaire, optionnelle pour locataire
+- Pièce d'identité **facultative pour tous les rôles** (révisé le 2026-07-16, voir /architect — initialement obligatoire pour propriétaire/gestionnaire) : peut être fournie à l'inscription ou plus tard via `POST /api/identity/verify`
 - Vérification CNI automatique via Tesseract.js (étape 07) — décision `VERIFIED` ou `REJECTED` en moins de 10 secondes, aucune validation humaine
+- **Le verrou fonctionnel n'est plus l'inscription mais la création de bien** : `PropertiesService.create()` refuse tant que `idVerificationStatus !== VERIFIED` (`assertIdentityVerified()`, `src/common/permissions/identity-verified.ts`) — seul point de blocage dans tout le produit, aucune autre action n'en dépend
 - Le statut de compte (`accountStatus`) est suivi côté Prisma : `ACTIVE`, `SUSPENDED_INACTIVITY`, `SUSPENDED_ADMIN`, `SUSPENDED_PAYMENT`
 
 ### Connexion
@@ -158,7 +160,7 @@ Aucun modèle Prisma `Receipt`, `MonthlyReport` ou `Invoice` ne stocke un binair
 - Tout endpoint authentifié est protégé par `SupabaseAuthGuard` (validation du JWT Supabase + synchronisation avec l'`User` Prisma + injection dans `request.user`)
 - Les endpoints qui exigent un rôle sont annotés `@Roles(UserRole.OWNER)` et protégés par `RolesGuard`
 - L'objet `request.user` est l'`User` Prisma — jamais l'`User` Supabase brut
-- Les comptes `SUSPENDED_ADMIN` voient leur JWT rejeté avec `401`. Les comptes `SUSPENDED_INACTIVITY` ou `SUSPENDED_PAYMENT` peuvent se connecter mais reçoivent `403 ACCOUNT_SUSPENDED` sur tout endpoint de mutation
+- Les comptes `SUSPENDED_ADMIN` voient leur JWT rejeté avec `401`. Les comptes `SUSPENDED_INACTIVITY` ou `SUSPENDED_PAYMENT` peuvent se connecter mais reçoivent `403 ACCOUNT_SUSPENDED` sur tout endpoint de mutation — **sauf** ceux annotés `@AllowWhileSuspended()`, réservés aux actions dont le but est justement de débloquer le compte (ex. `POST /properties`, voir build-plan.md unité 11/12)
 
 ### Autorisation par bien — `canActOnProperty()`
 
@@ -179,6 +181,9 @@ Le helper `canActOnProperty(user, propertyId)` dans `src/common/permissions/` es
 - Un `TenantProfile` ne peut avoir qu'un seul `Lease` en statut `ACTIVE` à un instant donné — contrainte unique partielle au niveau de la base de données
 - Le locataire ne peut consulter que son propre bail actif et ses propres paiements (`tenantUserId === user.id`)
 - L'historique des baux passés et des paiements associés est conservé intégralement même quand le locataire change de bien — accessible via `GET /api/tenants/:id/leases/history`
+- **Blocage locataire↔bien** (unité 14) : un propriétaire/gestionnaire peut bloquer un locataire pour **un bien précis**, avec justification obligatoire (`TenantPropertyBlock`) — jamais global au compte, jamais à l'échelle du propriétaire. Le même locataire reste invitable par ce même propriétaire pour un autre bien, ou par n'importe quel autre propriétaire. Vérifié à la fois dans `POST /api/auth/invite/tenant` (unité 09) et `POST /api/leases` (unité 15) via `assertTenantNotBlocked()` (`src/common/permissions/tenant-block.ts`), autorité unique — jamais de vérification inline ailleurs. Un blocage est refusé si un bail actif existe encore entre ce locataire et ce bien (résiliation d'abord requise).
+- **Cycle de vie d'un bail** (unité 15) : `POST /api/leases` crée le bail, génère immédiatement tout le calendrier d'échéances connu (durée fixe ou 12 mois glissants pour un bail ouvert — pas de cron dédié, prolongation à la demande à l'unité 16) et fait passer le bien à `OCCUPIED`, en une seule transaction. `POST /api/leases/:id/terminate` libère le bien (`VACANT`) et purge les échéances futures jamais touchées par un paiement — les échéances passées ou en cours (même partiellement payées) restent intactes.
+- **Accès à l'historique d'un locataire** (`GET /api/tenants/:id/leases/history`) : le locataire lui-même et un admin voient tous ses baux ; tout autre propriétaire/gestionnaire doit avoir eu au moins un bail (actif ou passé) avec ce locataire pour accéder à l'endpoint, mais ne voit alors que **ses propres baux avec lui**, jamais ceux liés à un propriétaire tiers — la relation est un filtre appliqué à la requête elle-même (même principe que `propertyVisibilityWhere()`), jamais une simple porte d'entrée tout-ou-rien (voir /review unité 14, fuite de confidentialité corrigée).
 
 ### Spécificité du gestionnaire
 

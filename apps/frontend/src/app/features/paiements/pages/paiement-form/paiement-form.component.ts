@@ -2,8 +2,13 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { PaiementsService, PaiementRequest } from '../../services/paiements.service';
+import { LocatairesService } from '../../../locataires/services/locataires.service';
+import { BiensService } from '../../../biens/services/biens.service';
 import { FrequencePaiement, ModePaiement } from '@core/models/paiement.model';
+import { Locataire } from '@core/models/locataire.model';
+import { Bien } from '@core/models/bien.model';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -13,7 +18,8 @@ import { CommonModule } from '@angular/common';
     CommonModule,
     ReactiveFormsModule,
     RouterModule,
-    LokAlerteComponent
+    LokAlerteComponent,
+    LokSkeletonComponent
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -49,17 +55,16 @@ import { CommonModule } from '@angular/common';
               <!-- Locataire -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Locataire *</label>
-                <select
-                  formControlName="locataireId"
-                  class="input-field"
-                >
-                  <option value="">Sélectionnez un locataire</option>
-                  <option value="1">Locataire #1 - Kofi Mensah</option>
-                  <option value="2">Locataire #2 - Awa Kouassi</option>
-                  <option value="3">Locataire #3 - Yao Agbogba</option>
-                  <option value="4">Locataire #4 - Mawunyo Togbe</option>
-                  <option value="5">Locataire #5 - Komla Amouzou</option>
-                </select>
+                @if (loadingLocataires) {
+                  <lok-skeleton type="text"></lok-skeleton>
+                } @else {
+                  <select formControlName="locataireId" class="input-field">
+                    <option value="">Sélectionnez un locataire</option>
+                    @for (loc of locataires; track loc.id) {
+                      <option [value]="loc.id">{{ loc.prenoms }} {{ loc.nom }}</option>
+                    }
+                  </select>
+                }
                 @if (paiementForm.get('locataireId')?.touched && paiementForm.get('locataireId')?.invalid) {
                   <p class="text-red-500 text-xs mt-1">Le locataire est requis</p>
                 }
@@ -68,17 +73,16 @@ import { CommonModule } from '@angular/common';
               <!-- Bien -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Bien *</label>
-                <select
-                  formControlName="bienId"
-                  class="input-field"
-                >
-                  <option value="">Sélectionnez un bien</option>
-                  <option value="1">Appartement Lomé Centre</option>
-                  <option value="2">Villa Sokodé</option>
-                  <option value="3">Studio Kara</option>
-                  <option value="4">Bureau Kpalimé</option>
-                  <option value="5">Local Commercial Lomé</option>
-                </select>
+                @if (loadingBiens) {
+                  <lok-skeleton type="text"></lok-skeleton>
+                } @else {
+                  <select formControlName="bienId" class="input-field">
+                    <option value="">Sélectionnez un bien</option>
+                    @for (bien of biens; track bien.id) {
+                      <option [value]="bien.id">{{ bien.titre }} — {{ bien.adresse.ville }}</option>
+                    }
+                  </select>
+                }
                 @if (paiementForm.get('bienId')?.touched && paiementForm.get('bienId')?.invalid) {
                   <p class="text-red-500 text-xs mt-1">Le bien est requis</p>
                 }
@@ -228,12 +232,18 @@ import { CommonModule } from '@angular/common';
 })
 export class PaiementFormComponent implements OnInit {
   paiementForm: FormGroup;
-  isSubmitting: boolean = false;
-  errorMessage: string = '';
+  isSubmitting = false;
+  errorMessage = '';
+  locataires: Locataire[] = [];
+  biens: Bien[] = [];
+  loadingLocataires = false;
+  loadingBiens = false;
 
   constructor(
     private fb: FormBuilder,
     private paiementsService: PaiementsService,
+    private locatairesService: LocatairesService,
+    private biensService: BiensService,
     private router: Router,
     private route: ActivatedRoute
   ) {
@@ -251,10 +261,25 @@ export class PaiementFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // Pré-remplir la date de paiement avec aujourd'hui
     const today = new Date().toISOString().split('T')[0];
-    this.paiementForm.patchValue({
-      datePaiement: today
+    this.paiementForm.patchValue({ datePaiement: today });
+    this.chargerLocataires();
+    this.chargerBiens();
+  }
+
+  private chargerLocataires(): void {
+    this.loadingLocataires = true;
+    this.locatairesService.getLocataires().subscribe({
+      next: (data) => { this.locataires = data; this.loadingLocataires = false; },
+      error: () => { this.loadingLocataires = false; }
+    });
+  }
+
+  private chargerBiens(): void {
+    this.loadingBiens = true;
+    this.biensService.getBiens().subscribe({
+      next: (data) => { this.biens = data; this.loadingBiens = false; },
+      error: () => { this.loadingBiens = false; }
     });
   }
 

@@ -1,10 +1,24 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Observable, BehaviorSubject, tap, catchError, of } from 'rxjs';
+import { Observable, from, BehaviorSubject, of, firstValueFrom, timer } from 'rxjs';
+import { catchError, map, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
+import { environment } from '@env/environment';
+import { SupabaseService } from './supabase.service';
+import type { Session, User } from '@supabase/supabase-js';
 
-export type UserType = 'proprietaire_local' | 'proprietaire_diaspora' | 'locataire' | 'gestionnaire';
+export type UserRole = 'OWNER' | 'TENANT' | 'MANAGER' | 'ADMIN';
+
+export interface WARAHUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  phone?: string;
+  accountStatus?: string;
+}
 
 export interface RegisterRequest {
   prenom: string;
@@ -12,9 +26,8 @@ export interface RegisterRequest {
   email: string;
   telephone: string;
   motDePasse: string;
-  typeUtilisateur: UserType;
+  typeUtilisateur: 'proprietaire_local' | 'proprietaire_diaspora' | 'locataire' | 'gestionnaire';
   pieceIdentite?: File;
-  // Champs conditionnels
   ville?: string;
   paysResidence?: string;
   zoneIntervention?: string[];
@@ -27,19 +40,6 @@ export interface LoginRequest {
   motDePasse: string;
 }
 
-export interface LoginResponse {
-  token: string;
-  refreshToken: string;
-  utilisateur: {
-    id: string;
-    prenom: string;
-    nom: string;
-    email: string;
-    telephone: string;
-    ville: string;
-  };
-}
-
 export interface ForgotPasswordRequest {
   email: string;
 }
@@ -49,211 +49,257 @@ export interface ResetPasswordRequest {
   nouveauMotDePasse: string;
 }
 
-export interface Verify2FARequest {
-  email: string;
-  code: string;
-}
+// Correspondance rôles Supabase → routes Angular
+const ROLE_ROUTES: Record<string, string> = {
+  OWNER:   '/dashboard',
+  TENANT:  '/locataire',
+  MANAGER: '/gestionnaire',
+  ADMIN:   '/admin',
+};
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class AuthService {
-  private apiUrl = 'http://localhost:3000/api/auth'; // À remplacer par l'URL réelle de l'API
-  private currentUserSubject = new BehaviorSubject<any>(null);
-  public currentUser$ = this.currentUserSubject.asObservable();
+  private readonly apiUrl = `${environment.apiUrl}/auth`;
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
+  private currentUserSubject = new BehaviorSubject<WARAHUser | null>(null);
+  public currentUser$ = this.currentUserSubject.asObservable();
+
+  // Session Supabase courante (contient le JWT access_token)
+  private session: Session | null = null;
+
+  // Persiste en sessionStorage : évite de re-provisionner à chaque rechargement
+  private get provisioned(): boolean {
+    return sessionStorage.getItem('warah_provisioned') === '1';
+  }
+  private set provisioned(v: boolean) {
+    if (v) sessionStorage.setItem('warah_provisioned', '1');
+    else sessionStorage.removeItem('warah_provisioned');
+  }
+
   constructor(
+    private supabase: SupabaseService,
     private http: HttpClient,
-    private router: Router
+    private router: Router,
   ) {
-    // Vérifier si un token existe au démarrage
-    this.loadUserFromStorage();
+    if (this.isBrowser) {
+      // Réveille le backend dès le démarrage (évite le cold start au moment du login)
+      this.warmUpBackend();
+
+      // Écouter les changements de session Supabase (refresh automatique, déconnexion)
+      this.supabase.auth.onAuthStateChange(async (_event, session) => {
+        this.session = session;
+        if (session) {
+          if (!this.provisioned) {
+            // Premier login : /auth/register retourne le profil complet — un seul appel
+            const user = await firstValueFrom(this.provisionAndGetProfile());
+            if (user) this.currentUserSubject.next(user);
+          } else {
+            // Rechargement : utilisateur déjà en base, charger le profil directement
+            await this.loadWARAHProfile();
+          }
+        } else {
+          this.currentUserSubject.next(null);
+        }
+      });
+
+      // Charger la session existante au démarrage (utilisateur déjà en base — pas besoin de register)
+      this.supabase.getSession().then(({ data }) => {
+        this.session = data.session;
+        if (data.session) {
+          this.loadWARAHProfile();
+        }
+      });
+    }
   }
 
-  /**
-   * Charge l'utilisateur depuis le localStorage si un token existe
-   * (localStorage n'existe pas côté serveur lors du rendu SSR)
-   */
-  private loadUserFromStorage(): void {
-    if (!this.isBrowser) {
-      return;
-    }
-    const token = localStorage.getItem('warah_token');
-    const user = localStorage.getItem('warah_user');
+  // ── Authentification ─────────────────────────────────────────
 
-    if (token && user) {
-      this.currentUserSubject.next(JSON.parse(user));
-    }
-  }
-
-  /**
-   * Inscription d'un nouvel utilisateur
-   */
-  register(data: RegisterRequest): Observable<any> {
-    const formData = new FormData();
-    formData.append('prenom', data.prenom);
-    formData.append('nom', data.nom);
-    formData.append('email', data.email);
-    formData.append('telephone', data.telephone);
-    formData.append('motDePasse', data.motDePasse);
-    formData.append('typeUtilisateur', data.typeUtilisateur);
-    
-    // Champs conditionnels
-    if (data.ville) {
-      formData.append('ville', data.ville);
-    }
-    if (data.paysResidence) {
-      formData.append('paysResidence', data.paysResidence);
-    }
-    if (data.zoneIntervention && data.zoneIntervention.length > 0) {
-      formData.append('zoneIntervention', JSON.stringify(data.zoneIntervention));
-    }
-    if (data.tarifs) {
-      formData.append('tarifs', data.tarifs);
-    }
-    if (data.references) {
-      formData.append('references', data.references);
-    }
-    if (data.pieceIdentite) {
-      formData.append('pieceIdentite', data.pieceIdentite);
-    }
-
-    return this.http.post(`${this.apiUrl}/register`, formData).pipe(
-      tap((response: any) => {
-        // Stocker le token et l'utilisateur
-        this.setSession(response);
-      }),
-      catchError((error: any) => {
-        console.error('Erreur d\'inscription:', error);
-        return of(error);
+  login(data: LoginRequest): Observable<WARAHUser> {
+    return from(
+      this.supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.motDePasse,
+      })
+    ).pipe(
+      tap(({ error }) => { if (error) throw error; }),
+      map(({ data: d }) => {
+        this.session = d.session;
+        // Émettre un profil préliminaire depuis les métadonnées Supabase — navigation immédiate
+        const meta = d.user?.user_metadata ?? {};
+        const prelimUser: WARAHUser = {
+          id: d.user?.id ?? '',
+          email: d.user?.email ?? data.email,
+          firstName: meta['first_name'] ?? '',
+          lastName: meta['last_name'] ?? '',
+          role: (meta['role'] as UserRole) ?? 'OWNER',
+          phone: meta['phone'],
+        };
+        this.currentUserSubject.next(prelimUser);
+        // onAuthStateChange enrichira le profil depuis le backend en arrière-plan
+        return prelimUser;
       })
     );
   }
 
-  /**
-   * Connexion de l'utilisateur
-   */
-  login(data: LoginRequest): Observable<LoginResponse> {
-    return this.http.post<LoginResponse>(`${this.apiUrl}/login`, data).pipe(
-      tap((response: LoginResponse) => {
-        // Stocker le token et l'utilisateur
-        this.setSession(response);
-      }),
-      catchError((error: any) => {
-        console.error('Erreur de connexion:', error);
-        return of(error);
+  register(data: RegisterRequest): Observable<WARAHUser> {
+    return from(
+      this.supabase.auth.signUp({
+        email: data.email,
+        password: data.motDePasse,
+        options: {
+          data: {
+            first_name: data.prenom,
+            last_name: data.nom,
+            phone: data.telephone,
+            role: this.mapRole(data.typeUtilisateur),
+          },
+        },
+      })
+    ).pipe(
+      tap(({ error }) => { if (error) throw error; }),
+      map(({ data: d }) => {
+        this.session = d.session;
+        const meta = d.user?.user_metadata ?? {};
+        const prelimUser: WARAHUser = {
+          id: d.user?.id ?? '',
+          email: d.user?.email ?? data.email,
+          firstName: data.prenom,
+          lastName: data.nom,
+          role: this.mapRole(data.typeUtilisateur),
+          phone: data.telephone,
+        };
+        this.currentUserSubject.next(prelimUser);
+        return prelimUser;
       })
     );
   }
 
-  /**
-   * Vérification du code 2FA
-   */
-  verify2FA(data: Verify2FARequest): Observable<LoginResponse> {
-    return this.http.post<LoginResponse>(`${this.apiUrl}/verify-2fa`, data).pipe(
-      tap((response: LoginResponse) => {
-        this.setSession(response);
-      }),
-      catchError((error: any) => {
-        console.error('Erreur de vérification 2FA:', error);
-        return of(error);
+  forgotPassword(data: ForgotPasswordRequest): Observable<void> {
+    return from(
+      this.supabase.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
       })
+    ).pipe(
+      tap(({ error }) => { if (error) throw error; }),
+      map(() => void 0)
     );
   }
 
-  /**
-   * Demande de réinitialisation de mot de passe
-   */
-  forgotPassword(data: ForgotPasswordRequest): Observable<any> {
-    return this.http.post(`${this.apiUrl}/forgot-password`, data).pipe(
-      catchError((error: any) => {
-        console.error('Erreur de demande de réinitialisation:', error);
-        return of(error);
-      })
+  resetPassword(data: { token: string; nouveauMotDePasse: string }): Observable<void> {
+    // Supabase injecte le token dans l'URL au retour de l'email de reset
+    // On met à jour le mot de passe de la session courante
+    return from(
+      this.supabase.auth.updateUser({ password: data.nouveauMotDePasse })
+    ).pipe(
+      tap(({ error }) => { if (error) throw error; }),
+      map(() => void 0)
     );
   }
 
-  /**
-   * Réinitialisation du mot de passe
-   */
-  resetPassword(data: ResetPasswordRequest): Observable<any> {
-    return this.http.post(`${this.apiUrl}/reset-password`, data).pipe(
-      catchError((error: any) => {
-        console.error('Erreur de réinitialisation:', error);
-        return of(error);
-      })
-    );
-  }
-
-  /**
-   * Déconnexion de l'utilisateur
-   */
   logout(): void {
-    // Supprimer le token et l'utilisateur du localStorage
-    if (this.isBrowser) {
-      localStorage.removeItem('warah_token');
-      localStorage.removeItem('warah_refresh_token');
-      localStorage.removeItem('warah_user');
-    }
-
-    // Réinitialiser le BehaviorSubject
-    this.currentUserSubject.next(null);
-    
-    // Rediriger vers la page de connexion
-    this.router.navigate(['/auth/login']);
+    this.supabase.auth.signOut().then(() => {
+      this.session = null;
+      this.provisioned = false;
+      this.currentUserSubject.next(null);
+      this.router.navigate(['/auth/login']);
+    });
   }
 
-  /**
-   * Stocke la session utilisateur après connexion/inscription
-   */
-  private setSession(response: LoginResponse): void {
-    if (this.isBrowser) {
-      localStorage.setItem('warah_token', response.token);
-      localStorage.setItem('warah_refresh_token', response.refreshToken);
-      localStorage.setItem('warah_user', JSON.stringify(response.utilisateur));
-    }
+  // ── Token / session ──────────────────────────────────────────
 
-    this.currentUserSubject.next(response.utilisateur);
-  }
-
-  /**
-   * Retourne le token JWT actuel
-   */
   getToken(): string | null {
-    return this.isBrowser ? localStorage.getItem('warah_token') : null;
+    return this.session?.access_token ?? null;
   }
 
-  /**
-   * Retourne l'utilisateur actuel
-   */
-  getCurrentUser(): any {
+  isLoggedIn(): boolean {
+    return !!this.session?.access_token;
+  }
+
+  getCurrentUser(): WARAHUser | null {
     return this.currentUserSubject.value;
   }
 
-  /**
-   * Vérifie si l'utilisateur est connecté
-   */
-  isLoggedIn(): boolean {
-    return !!this.getToken();
+  // ── Profil backend ────────────────────────────────────────────
+
+  // Ping le backend pour sortir du cold start avant que l'utilisateur clique sur "Se connecter"
+  // /health/live est hors du préfixe /api — on retire le suffixe /api de l'URL de base
+  private warmUpBackend(): void {
+    const baseUrl = environment.apiUrl.replace(/\/api$/, '');
+    this.http.get(`${baseUrl}/health/live`, { responseType: 'text' })
+      .pipe(catchError(() => of(null)))
+      .subscribe();
   }
 
-  /**
-   * Rafraîchit le token JWT
-   */
-  refreshToken(): Observable<LoginResponse> {
-    const refreshToken = this.isBrowser ? localStorage.getItem('warah_refresh_token') : null;
-
-
-    return this.http.post<LoginResponse>(`${this.apiUrl}/refresh-token`, { refreshToken }).pipe(
-      tap((response: LoginResponse) => {
-        this.setSession(response);
-      }),
-      catchError((error: any) => {
-        // Si le refresh échoue, déconnecter l'utilisateur
-        this.logout();
-        return of(error);
+  // Appelle /auth/register qui upserte l'utilisateur ET retourne son profil complet
+  private provisionAndGetProfile(): Observable<WARAHUser | null> {
+    const token = this.getToken();
+    if (!token) return of(null);
+    return this.http
+      .post<any>(`${this.apiUrl}/register`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-    );
+      .pipe(
+        tap(() => { this.provisioned = true; }),
+        map((p) => ({
+          id: p.id,
+          email: p.email,
+          firstName: p.firstName ?? p.profile?.firstName ?? '',
+          lastName: p.lastName ?? p.profile?.lastName ?? '',
+          role: p.role as UserRole,
+          phone: p.phone,
+          accountStatus: p.accountStatus,
+        } as WARAHUser)),
+        catchError(() => of(null))
+      );
+  }
+
+  private async loadWARAHProfile(): Promise<WARAHUser> {
+    const token = this.getToken();
+    if (!token) {
+      this.currentUserSubject.next(null);
+      return Promise.reject(new Error('Pas de session'));
+    }
+
+    return new Promise((resolve, reject) => {
+      this.http
+        .get<any>(`${this.apiUrl}/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .subscribe({
+          next: (profile) => {
+            const user: WARAHUser = {
+              id: profile.id,
+              email: profile.email,
+              firstName: profile.firstName ?? profile.profile?.firstName ?? '',
+              lastName: profile.lastName ?? profile.profile?.lastName ?? '',
+              role: profile.role as UserRole,
+              phone: profile.phone,
+              accountStatus: profile.accountStatus,
+            };
+            this.currentUserSubject.next(user);
+            resolve(user);
+          },
+          error: reject,
+        });
+    });
+  }
+
+  // Route par défaut selon le rôle de l'utilisateur
+  getDefaultRoute(): string {
+    const role = this.currentUserSubject.value?.role;
+    return role ? (ROLE_ROUTES[role] ?? '/dashboard') : '/auth/login';
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+
+  private mapRole(type: RegisterRequest['typeUtilisateur']): UserRole {
+    switch (type) {
+      case 'proprietaire_local':
+      case 'proprietaire_diaspora': return 'OWNER';
+      case 'locataire':             return 'TENANT';
+      case 'gestionnaire':          return 'MANAGER';
+      default:                      return 'OWNER';
+    }
   }
 }

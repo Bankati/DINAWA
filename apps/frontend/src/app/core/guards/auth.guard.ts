@@ -1,25 +1,23 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from "@angular/core";
 import {
   CanActivate,
   Router,
   ActivatedRouteSnapshot,
-  RouterStateSnapshot
-} from '@angular/router';
-import { AuthService } from '../services/auth.service';
-import { Observable } from 'rxjs';
+  RouterStateSnapshot,
+} from "@angular/router";
+import { AuthService } from "../services/auth.service";
+import { Observable } from "rxjs";
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: "root",
 })
 export class AuthGuard implements CanActivate {
-  constructor(
-    private authService: AuthService,
-    private router: Router
-  ) {}
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
   canActivate(
     route: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot
+    state: RouterStateSnapshot,
   ): Observable<boolean> | Promise<boolean> | boolean {
     // Vérifier si l'utilisateur est connecté
     if (this.authService.isLoggedIn()) {
@@ -27,10 +25,10 @@ export class AuthGuard implements CanActivate {
     }
 
     // Si non connecté, rediriger vers la page de connexion
-    this.router.navigate(['/auth/login'], {
-      queryParams: { returnUrl: state.url }
+    void this.router.navigate(["/auth/login"], {
+      queryParams: { returnUrl: state.url },
     });
-    
+
     return false;
   }
 }

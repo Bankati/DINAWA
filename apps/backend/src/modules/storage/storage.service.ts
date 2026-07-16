@@ -11,7 +11,8 @@ export type StorageBucket =
   | 'property-documents'
   | 'id-documents'
   | 'manager-documents'
-  | 'payment-proofs';
+  | 'payment-proofs'
+  | 'profile-photos';
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DOCUMENT_MIME_TYPES = new Set<string>([...IMAGE_MIME_TYPES, 'application/pdf']);
@@ -22,12 +23,22 @@ const BUCKET_LIMITS: Record<StorageBucket, { maxBytes: number; allowedMimeTypes:
   'id-documents': { maxBytes: MAX_PHOTO_BYTES, allowedMimeTypes: IMAGE_MIME_TYPES },
   'manager-documents': { maxBytes: MAX_DOCUMENT_BYTES, allowedMimeTypes: DOCUMENT_MIME_TYPES },
   'payment-proofs': { maxBytes: MAX_DOCUMENT_BYTES, allowedMimeTypes: DOCUMENT_MIME_TYPES },
+  'profile-photos': { maxBytes: MAX_PHOTO_BYTES, allowedMimeTypes: IMAGE_MIME_TYPES },
 };
 
-// Wrapper Supabase Storage — seul point d'entrée pour manipuler les 5 buckets
-// privés du projet. La compression image (sharp) est de la responsabilité de
-// l'appelant (ex. PropertiesService.uploadPropertyPhoto) — ce service reste
-// générique et ignore tout du contenu métier du fichier.
+// Seule source de vérité pour les types MIME autorisés par bucket — utilisé
+// à la fois par StorageService.assertValid() (garde-fou final) et par
+// createMimeTypeFilter() (rejet précoce côté Multer, voir /review unité 13 :
+// jamais bufferiser un fichier en mémoire avant de valider son type).
+export function isAllowedMimeType(bucket: StorageBucket, mimetype: string): boolean {
+  return BUCKET_LIMITS[bucket].allowedMimeTypes.has(mimetype);
+}
+
+// Wrapper Supabase Storage — seul point d'entrée pour manipuler les 6 buckets
+// privés du projet (voir architecture.md, invariant Storage — mis à jour à
+// l'étape 10 pour ajouter profile-photos). La compression image (sharp) est
+// de la responsabilité de l'appelant (ex. PropertiesService.uploadPropertyPhoto)
+// — ce service reste générique et ignore tout du contenu métier du fichier.
 @Injectable()
 export class StorageService {
   constructor(private readonly supabase: SupabaseAdminService) {}

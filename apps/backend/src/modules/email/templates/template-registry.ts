@@ -9,6 +9,8 @@ import * as monthlyReport from './monthly-report.template';
 import * as listingContact from './listing-contact.template';
 import * as inactivityWarning from './inactivity-warning.template';
 import * as accountSuspended from './account-suspended.template';
+import * as accountReactivated from './account-reactivated.template';
+import * as leaseCreated from './lease-created.template';
 import { TemplateModule, TemplateVariables } from './types';
 
 export type EmailTemplate =
@@ -22,7 +24,9 @@ export type EmailTemplate =
   | 'monthly-report'
   | 'listing-contact'
   | 'inactivity-warning'
-  | 'account-suspended';
+  | 'account-suspended'
+  | 'account-reactivated'
+  | 'lease-created';
 
 const registry: Record<EmailTemplate, TemplateModule> = {
   'signup-confirmation': signupConfirmation,
@@ -36,6 +40,8 @@ const registry: Record<EmailTemplate, TemplateModule> = {
   'listing-contact': listingContact,
   'inactivity-warning': inactivityWarning,
   'account-suspended': accountSuspended,
+  'account-reactivated': accountReactivated,
+  'lease-created': leaseCreated,
 };
 
 export function subjectFor(template: EmailTemplate, variables: TemplateVariables): string {

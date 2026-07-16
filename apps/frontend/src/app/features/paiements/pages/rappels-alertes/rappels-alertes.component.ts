@@ -1,21 +1,23 @@
-import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
-import { PaiementsService } from '../../services/paiements.service';
-import { Paiement, StatutPaiement } from '@core/models/paiement.model';
-import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
-import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from "@angular/core";
+import { FormBuilder, ReactiveFormsModule } from "@angular/forms";
+import { RouterModule } from "@angular/router";
+import { HttpErrorResponse } from "@angular/common/http";
+import { PaiementsService } from "../../services/paiements.service";
+import { Paiement, StatutPaiement } from "@core/models/paiement.model";
+import { LokAlerteComponent } from "../../../../shared/components/lok-alerte/lok-alerte.component";
+import { LokMontantFcfaComponent } from "../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component";
+import { CommonModule } from "@angular/common";
+import { extractErrorMessage } from "@core/utils/http-error.util";
 
 @Component({
-  selector: 'app-rappels-alertes',
+  selector: "app-rappels-alertes",
   standalone: true,
   imports: [
     CommonModule,
     ReactiveFormsModule,
     RouterModule,
     LokAlerteComponent,
-    LokMontantFcfaComponent
+    LokMontantFcfaComponent,
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -24,12 +26,11 @@ import { CommonModule } from '@angular/common';
         <div class="flex items-center justify-between">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Rappels et Alertes</h1>
-            <p class="text-sm text-gray-600">Gérez les notifications de paiement</p>
+            <p class="text-sm text-gray-600">
+              Gérez les notifications de paiement
+            </p>
           </div>
-          <button
-            routerLink="/dashboard/paiements"
-            class="btn-secondary"
-          >
+          <button routerLink="/dashboard/paiements" class="btn-secondary">
             Retour
           </button>
         </div>
@@ -51,32 +52,49 @@ import { CommonModule } from '@angular/common';
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <p class="text-sm text-gray-600">Total impayés</p>
-            <p class="text-3xl font-bold text-red-600">{{ statistiques.impayes }}</p>
+            <p class="text-3xl font-bold text-red-600">
+              {{ statistiques.impayes }}
+            </p>
           </div>
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <p class="text-sm text-gray-600">En retard</p>
-            <p class="text-3xl font-bold text-orange-600">{{ statistiques.enRetard }}</p>
+            <p class="text-3xl font-bold text-orange-600">
+              {{ statistiques.enRetard }}
+            </p>
           </div>
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <p class="text-sm text-gray-600">Rappels envoyés</p>
-            <p class="text-3xl font-bold text-blue-600">{{ statistiques.rappelsEnvoyes }}</p>
+            <p class="text-3xl font-bold text-blue-600">
+              {{ statistiques.rappelsEnvoyes }}
+            </p>
           </div>
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <p class="text-sm text-gray-600">Taux de réponse</p>
-            <p class="text-3xl font-bold text-green-600">{{ statistiques.tauxReponse }}%</p>
+            <p class="text-3xl font-bold text-green-600">
+              {{ statistiques.tauxReponse }}%
+            </p>
           </div>
         </div>
 
         <!-- Configuration des rappels automatiques -->
-        <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">Configuration des rappels automatiques</h2>
-          
+        <div
+          class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6"
+        >
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">
+            Configuration des rappels automatiques
+          </h2>
+
           <form [formGroup]="rappelConfigForm" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- Rappel avant échéance -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Rappel avant échéance (jours)</label>
+                <label
+                  class="block text-sm font-medium text-gray-700 mb-2"
+                  for="rappels-avant"
+                  >Rappel avant échéance (jours)</label
+                >
                 <select
+                  id="rappels-avant"
                   formControlName="rappelAvantEcheance"
                   class="input-field"
                 >
@@ -90,8 +108,13 @@ import { CommonModule } from '@angular/common';
 
               <!-- Rappel après échéance -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Rappel après échéance (jours)</label>
+                <label
+                  class="block text-sm font-medium text-gray-700 mb-2"
+                  for="rappels-apres"
+                  >Rappel après échéance (jours)</label
+                >
                 <select
+                  id="rappels-apres"
                   formControlName="rappelApresEcheance"
                   class="input-field"
                 >
@@ -105,8 +128,13 @@ import { CommonModule } from '@angular/common';
 
               <!-- Fréquence des rappels -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Fréquence des rappels</label>
+                <label
+                  class="block text-sm font-medium text-gray-700 mb-2"
+                  for="rappels-frequence"
+                  >Fréquence des rappels</label
+                >
                 <select
+                  id="rappels-frequence"
                   formControlName="frequenceRappels"
                   class="input-field"
                 >
@@ -118,18 +146,32 @@ import { CommonModule } from '@angular/common';
 
               <!-- Canaux de notification -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Canaux de notification</label>
+                <span class="block text-sm font-medium text-gray-700 mb-2"
+                  >Canaux de notification</span
+                >
                 <div class="space-y-2">
                   <label class="flex items-center">
-                    <input type="checkbox" formControlName="notificationEmail" class="mr-2">
+                    <input
+                      type="checkbox"
+                      formControlName="notificationEmail"
+                      class="mr-2"
+                    />
                     <span>Email</span>
                   </label>
                   <label class="flex items-center">
-                    <input type="checkbox" formControlName="notificationSMS" class="mr-2">
+                    <input
+                      type="checkbox"
+                      formControlName="notificationSMS"
+                      class="mr-2"
+                    />
                     <span>SMS</span>
                   </label>
                   <label class="flex items-center">
-                    <input type="checkbox" formControlName="notificationWhatsApp" class="mr-2">
+                    <input
+                      type="checkbox"
+                      formControlName="notificationWhatsApp"
+                      class="mr-2"
+                    />
                     <span>WhatsApp</span>
                   </label>
                 </div>
@@ -143,9 +185,24 @@ import { CommonModule } from '@angular/common';
             >
               @if (isSavingConfig) {
                 <span class="flex items-center gap-2">
-                  <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  <svg
+                    class="animate-spin h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
                   </svg>
                   Enregistrement...
                 </span>
@@ -159,13 +216,13 @@ import { CommonModule } from '@angular/common';
         <!-- Liste des paiements avec alertes -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100">
           <div class="p-6 border-b border-gray-200">
-            <h2 class="text-lg font-semibold text-gray-900">Paiements nécessitant une attention</h2>
+            <h2 class="text-lg font-semibold text-gray-900">
+              Paiements nécessitant une attention
+            </h2>
           </div>
-          
+
           @if (loading) {
-            <div class="p-6 text-center text-gray-500">
-              Chargement...
-            </div>
+            <div class="p-6 text-center text-gray-500">Chargement...</div>
           } @else if (paiementsAvecAlertes.length === 0) {
             <div class="p-6 text-center text-gray-500">
               Aucun paiement ne nécessite d'attention
@@ -184,10 +241,11 @@ import { CommonModule } from '@angular/common';
                           {{ getStatutLabel(paiement.statut) }}
                         </span>
                         <span class="text-sm text-gray-600">
-                          Échéance: {{ paiement.dateEcheance | date:'dd/MM/yyyy' }}
+                          Échéance:
+                          {{ paiement.dateEcheance | date: "dd/MM/yyyy" }}
                         </span>
                       </div>
-                      
+
                       <h3 class="font-semibold text-gray-900 mb-1">
                         {{ getBienTitre(paiement.bienId) }}
                       </h3>
@@ -195,10 +253,12 @@ import { CommonModule } from '@angular/common';
                         Locataire: {{ getLocataireNom(paiement.locataireId) }}
                       </p>
                       <p class="font-semibold text-gray-900">
-                        <lok-montant-fcfa [montant]="paiement.montantEcheance"></lok-montant-fcfa>
+                        <lok-montant-fcfa
+                          [montant]="paiement.montantEcheance"
+                        ></lok-montant-fcfa>
                       </p>
                     </div>
-                    
+
                     <div class="flex gap-2 ml-4">
                       <button
                         (click)="envoyerRappel(paiement.id)"
@@ -228,9 +288,11 @@ import { CommonModule } from '@angular/common';
         <!-- Historique des rappels -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
           <div class="p-6 border-b border-gray-200">
-            <h2 class="text-lg font-semibold text-gray-900">Historique des rappels</h2>
+            <h2 class="text-lg font-semibold text-gray-900">
+              Historique des rappels
+            </h2>
           </div>
-          
+
           @if (historiqueRappels.length === 0) {
             <div class="p-6 text-center text-gray-500">
               Aucun rappel envoyé récemment
@@ -241,15 +303,23 @@ import { CommonModule } from '@angular/common';
                 <div class="p-6">
                   <div class="flex items-center justify-between">
                     <div>
-                      <p class="font-medium text-gray-900">{{ rappel.destinataire }}</p>
+                      <p class="font-medium text-gray-900">
+                        {{ rappel.destinataire }}
+                      </p>
                       <p class="text-sm text-gray-600">{{ rappel.message }}</p>
-                      <p class="text-xs text-gray-500 mt-1">{{ rappel.date | date:'dd/MM/yyyy HH:mm' }}</p>
+                      <p class="text-xs text-gray-500 mt-1">
+                        {{ rappel.date | date: "dd/MM/yyyy HH:mm" }}
+                      </p>
                     </div>
                     <span
-                      [class]="rappel.statut === 'envoye' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                      [class]="
+                        rappel.statut === 'envoye'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      "
                       class="px-3 py-1 rounded-full text-xs font-medium"
                     >
-                      {{ rappel.statut === 'envoye' ? 'Envoyé' : 'Échoué' }}
+                      {{ rappel.statut === "envoye" ? "Envoyé" : "Échoué" }}
                     </span>
                   </div>
                 </div>
@@ -262,57 +332,62 @@ import { CommonModule } from '@angular/common';
   `,
 })
 export class RappelsAlertesComponent implements OnInit {
-  rappelConfigForm: FormGroup;
+  // Type inféré depuis fb.nonNullable.group() — jamais annoter en
+  // `FormGroup` nu (voir /review frontend).
+  rappelConfigForm: ReturnType<RappelsAlertesComponent["buildForm"]>;
   paiementsAvecAlertes: Paiement[] = [];
   loading: boolean = false;
-  errorMessage: string = '';
-  successMessage: string = '';
+  errorMessage: string = "";
+  successMessage: string = "";
   isSavingConfig: boolean = false;
   isSendingRappel: boolean = false;
-  
+
   statistiques = {
     impayes: 0,
     enRetard: 0,
     rappelsEnvoyes: 12,
-    tauxReponse: 75
+    tauxReponse: 75,
   };
 
   historiqueRappels = [
     {
-      id: '1',
-      destinataire: 'Paul Mensah',
-      message: 'Rappel de loyer pour Appartement Lomé Centre',
-      date: new Date('2024-06-20T10:30:00'),
-      statut: 'envoye'
+      id: "1",
+      destinataire: "Paul Mensah",
+      message: "Rappel de loyer pour Appartement Lomé Centre",
+      date: new Date("2024-06-20T10:30:00"),
+      statut: "envoye",
     },
     {
-      id: '2',
-      destinataire: 'Kofi Adzo',
-      message: 'Alerte impayé pour Villa Sokodé',
-      date: new Date('2024-06-19T14:15:00'),
-      statut: 'envoye'
+      id: "2",
+      destinataire: "Kofi Adzo",
+      message: "Alerte impayé pour Villa Sokodé",
+      date: new Date("2024-06-19T14:15:00"),
+      statut: "envoye",
     },
     {
-      id: '3',
-      destinataire: 'Mawunyo Koffi',
-      message: 'Rappel de loyer pour Studio Kara',
-      date: new Date('2024-06-18T09:00:00'),
-      statut: 'echoue'
-    }
+      id: "3",
+      destinataire: "Mawunyo Koffi",
+      message: "Rappel de loyer pour Studio Kara",
+      date: new Date("2024-06-18T09:00:00"),
+      statut: "echoue",
+    },
   ];
 
-  constructor(
-    private fb: FormBuilder,
-    private paiementsService: PaiementsService,
-    private router: Router
-  ) {
-    this.rappelConfigForm = this.fb.group({
-      rappelAvantEcheance: ['3'],
-      rappelApresEcheance: ['1'],
-      frequenceRappels: ['quotidien'],
+  private readonly fb = inject(FormBuilder);
+  private readonly paiementsService = inject(PaiementsService);
+
+  constructor() {
+    this.rappelConfigForm = this.buildForm();
+  }
+
+  private buildForm() {
+    return this.fb.nonNullable.group({
+      rappelAvantEcheance: ["3"],
+      rappelApresEcheance: ["1"],
+      frequenceRappels: ["quotidien"],
       notificationEmail: [true],
       notificationSMS: [true],
-      notificationWhatsApp: [false]
+      notificationWhatsApp: [false],
     });
   }
 
@@ -328,15 +403,19 @@ export class RappelsAlertesComponent implements OnInit {
     this.paiementsService.getImpayes().subscribe({
       next: (paiements: Paiement[]) => {
         this.paiementsAvecAlertes = paiements;
-        this.statistiques.impayes = paiements.filter(p => p.statut === StatutPaiement.IMPAYE).length;
-        this.statistiques.enRetard = paiements.filter(p => p.statut === StatutPaiement.EN_RETARD).length;
+        this.statistiques.impayes = paiements.filter(
+          (p) => p.statut === StatutPaiement.IMPAYE,
+        ).length;
+        this.statistiques.enRetard = paiements.filter(
+          (p) => p.statut === StatutPaiement.EN_RETARD,
+        ).length;
         this.loading = false;
       },
-      error: (error: any) => {
-        console.error('Erreur lors du chargement des paiements:', error);
-        this.errorMessage = 'Erreur lors du chargement des paiements';
+      error: (error: HttpErrorResponse) => {
+        console.error("Erreur lors du chargement des paiements:", error);
+        this.errorMessage = "Erreur lors du chargement des paiements";
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -349,15 +428,15 @@ export class RappelsAlertesComponent implements OnInit {
     }
 
     this.isSavingConfig = true;
-    this.errorMessage = '';
-    this.successMessage = '';
+    this.errorMessage = "";
+    this.successMessage = "";
 
     // Simulation de sauvegarde
     setTimeout(() => {
       this.isSavingConfig = false;
-      this.successMessage = 'Configuration enregistrée avec succès !';
+      this.successMessage = "Configuration enregistrée avec succès !";
       setTimeout(() => {
-        this.successMessage = '';
+        this.successMessage = "";
       }, 3000);
     }, 1000);
   }
@@ -367,35 +446,40 @@ export class RappelsAlertesComponent implements OnInit {
    */
   envoyerRappel(paiementId: string): void {
     this.isSendingRappel = true;
-    this.errorMessage = '';
-    this.successMessage = '';
+    this.errorMessage = "";
+    this.successMessage = "";
 
     this.paiementsService.envoyerRappel(paiementId).subscribe({
       next: () => {
         this.isSendingRappel = false;
-        this.successMessage = 'Rappel envoyé avec succès !';
-        
+        this.successMessage = "Rappel envoyé avec succès !";
+
         // Ajouter à l'historique
-        const paiement = this.paiementsAvecAlertes.find(p => p.id === paiementId);
+        const paiement = this.paiementsAvecAlertes.find(
+          (p) => p.id === paiementId,
+        );
         if (paiement) {
           this.historiqueRappels.unshift({
-            id: Math.random().toString(36).substr(2, 9),
+            id: Math.random().toString(36).substring(2, 11),
             destinataire: this.getLocataireNom(paiement.locataireId),
             message: `Rappel de loyer pour ${this.getBienTitre(paiement.bienId)}`,
             date: new Date(),
-            statut: 'envoye'
+            statut: "envoye",
           });
           this.statistiques.rappelsEnvoyes++;
         }
-        
+
         setTimeout(() => {
-          this.successMessage = '';
+          this.successMessage = "";
         }, 3000);
       },
-      error: (error: any) => {
+      error: (error: HttpErrorResponse) => {
         this.isSendingRappel = false;
-        this.errorMessage = error.error?.message || 'Erreur lors de l\'envoi du rappel';
-      }
+        this.errorMessage = extractErrorMessage(
+          error,
+          "Erreur lors de l'envoi du rappel",
+        );
+      },
     });
   }
 
@@ -404,13 +488,13 @@ export class RappelsAlertesComponent implements OnInit {
    */
   getBienTitre(bienId: string): string {
     const titres: Record<string, string> = {
-      '1': 'Appartement Lomé Centre',
-      '2': 'Villa Sokodé',
-      '3': 'Studio Kara',
-      '4': 'Bureau Kpalimé',
-      '5': 'Local Commercial Lomé'
+      "1": "Appartement Lomé Centre",
+      "2": "Villa Sokodé",
+      "3": "Studio Kara",
+      "4": "Bureau Kpalimé",
+      "5": "Local Commercial Lomé",
     };
-    return titres[bienId] || 'Bien inconnu';
+    return titres[bienId] || "Bien inconnu";
   }
 
   /**
@@ -418,13 +502,13 @@ export class RappelsAlertesComponent implements OnInit {
    */
   getLocataireNom(locataireId: string): string {
     const noms: Record<string, string> = {
-      '1': 'Paul Mensah',
-      '2': 'Kofi Adzo',
-      '3': 'Mawunyo Koffi',
-      '4': 'Yao Komlan',
-      '5': 'Afi Agbessi'
+      "1": "Paul Mensah",
+      "2": "Kofi Adzo",
+      "3": "Mawunyo Koffi",
+      "4": "Yao Komlan",
+      "5": "Afi Agbessi",
     };
-    return noms[locataireId] || 'Locataire inconnu';
+    return noms[locataireId] || "Locataire inconnu";
   }
 
   /**
@@ -432,12 +516,12 @@ export class RappelsAlertesComponent implements OnInit {
    */
   getStatutBadgeClass(statut: StatutPaiement): string {
     const classes: Record<StatutPaiement, string> = {
-      [StatutPaiement.PAYE]: 'bg-green-100 text-green-800',
-      [StatutPaiement.PARTIEL]: 'bg-yellow-100 text-yellow-800',
-      [StatutPaiement.IMPAYE]: 'bg-red-100 text-red-800',
-      [StatutPaiement.EN_RETARD]: 'bg-orange-100 text-orange-800'
+      [StatutPaiement.PAYE]: "bg-green-100 text-green-800",
+      [StatutPaiement.PARTIEL]: "bg-yellow-100 text-yellow-800",
+      [StatutPaiement.IMPAYE]: "bg-red-100 text-red-800",
+      [StatutPaiement.EN_RETARD]: "bg-orange-100 text-orange-800",
     };
-    return classes[statut] || 'bg-gray-100 text-gray-800';
+    return classes[statut] || "bg-gray-100 text-gray-800";
   }
 
   /**
@@ -445,10 +529,10 @@ export class RappelsAlertesComponent implements OnInit {
    */
   getStatutLabel(statut: StatutPaiement): string {
     const labels: Record<StatutPaiement, string> = {
-      [StatutPaiement.PAYE]: 'Payé',
-      [StatutPaiement.PARTIEL]: 'Partiel',
-      [StatutPaiement.IMPAYE]: 'Impayé',
-      [StatutPaiement.EN_RETARD]: 'En retard'
+      [StatutPaiement.PAYE]: "Payé",
+      [StatutPaiement.PARTIEL]: "Partiel",
+      [StatutPaiement.IMPAYE]: "Impayé",
+      [StatutPaiement.EN_RETARD]: "En retard",
     };
     return labels[statut] || statut;
   }

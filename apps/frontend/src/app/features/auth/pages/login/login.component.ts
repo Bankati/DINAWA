@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ParticlesBackgroundComponent } from '../../../../shared/components/particles-background/particles-background.component';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -31,7 +32,7 @@ import { ParticlesBackgroundComponent } from '../../../../shared/components/part
       <div class="login-card">
         <!-- Logo et badge -->
         <div class="card-logo">
-          <img src="/assets/warah-logo.png" alt="WARAH" class="logo-img">
+          <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
         </div>
         <div class="security-badge">
           <span class="badge-icon">🔒</span>
@@ -114,89 +115,17 @@ import { ParticlesBackgroundComponent } from '../../../../shared/components/part
             <span *ngIf="isLoading">Connexion...</span>
             <span *ngIf="!isLoading">Se connecter</span>
           </button>
+
+          <!-- Message d'erreur -->
+          <div *ngIf="errorMessage" class="error-banner">
+            {{ errorMessage }}
+          </div>
         </form>
 
         <!-- Footer -->
         <div class="card-footer">
           <span class="footer-text">Pas encore inscrit ?</span>
           <a routerLink="/auth/register" class="footer-link">Créez un compte</a>
-        </div>
-
-        <!-- Accès rapide dev -->
-        <div class="dev-section">
-          <div class="dev-divider">
-            <span class="dev-label">Accès rapide · Dev</span>
-          </div>
-          <div class="dev-cards">
-
-            <button type="button" class="dev-card dev-card-blue" (click)="connexionRapide('proprietaire')">
-              <div class="dev-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-              </div>
-              <div class="dev-card-info">
-                <p class="dev-card-name">Propriétaire</p>
-                <p class="dev-card-route">/dashboard</p>
-              </div>
-              <svg class="dev-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-                <polyline points="12 5 19 12 12 19"></polyline>
-              </svg>
-            </button>
-
-            <button type="button" class="dev-card dev-card-green" (click)="connexionRapide('locataire')">
-              <div class="dev-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </div>
-              <div class="dev-card-info">
-                <p class="dev-card-name">Locataire</p>
-                <p class="dev-card-route">/locataire</p>
-              </div>
-              <svg class="dev-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-                <polyline points="12 5 19 12 12 19"></polyline>
-              </svg>
-            </button>
-
-            <button type="button" class="dev-card dev-card-gold" (click)="connexionRapide('gestionnaire')">
-              <div class="dev-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                </svg>
-              </div>
-              <div class="dev-card-info">
-                <p class="dev-card-name">Gestionnaire</p>
-                <p class="dev-card-route">/gestionnaire</p>
-              </div>
-              <svg class="dev-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-                <polyline points="12 5 19 12 12 19"></polyline>
-              </svg>
-            </button>
-
-            <button type="button" class="dev-card dev-card-red" (click)="connexionRapide('admin')">
-              <div class="dev-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"></path>
-                </svg>
-              </div>
-              <div class="dev-card-info">
-                <p class="dev-card-name">Admin</p>
-                <p class="dev-card-route">/admin</p>
-              </div>
-              <svg class="dev-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-                <polyline points="12 5 19 12 12 19"></polyline>
-              </svg>
-            </button>
-
-          </div>
         </div>
       </div>
     </div>
@@ -561,6 +490,17 @@ import { ParticlesBackgroundComponent } from '../../../../shared/components/part
       text-decoration: underline;
     }
 
+    .error-banner {
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      border-radius: 8px;
+      color: #DC2626;
+      font-size: 0.875rem;
+      text-align: center;
+    }
+
     .dev-section {
       margin-top: 1.5rem;
     }
@@ -720,16 +660,18 @@ import { ParticlesBackgroundComponent } from '../../../../shared/components/part
 })
 export class LoginComponent implements OnInit {
   loginForm: FormGroup;
-  isLoading: boolean = false;
-  showPassword: boolean = false;
-  emailFocused: boolean = false;
-  passwordFocused: boolean = false;
+  isLoading = false;
+  showPassword = false;
+  emailFocused = false;
+  passwordFocused = false;
   mousePosition = { x: 0, y: 0 };
+  errorMessage = '';
 
   constructor(
     private fb: FormBuilder,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private authService: AuthService,
   ) {
     this.loginForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
@@ -739,6 +681,10 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     this.mousePosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    // Si déjà connecté, rediriger directement
+    if (this.authService.isLoggedIn()) {
+      this.router.navigate([this.authService.getDefaultRoute()]);
+    }
   }
 
   @HostListener('mousemove', ['$event'])
@@ -751,46 +697,29 @@ export class LoginComponent implements OnInit {
   get email() { return this.loginForm.get('email'); }
   get motDePasse() { return this.loginForm.get('motDePasse'); }
 
-  onSubmitClick() {
-    // Animation de clic
-  }
+  onSubmitClick() {}
 
   onLogin(): void {
-    if (this.loginForm.invalid) {
-      return;
-    }
+    if (this.loginForm.invalid) return;
 
     this.isLoading = true;
+    this.errorMessage = '';
 
-    setTimeout(() => {
-      this.isLoading = false;
-      this.router.navigate(['/dashboard']);
-    }, 1000);
-  }
-
-  connexionRapide(role: 'proprietaire' | 'locataire' | 'gestionnaire' | 'admin'): void {
-    const users: Record<string, { prenom: string; nom: string; email: string; role: string }> = {
-      proprietaire: { prenom: 'Kofi', nom: 'Mensah', email: 'kofi@warah.tg', role: 'proprietaire' },
-      locataire:    { prenom: 'Awa', nom: 'Koné', email: 'awa@warah.tg', role: 'locataire' },
-      gestionnaire: { prenom: 'Yao', nom: 'Koffi', email: 'yao@warah.tg', role: 'gestionnaire' },
-      admin:        { prenom: 'Admin', nom: 'WARAH', email: 'admin@warah.tg', role: 'admin' },
-    };
-
-    const routes: Record<string, string> = {
-      proprietaire: '/dashboard',
-      locataire:    '/locataire',
-      gestionnaire: '/gestionnaire',
-      admin:        '/admin',
-    };
-
-    localStorage.setItem('warah_token', `dev-token-${role}`);
-    localStorage.setItem('warah_user', JSON.stringify({
-      id: role,
-      ...users[role],
-      telephone: '+22890000000',
-      ville: 'Lomé',
-    }));
-
-    this.router.navigate([routes[role]]);
+    this.authService.login({
+      email: this.loginForm.value.email,
+      motDePasse: this.loginForm.value.motDePasse,
+    }).subscribe({
+      next: (user) => {
+        this.isLoading = false;
+        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+        this.router.navigate([returnUrl ?? this.authService.getDefaultRoute()]);
+      },
+      error: (err) => {
+        this.isLoading = false;
+        this.errorMessage = err?.message === 'Invalid login credentials'
+          ? 'Email ou mot de passe incorrect'
+          : (err?.message ?? 'Erreur de connexion');
+      },
+    });
   }
 }

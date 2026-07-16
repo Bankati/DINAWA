@@ -29,7 +29,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
             <p class="text-sm text-gray-600">Gestion des locataires</p>
           </div>
           <button
-            routerLink="/locataires/nouveau"
+            routerLink="/dashboard/locataires/nouveau"
             class="btn-primary flex items-center gap-2"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,20 +356,20 @@ export class LocatairesListComponent implements OnInit {
    * Voir les détails d'un locataire
    */
   viewLocataire(id: string): void {
-    this.router.navigate(['/locataires', id]);
+    this.router.navigate(['/dashboard/locataires', id]);
   }
 
   /**
    * Modifier un locataire
    */
   editLocataire(id: string): void {
-    this.router.navigate(['/locataires', id, 'edit']);
+    this.router.navigate(['/dashboard/locataires', id, 'edit']);
   }
 
   /**
    * Navigue vers la page de création
    */
   navigateToNew(): void {
-    this.router.navigate(['/locataires/nouveau']);
+    this.router.navigate(['/dashboard/locataires/nouveau']);
   }
 }

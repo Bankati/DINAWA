@@ -28,7 +28,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
             <div class="logo">
-              <img src="/assets/warah-logo.png" alt="WARAH" class="logo-img">
+              <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
             </div>
             <div class="h-8 w-px bg-gray-200"></div>
             <div>

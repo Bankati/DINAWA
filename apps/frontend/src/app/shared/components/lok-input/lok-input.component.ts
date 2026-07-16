@@ -1,30 +1,45 @@
-import { Component, Input, Output, EventEmitter, forwardRef, HostListener } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ControlValueAccessor, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@angular/forms';
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  forwardRef,
+} from "@angular/core";
+import { CommonModule } from "@angular/common";
+import {
+  ControlValueAccessor,
+  NG_VALUE_ACCESSOR,
+  ReactiveFormsModule,
+} from "@angular/forms";
 
 @Component({
-  selector: 'lok-input',
+  selector: "lok-input",
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
       useExisting: forwardRef(() => LokInputComponent),
-      multi: true
-    }
+      multi: true,
+    },
   ],
   template: `
-    <div class="lok-input-wrapper" [class.focused]="isFocused" [class.has-error]="hasError">
+    <div
+      class="lok-input-wrapper"
+      [class.focused]="isFocused"
+      [class.has-error]="hasError"
+    >
       @if (label) {
-        <label class="lok-input-label">{{ label }}</label>
+        <label class="lok-input-label" [for]="inputId">{{ label }}</label>
       }
-      
+
       <div class="lok-input-container">
         @if (icon) {
           <svg class="lok-input-icon" [innerHTML]="icon"></svg>
         }
-        
+
         <input
+          [id]="inputId"
           [type]="type"
           [value]="value"
           (input)="onInput($event)"
@@ -35,31 +50,51 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@a
           [readonly]="readonly"
           class="lok-input-field"
         />
-        
-        @if (showPasswordToggle && type === 'password') {
-          <button type="button" class="lok-password-toggle" (click)="togglePassword()">
-            <svg *ngIf="!showPassword" class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+
+        @if (showPasswordToggle && type === "password") {
+          <button
+            type="button"
+            class="lok-password-toggle"
+            (click)="togglePassword()"
+          >
+            <svg
+              *ngIf="!showPassword"
+              class="eye-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
-            <svg *ngIf="showPassword" class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+            <svg
+              *ngIf="showPassword"
+              class="eye-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+              ></path>
               <line x1="1" y1="1" x2="23" y2="23"></line>
             </svg>
           </button>
         }
-        
+
         @if (suffix) {
           <span class="lok-input-suffix">{{ suffix }}</span>
         }
       </div>
-      
+
       <div class="lok-input-focus-line" [class.active]="isFocused"></div>
-      
+
       @if (errorMessage && hasError) {
         <div class="lok-input-error">{{ errorMessage }}</div>
       }
-      
+
       @if (helperText && !hasError) {
         <div class="lok-input-helper">{{ helperText }}</div>
       }
@@ -181,24 +216,27 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@a
       font-size: 0.75rem;
       color: #6b7280;
     }
-  `
+  `,
 })
 export class LokInputComponent implements ControlValueAccessor {
-  @Input() type: 'text' | 'email' | 'password' | 'number' | 'tel' = 'text';
-  @Input() label: string = '';
-  @Input() placeholder: string = '';
-  @Input() icon: string = '';
-  @Input() suffix: string = '';
+  @Input() type: "text" | "email" | "password" | "number" | "tel" = "text";
+  @Input() label: string = "";
+  @Input() placeholder: string = "";
+  @Input() icon: string = "";
+  @Input() suffix: string = "";
   @Input() disabled: boolean = false;
   @Input() readonly: boolean = false;
   @Input() showPasswordToggle: boolean = false;
-  @Input() errorMessage: string = '';
-  @Input() helperText: string = '';
+  @Input() errorMessage: string = "";
+  @Input() helperText: string = "";
   @Input() hasError: boolean = false;
 
   @Output() valueChange = new EventEmitter<string>();
 
-  value: string = '';
+  private static nextId = 0;
+  readonly inputId = `lok-input-${LokInputComponent.nextId++}`;
+
+  value: string = "";
   isFocused: boolean = false;
   showPassword: boolean = false;
 
@@ -226,7 +264,7 @@ export class LokInputComponent implements ControlValueAccessor {
   }
 
   writeValue(value: string): void {
-    this.value = value || '';
+    this.value = value || "";
   }
 
   registerOnChange(fn: (value: string) => void): void {

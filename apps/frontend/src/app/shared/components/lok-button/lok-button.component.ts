@@ -1,12 +1,12 @@
-import { Component, Input, HostBinding, HostListener, Output, EventEmitter } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, Output, EventEmitter } from "@angular/core";
+import { CommonModule } from "@angular/common";
 
 @Component({
-  selector: 'lok-button',
+  selector: "lok-button",
   standalone: true,
   imports: [CommonModule],
   template: `
-    <button 
+    <button
       class="lok-button"
       [class]="buttonClass"
       [disabled]="disabled || loading"
@@ -14,18 +14,33 @@ import { CommonModule } from '@angular/common';
     >
       @if (loading) {
         <svg class="lok-button-spinner" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="31.416" stroke-dashoffset="31.416">
-            <animate attributeName="stroke-dashoffset" from="31.416" to="0" dur="1s" repeatCount="indefinite"/>
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-dasharray="31.416"
+            stroke-dashoffset="31.416"
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              from="31.416"
+              to="0"
+              dur="1s"
+              repeatCount="indefinite"
+            />
           </circle>
         </svg>
       } @else if (icon) {
         <svg class="lok-button-icon" [innerHTML]="icon"></svg>
       }
-      
+
       <span class="lok-button-text">
         <ng-content></ng-content>
       </span>
-      
+
       @if (suffixIcon) {
         <svg class="lok-button-suffix-icon" [innerHTML]="suffixIcon"></svg>
       }
@@ -81,7 +96,11 @@ import { CommonModule } from '@angular/common';
 
     /* Accent variant */
     .lok-button.accent {
-      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+      background: linear-gradient(
+        135deg,
+        var(--color-primary) 0%,
+        var(--color-primary-light) 100%
+      );
       color: white;
     }
 
@@ -167,36 +186,46 @@ import { CommonModule } from '@angular/common';
     }
 
     @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .lok-button-text {
       flex: 1;
     }
-  `
+  `,
 })
 export class LokButtonComponent {
-  @Input() variant: 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost' | 'danger' | 'success' = 'primary';
-  @Input() size: 'sm' | 'md' | 'lg' | 'xl' = 'md';
-  @Input() icon: string = '';
-  @Input() suffixIcon: string = '';
+  @Input() variant:
+    | "primary"
+    | "secondary"
+    | "accent"
+    | "outline"
+    | "ghost"
+    | "danger"
+    | "success" = "primary";
+  @Input() size: "sm" | "md" | "lg" | "xl" = "md";
+  @Input() icon: string = "";
+  @Input() suffixIcon: string = "";
   @Input() disabled: boolean = false;
   @Input() loading: boolean = false;
   @Input() fullWidth: boolean = false;
 
-  @Output() click = new EventEmitter<void>();
+  @Output() clicked = new EventEmitter<void>();
 
   get buttonClass(): string {
     const classes: string[] = [this.variant, this.size];
-    if (this.fullWidth) classes.push('full-width');
-    return classes.join(' ');
+    if (this.fullWidth) classes.push("full-width");
+    return classes.join(" ");
   }
 
-  @HostListener('click')
   onClick(): void {
     if (!this.disabled && !this.loading) {
-      this.click.emit();
+      this.clicked.emit();
     }
   }
 }

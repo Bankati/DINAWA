@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { StatutPaiement } from '@core/models/paiement.model';
-import { StatutBien } from '@core/models/bien.model';
+import { StatutBien, TypeBien } from '@core/models/bien.model';
+import { environment } from '@env/environment';
 
 export interface DashboardKPI {
   totalBiens: number;
@@ -52,238 +53,79 @@ export interface DernierBien {
   dateAjout: Date;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class DashboardService {
-  private apiUrl = 'http://localhost:3000/api/dashboard';
+  private readonly apiUrl = `${environment.apiUrl}/dashboard`;
 
   constructor(private http: HttpClient) {}
 
-  /**
-   * Récupère les KPIs du tableau de bord
-   */
   getKPIs(): Observable<DashboardKPI> {
-    return this.http.get<DashboardKPI>(`${this.apiUrl}/kpis`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des KPIs:', error);
-        // Retourner des données mockées en cas d'erreur
-        return of(this.getMockKPIs());
-      })
-    );
+    return this.http.get<DashboardKPI>(`${this.apiUrl}/kpis`);
   }
 
-  /**
-   * Récupère les revenus mensuels pour le graphique
-   */
   getRevenusMensuels(annee: number = new Date().getFullYear()): Observable<RevenuMensuel[]> {
-    return this.http.get<RevenuMensuel[]>(`${this.apiUrl}/revenus/${annee}`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des revenus:', error);
-        return of(this.getMockRevenus());
-      })
-    );
+    return this.http.get<RevenuMensuel[]>(`${this.apiUrl}/revenus/${annee}`);
   }
 
-  /**
-   * Récupère les alertes actives
-   */
   getAlertes(): Observable<Alerte[]> {
-    return this.http.get<Alerte[]>(`${this.apiUrl}/alertes`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des alertes:', error);
-        return of(this.getMockAlertes());
-      })
-    );
+    return this.http.get<Alerte[]>(`${this.apiUrl}/alertes`);
   }
 
-  /**
-   * Récupère les derniers paiements
-   */
   getDerniersPaiements(limit: number = 5): Observable<DernierPaiement[]> {
-    return this.http.get<DernierPaiement[]>(`${this.apiUrl}/paiements/recent?limit=${limit}`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des paiements:', error);
-        return of(this.getMockPaiements());
-      })
+    return this.http.get<any[]>(`${this.apiUrl}/paiements/recent`, { params: { limit } }).pipe(
+      map(items => items.map(p => ({
+        ...p,
+        statut: this.mapStatutPaiement(p.statut),
+      })))
     );
   }
 
-  /**
-   * Récupère les derniers biens ajoutés
-   */
   getDerniersBiens(limit: number = 5): Observable<DernierBien[]> {
-    return this.http.get<DernierBien[]>(`${this.apiUrl}/biens/recent?limit=${limit}`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des biens:', error);
-        return of(this.getMockBiens());
-      })
+    return this.http.get<any[]>(`${this.apiUrl}/biens/recent`, { params: { limit } }).pipe(
+      map(items => items.map(b => ({
+        ...b,
+        statut: this.mapStatutBien(b.statut),
+        type: this.mapTypeBien(b.type),
+      })))
     );
   }
 
-  /**
-   * Marque une alerte comme lue
-   */
   marquerAlerteLue(alerteId: string): Observable<void> {
-    return this.http.patch<void>(`${this.apiUrl}/alertes/${alerteId}/lire`, {}).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors du marquage de l\'alerte:', error);
-        return of();
-      })
-    );
+    return this.http.patch<void>(`${this.apiUrl}/alertes/${alerteId}/lire`, {});
   }
 
-  // Données mockées pour le développement
-  private getMockKPIs(): DashboardKPI {
-    return {
-      totalBiens: 12,
-      biensOccupes: 8,
-      biensVacants: 4,
-      totalLocataires: 8,
-      revenusMensuels: 850000,
-      revenusAnnuels: 10200000,
-      impayes: 2,
-      tauxOccupation: 67
+  // ── Mapping enums backend (anglais Prisma) → frontend (français) ──────────
+
+  private mapStatutBien(s: string): StatutBien {
+    const m: Record<string, StatutBien> = {
+      OCCUPIED: StatutBien.OCCUPE,
+      VACANT:   StatutBien.VACANT,
+      RENOVATION: StatutBien.EN_TRAVAUX,
+      ARCHIVED: StatutBien.ARCHIVE,
     };
+    return m[s] ?? (s as StatutBien);
   }
 
-  private getMockRevenus(): RevenuMensuel[] {
-    return [
-      { mois: 'Jan', montant: 750000, paiements: 7 },
-      { mois: 'Fév', montant: 800000, paiements: 8 },
-      { mois: 'Mar', montant: 850000, paiements: 8 },
-      { mois: 'Avr', montant: 820000, paiements: 8 },
-      { mois: 'Mai', montant: 850000, paiements: 8 },
-      { mois: 'Juin', montant: 850000, paiements: 8 }
-    ];
+  private mapTypeBien(t: string): TypeBien {
+    const m: Record<string, TypeBien> = {
+      APARTMENT: TypeBien.APPARTEMENT,
+      VILLA:     TypeBien.VILLA,
+      STUDIO:    TypeBien.STUDIO,
+      COMMERCIAL: TypeBien.LOCAL,
+    };
+    return m[t] ?? (t as TypeBien);
   }
 
-  private getMockAlertes(): Alerte[] {
-    return [
-      {
-        id: '1',
-        type: 'retard',
-        titre: 'Paiement en retard',
-        description: 'Kofi Mensa n\'a pas payé son loyer de mai',
-        date: new Date(),
-        priorite: 'haute',
-        bienId: '1',
-        locataireId: '1'
-      },
-      {
-        id: '2',
-        type: 'impaye',
-        titre: 'Loyer impayé',
-        description: 'Awa Koné a 2 mois de retard',
-        date: new Date(Date.now() - 86400000),
-        priorite: 'haute',
-        bienId: '2',
-        locataireId: '2'
-      },
-      {
-        id: '3',
-        type: 'maintenance',
-        titre: 'Maintenance requise',
-        description: 'Plomberie à vérifier au bien #3',
-        date: new Date(Date.now() - 172800000),
-        priorite: 'moyenne',
-        bienId: '3'
-      }
-    ];
-  }
-
-  private getMockPaiements(): DernierPaiement[] {
-    return [
-      {
-        id: '1',
-        locataire: 'Kofi Mensa',
-        bien: 'Appartement Lomé Centre',
-        montant: 100000,
-        date: new Date(),
-        statut: StatutPaiement.PAYE
-      },
-      {
-        id: '2',
-        locataire: 'Awa Koné',
-        bien: 'Villa Sokodé',
-        montant: 150000,
-        date: new Date(Date.now() - 86400000),
-        statut: StatutPaiement.EN_RETARD
-      },
-      {
-        id: '3',
-        locataire: 'Yao Koffi',
-        bien: 'Studio Kara',
-        montant: 75000,
-        date: new Date(Date.now() - 172800000),
-        statut: StatutPaiement.PAYE
-      },
-      {
-        id: '4',
-        locataire: 'Mame Diop',
-        bien: 'Bureau Kpalimé',
-        montant: 125000,
-        date: new Date(Date.now() - 259200000),
-        statut: StatutPaiement.IMPAYE
-      },
-      {
-        id: '5',
-        locataire: 'Kouassi Tété',
-        bien: 'Magasin Lomé',
-        montant: 200000,
-        date: new Date(Date.now() - 345600000),
-        statut: StatutPaiement.PAYE
-      }
-    ];
-  }
-
-  private getMockBiens(): DernierBien[] {
-    return [
-      {
-        id: '1',
-        titre: 'Appartement Lomé Centre',
-        type: 'APPARTEMENT',
-        ville: 'Lomé',
-        loyer: 100000,
-        statut: StatutBien.OCCUPE,
-        dateAjout: new Date()
-      },
-      {
-        id: '2',
-        titre: 'Villa Sokodé',
-        type: 'VILLA',
-        ville: 'Sokodé',
-        loyer: 150000,
-        statut: StatutBien.OCCUPE,
-        dateAjout: new Date(Date.now() - 604800000)
-      },
-      {
-        id: '3',
-        titre: 'Studio Kara',
-        type: 'STUDIO',
-        ville: 'Kara',
-        loyer: 75000,
-        statut: StatutBien.VACANT,
-        dateAjout: new Date(Date.now() - 1209600000)
-      },
-      {
-        id: '4',
-        titre: 'Bureau Kpalimé',
-        type: 'BUREAU',
-        ville: 'Kpalimé',
-        loyer: 125000,
-        statut: StatutBien.OCCUPE,
-        dateAjout: new Date(Date.now() - 1814400000)
-      },
-      {
-        id: '5',
-        titre: 'Magasin Lomé',
-        type: 'COMMERCIAL',
-        ville: 'Lomé',
-        loyer: 200000,
-        statut: StatutBien.VACANT,
-        dateAjout: new Date(Date.now() - 2419200000)
-      }
-    ];
+  private mapStatutPaiement(s: string): StatutPaiement {
+    const m: Record<string, StatutPaiement> = {
+      PAID:    StatutPaiement.PAYE,
+      PARTIAL: StatutPaiement.PARTIEL,
+      LATE:    StatutPaiement.EN_RETARD,
+      OVERDUE: StatutPaiement.IMPAYE,
+      PENDING: StatutPaiement.EN_RETARD,
+      PENDING_CONFIRMATION: StatutPaiement.EN_RETARD,
+      REJECTED: StatutPaiement.IMPAYE,
+    };
+    return m[s] ?? (s as StatutPaiement);
   }
 }

@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { Bien, TypeBien, StatutBien } from '@core/models/bien.model';
+import { environment } from '@env/environment';
 
 export interface BiensFilters {
   type?: TypeBien;
@@ -17,7 +17,7 @@ export interface BiensFilters {
   providedIn: 'root'
 })
 export class BiensService {
-  private apiUrl = 'http://localhost:3000/api/biens';
+  private readonly apiUrl = `${environment.apiUrl}/biens`;
 
   constructor(private http: HttpClient) {}
 
@@ -25,156 +25,63 @@ export class BiensService {
    * Récupère tous les biens avec filtres optionnels
    */
   getBiens(filters?: BiensFilters): Observable<Bien[]> {
-    let url = this.apiUrl;
-    
-    if (filters) {
-      const params = new URLSearchParams();
-      if (filters.type) params.append('type', filters.type);
-      if (filters.statut) params.append('statut', filters.statut);
-      if (filters.ville) params.append('ville', filters.ville);
-      if (filters.prixMin) params.append('prixMin', filters.prixMin.toString());
-      if (filters.prixMax) params.append('prixMax', filters.prixMax.toString());
-      if (filters.recherche) params.append('recherche', filters.recherche);
-      
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-    }
-
-    return this.http.get<Bien[]>(url).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des biens:', error);
-        return of(this.getMockBiens());
-      })
-    );
+    let params = new HttpParams();
+    if (filters?.type)      params = params.set('type', filters.type);
+    if (filters?.statut)    params = params.set('statut', filters.statut);
+    if (filters?.ville)     params = params.set('ville', filters.ville);
+    if (filters?.prixMin)   params = params.set('prixMin', filters.prixMin);
+    if (filters?.prixMax)   params = params.set('prixMax', filters.prixMax);
+    if (filters?.recherche) params = params.set('recherche', filters.recherche);
+    return this.http.get<Bien[]>(this.apiUrl, { params });
   }
 
   /**
    * Récupère un bien par son ID
    */
   getBienById(id: string): Observable<Bien> {
-    return this.http.get<Bien>(`${this.apiUrl}/${id}`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération du bien:', error);
-        const mockBien = this.getMockBiens().find(b => b.id === id);
-        return of(mockBien || this.getMockBiens()[0]);
-      })
-    );
+    return this.http.get<Bien>(`${this.apiUrl}/${id}`);
   }
 
   /**
    * Crée un nouveau bien
    */
   createBien(bien: Partial<Bien> | FormData): Observable<Bien> {
-    return this.http.post<Bien>(this.apiUrl, bien).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la création du bien:', error);
-        const bienData = bien as Bien;
-        const newBien: Bien = {
-          id: Math.random().toString(36).substr(2, 9),
-          titre: bienData.titre || '',
-          proprietaireId: bienData.proprietaireId || 'mock-prop-1',
-          typeBien: bienData.typeBien,
-          statut: bienData.statut || StatutBien.VACANT,
-          adresse: bienData.adresse || { quartier: '', ville: '' },
-          surface: bienData.surface || 0,
-          nbPieces: bienData.nbPieces || 0,
-          loyer: bienData.loyer || 0,
-          photos: bienData.photos || [],
-          dateCreation: new Date(),
-          description: bienData.description,
-          locataireActuelId: bienData.locataireActuelId,
-          charges: bienData.charges
-        };
-        return of(newBien);
-      })
-    );
+    return this.http.post<Bien>(this.apiUrl, bien);
   }
 
   /**
    * Met à jour un bien existant
    */
   updateBien(id: string, bien: Partial<Bien> | FormData): Observable<Bien> {
-    return this.http.put<Bien>(`${this.apiUrl}/${id}`, bien).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la mise à jour du bien:', error);
-        const bienData = bien as Bien;
-        const updatedBien: Bien = {
-          id,
-          titre: bienData.titre || '',
-          proprietaireId: bienData.proprietaireId || 'mock-prop-1',
-          typeBien: bienData.typeBien,
-          statut: bienData.statut || StatutBien.VACANT,
-          adresse: bienData.adresse || { quartier: '', ville: '' },
-          surface: bienData.surface || 0,
-          nbPieces: bienData.nbPieces || 0,
-          loyer: bienData.loyer || 0,
-          photos: bienData.photos || [],
-          dateCreation: bienData.dateCreation || new Date(),
-          description: bienData.description,
-          locataireActuelId: bienData.locataireActuelId,
-          charges: bienData.charges
-        };
-        return of(updatedBien);
-      })
-    );
+    return this.http.put<Bien>(`${this.apiUrl}/${id}`, bien);
   }
 
   /**
    * Supprime un bien
    */
   deleteBien(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la suppression du bien:', error);
-        return of();
-      })
-    );
+    return this.http.delete<void>(`${this.apiUrl}/${id}`);
   }
 
-  /**
-   * Archive un bien
-   */
   archiveBien(id: string): Observable<Bien> {
-    return this.http.patch<Bien>(`${this.apiUrl}/${id}/archive`, {}).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de l\'archivage du bien:', error);
-        return of();
-      })
-    );
+    return this.http.patch<Bien>(`${this.apiUrl}/${id}/archive`, {});
   }
 
-  /**
-   * Change le statut d'un bien
-   */
   changerStatut(id: string, statut: StatutBien): Observable<Bien> {
-    return this.http.patch<Bien>(`${this.apiUrl}/${id}/statut`, { statut }).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors du changement de statut:', error);
-        return of();
-      })
-    );
+    return this.http.patch<Bien>(`${this.apiUrl}/${id}/statut`, { statut });
   }
 
-  /**
-   * Récupère les statistiques des biens
-   */
   getStatistiques(): Observable<{
     total: number;
     parType: Record<TypeBien, number>;
     parStatut: Record<StatutBien, number>;
     parVille: Record<string, number>;
   }> {
-    return this.http.get<any>(`${this.apiUrl}/statistiques`).pipe(
-      catchError((error: any) => {
-        console.error('Erreur lors de la récupération des statistiques:', error);
-        return of(this.getMockStatistiques());
-      })
-    );
+    return this.http.get<any>(`${this.apiUrl}/statistiques`);
   }
 
-  // Données mockées pour le développement
-  private getMockBiens(): Bien[] {
+  // Données mockées conservées uniquement pour les tests unitaires
+  getMockBiens(): Bien[] {
     return [
       {
         id: '1',

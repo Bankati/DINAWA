@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npx ng build --configuration production",
+  "outputDirectory": "dist/warah-frontend/browser",
+  "installCommand": "npm install --legacy-peer-deps",
+  "framework": null
+}

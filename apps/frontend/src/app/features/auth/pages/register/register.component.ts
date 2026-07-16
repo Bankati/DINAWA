@@ -30,7 +30,7 @@ export type UserType = 'proprietaire_local' | 'proprietaire_diaspora' | 'locatai
         <div class="left-panel">
           <div class="left-content">
             <div class="logo">
-              <img src="/assets/warah-logo.png" alt="WARAH" class="logo-img">
+              <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
             </div>
             <h1 class="hero-title">L'immobilier togolais dans votre poche</h1>
             <div class="features">
@@ -771,9 +771,9 @@ export class RegisterComponent implements OnInit {
         }
       };
 
-      localStorage.setItem('warah_token', mockResponse.token);
-      localStorage.setItem('warah_refresh_token', mockResponse.refreshToken);
-      localStorage.setItem('warah_user', JSON.stringify(mockResponse.utilisateur));
+      localStorage.setItem('WARAH_token', mockResponse.token);
+      localStorage.setItem('WARAH_refresh_token', mockResponse.refreshToken);
+      localStorage.setItem('WARAH_user', JSON.stringify(mockResponse.utilisateur));
 
       const redirectMap: Record<UserType, string> = {
         proprietaire_local: '/proprietaires/dashboard',

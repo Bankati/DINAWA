@@ -1,21 +1,33 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { AdminService } from '../../services/admin.service';
-import { CompteUtilisateur, RoleUtilisateur, StatutCompte } from '@core/models/admin.model';
-import { LokBadgeStatutCompteComponent } from '../../../../shared/components/lok-badge-statut-compte/lok-badge-statut-compte.component';
-import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
-import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
-import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
+import { Component, OnInit, inject } from "@angular/core";
+import { CommonModule } from "@angular/common";
+import { AdminService } from "../../services/admin.service";
+import {
+  CompteUtilisateur,
+  RoleUtilisateur,
+  StatutCompte,
+} from "@core/models/admin.model";
+import { LokBadgeStatutCompteComponent } from "../../../../shared/components/lok-badge-statut-compte/lok-badge-statut-compte.component";
+import { LokSkeletonComponent } from "../../../../shared/components/lok-skeleton/lok-skeleton.component";
+import { LokEmptyStateComponent } from "../../../../shared/components/lok-empty-state/lok-empty-state.component";
+import { LokConfirmModalComponent } from "../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component";
 
 @Component({
-  selector: 'app-comptes',
+  selector: "app-comptes",
   standalone: true,
-  imports: [CommonModule, LokBadgeStatutCompteComponent, LokSkeletonComponent, LokEmptyStateComponent, LokConfirmModalComponent],
+  imports: [
+    CommonModule,
+    LokBadgeStatutCompteComponent,
+    LokSkeletonComponent,
+    LokEmptyStateComponent,
+    LokConfirmModalComponent,
+  ],
   template: `
     <div class="admin-page">
       <div class="admin-header">
         <h1 class="admin-title">Gestion des comptes</h1>
-        <p class="admin-subtitle">Propriétaires, locataires et gestionnaires inscrits sur WARAH</p>
+        <p class="admin-subtitle">
+          Propriétaires, locataires et gestionnaires inscrits sur WARAH
+        </p>
       </div>
 
       @if (loading) {
@@ -44,21 +56,35 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
                 <tr>
                   <td>
                     <div class="user-cell">
-                      <span class="user-name">{{ compte.prenom }} {{ compte.nom }}</span>
+                      <span class="user-name"
+                        >{{ compte.prenom }} {{ compte.nom }}</span
+                      >
                       <span class="user-email">{{ compte.email }}</span>
                     </div>
                   </td>
                   <td>{{ labelRole(compte.role) }}</td>
                   <td>{{ compte.dateInscription }}</td>
-                  <td>{{ compte.nombreBiens ?? '—' }}</td>
-                  <td><lok-badge-statut-compte [statut]="compte.statut"></lok-badge-statut-compte></td>
+                  <td>{{ compte.nombreBiens ?? "—" }}</td>
+                  <td>
+                    <lok-badge-statut-compte
+                      [statut]="compte.statut"
+                    ></lok-badge-statut-compte>
+                  </td>
                   <td>
                     @if (compte.statut === StatutCompte.SUSPENDU) {
-                      <button type="button" class="action-btn action-btn--activer" (click)="demanderActivation(compte)">
+                      <button
+                        type="button"
+                        class="action-btn action-btn--activer"
+                        (click)="demanderActivation(compte)"
+                      >
                         Réactiver
                       </button>
                     } @else if (compte.statut === StatutCompte.ACTIF) {
-                      <button type="button" class="action-btn action-btn--suspendre" (click)="demanderSuspension(compte)">
+                      <button
+                        type="button"
+                        class="action-btn action-btn--suspendre"
+                        (click)="demanderSuspension(compte)"
+                      >
                         Suspendre
                       </button>
                     } @else {
@@ -75,14 +101,16 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
 
     @if (compteCible) {
       <lok-confirm-modal
-        [titre]="compteCible.statut === StatutCompte.ACTIF ? 'Suspendre ce compte ?' : 'Réactiver ce compte ?'"
-        [message]="compteCible.statut === StatutCompte.ACTIF
-          ? (compteCible.prenom + ' ' + compteCible.nom + ' ne pourra plus accéder à la plateforme.')
-          : (compteCible.prenom + ' ' + compteCible.nom + ' retrouvera l\\'accès à son compte.')"
+        [titre]="
+          compteCible.statut === StatutCompte.ACTIF
+            ? 'Suspendre ce compte ?'
+            : 'Réactiver ce compte ?'
+        "
+        [message]="confirmModalMessage"
         confirmLabel="Confirmer"
         cancelLabel="Annuler"
-        (onConfirm)="confirmerChangementStatut()"
-        (onCancel)="compteCible = null"
+        (confirm)="confirmerChangementStatut()"
+        (cancelled)="compteCible = null"
       ></lok-confirm-modal>
     }
   `,
@@ -196,7 +224,7 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
         font-size: 1.5rem;
       }
     }
-  `
+  `,
 })
 export class ComptesComponent implements OnInit {
   comptes: CompteUtilisateur[] = [];
@@ -204,10 +232,10 @@ export class ComptesComponent implements OnInit {
   compteCible: CompteUtilisateur | null = null;
   readonly StatutCompte = StatutCompte;
 
-  constructor(private adminService: AdminService) {}
+  private readonly adminService = inject(AdminService);
 
   ngOnInit(): void {
-    this.adminService.getComptes().subscribe(comptes => {
+    this.adminService.getComptes().subscribe((comptes) => {
       this.comptes = comptes;
       this.loading = false;
     });
@@ -216,14 +244,27 @@ export class ComptesComponent implements OnInit {
   labelRole(role: RoleUtilisateur): string {
     switch (role) {
       case RoleUtilisateur.PROPRIETAIRE:
-        return 'Propriétaire';
+        return "Propriétaire";
       case RoleUtilisateur.LOCATAIRE:
-        return 'Locataire';
+        return "Locataire";
       case RoleUtilisateur.GESTIONNAIRE:
-        return 'Gestionnaire';
+        return "Gestionnaire";
       default:
         return role;
     }
+  }
+
+  // Calculé en TypeScript plutôt qu'inline dans le template — l'apostrophe
+  // de « l'accès » rendait l'expression illisible et cassait le parseur de
+  // templates Angular (« Missing closing parentheses »).
+  get confirmModalMessage(): string {
+    if (!this.compteCible) {
+      return "";
+    }
+    const nomComplet = `${this.compteCible.prenom} ${this.compteCible.nom}`;
+    return this.compteCible.statut === StatutCompte.ACTIF
+      ? `${nomComplet} ne pourra plus accéder à la plateforme.`
+      : `${nomComplet} retrouvera l'accès à son compte.`;
   }
 
   demanderSuspension(compte: CompteUtilisateur): void {
@@ -238,13 +279,18 @@ export class ComptesComponent implements OnInit {
     if (!this.compteCible) {
       return;
     }
-    const nouveauStatut = this.compteCible.statut === StatutCompte.ACTIF ? StatutCompte.SUSPENDU : StatutCompte.ACTIF;
-    this.adminService.changerStatutCompte(this.compteCible.id, nouveauStatut).subscribe(compteMaj => {
-      const index = this.comptes.findIndex(c => c.id === compteMaj.id);
-      if (index !== -1) {
-        this.comptes[index] = compteMaj;
-      }
-      this.compteCible = null;
-    });
+    const nouveauStatut =
+      this.compteCible.statut === StatutCompte.ACTIF
+        ? StatutCompte.SUSPENDU
+        : StatutCompte.ACTIF;
+    this.adminService
+      .changerStatutCompte(this.compteCible.id, nouveauStatut)
+      .subscribe((compteMaj) => {
+        const index = this.comptes.findIndex((c) => c.id === compteMaj.id);
+        if (index !== -1) {
+          this.comptes[index] = compteMaj;
+        }
+        this.compteCible = null;
+      });
   }
 }

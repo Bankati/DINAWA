@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s -o /dev/null -w \"HTTP:%{http_code}\\\\n\" --max-time 3 http://localhost:63123/)"
+      "Bash(curl -s -o /dev/null -w \"HTTP:%{http_code}\\\\n\" --max-time 3 http://localhost:63123/)",
+      "Bash(curl -s \"https://resend.com/docs/dashboard/domains/introduction\" -A \"Mozilla/5.0\" --max-time 10)",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 30328 -Force\")"
     ]
   }
 }

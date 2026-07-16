@@ -34,6 +34,7 @@ export const routes: Routes = [
   },
   {
     path: 'proprietaires',
+    canActivate: [AuthGuard],
     loadChildren: () => import('./features/proprietaires/proprietaires.routes').then(m => m.proprietairesRoutes)
   },
   {

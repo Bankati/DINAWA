@@ -1,15 +1,23 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { AdminService } from '../../services/admin.service';
-import { TransactionSupervisee, StatutTransaction } from '@core/models/admin.model';
-import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
-import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
-import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
+import { Component, OnInit, inject } from "@angular/core";
+import { CommonModule } from "@angular/common";
+import { AdminService } from "../../services/admin.service";
+import {
+  TransactionSupervisee,
+  StatutTransaction,
+} from "@core/models/admin.model";
+import { LokMontantFcfaComponent } from "../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component";
+import { LokSkeletonComponent } from "../../../../shared/components/lok-skeleton/lok-skeleton.component";
+import { LokEmptyStateComponent } from "../../../../shared/components/lok-empty-state/lok-empty-state.component";
 
 @Component({
-  selector: 'app-transactions',
+  selector: "app-transactions",
   standalone: true,
-  imports: [CommonModule, LokMontantFcfaComponent, LokSkeletonComponent, LokEmptyStateComponent],
+  imports: [
+    CommonModule,
+    LokMontantFcfaComponent,
+    LokSkeletonComponent,
+    LokEmptyStateComponent,
+  ],
   template: `
     <div class="admin-page">
       <div class="admin-header">
@@ -49,11 +57,26 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
                   <td>{{ txn.proprietaire }}</td>
                   <td>{{ txn.locataire }}</td>
                   <td>{{ labelMode(txn.modePaiement) }}</td>
-                  <td><lok-montant-fcfa [montant]="txn.montant" size="sm"></lok-montant-fcfa></td>
-                  <td><lok-montant-fcfa [montant]="txn.commission" size="sm" color="primary"></lok-montant-fcfa></td>
+                  <td>
+                    <lok-montant-fcfa
+                      [montant]="txn.montant"
+                      size="sm"
+                    ></lok-montant-fcfa>
+                  </td>
+                  <td>
+                    <lok-montant-fcfa
+                      [montant]="txn.commission"
+                      size="sm"
+                      color="primary"
+                    ></lok-montant-fcfa>
+                  </td>
                   <td>{{ txn.date }}</td>
                   <td>
-                    <span class="statut-pill" [class]="statutClasses(txn.statut)">{{ labelStatut(txn.statut) }}</span>
+                    <span
+                      class="statut-pill"
+                      [class]="statutClasses(txn.statut)"
+                      >{{ labelStatut(txn.statut) }}</span
+                    >
                   </td>
                 </tr>
               }
@@ -157,16 +180,16 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
         font-size: 1.5rem;
       }
     }
-  `
+  `,
 })
 export class TransactionsComponent implements OnInit {
   transactions: TransactionSupervisee[] = [];
   loading = true;
 
-  constructor(private adminService: AdminService) {}
+  private readonly adminService = inject(AdminService);
 
   ngOnInit(): void {
-    this.adminService.getTransactions().subscribe(transactions => {
+    this.adminService.getTransactions().subscribe((transactions) => {
       this.transactions = transactions;
       this.loading = false;
     });
@@ -174,12 +197,12 @@ export class TransactionsComponent implements OnInit {
 
   labelMode(mode: string): string {
     switch (mode) {
-      case 'T_MONEY':
-        return 'T-Money';
-      case 'FLOOZ':
-        return 'Flooz';
-      case 'ESPECES':
-        return 'Espèces';
+      case "T_MONEY":
+        return "T-Money";
+      case "FLOOZ":
+        return "Flooz";
+      case "ESPECES":
+        return "Espèces";
       default:
         return mode;
     }
@@ -188,11 +211,11 @@ export class TransactionsComponent implements OnInit {
   labelStatut(statut: StatutTransaction): string {
     switch (statut) {
       case StatutTransaction.REUSSIE:
-        return 'Réussie';
+        return "Réussie";
       case StatutTransaction.EN_ATTENTE:
-        return 'En attente';
+        return "En attente";
       case StatutTransaction.ECHOUEE:
-        return 'Échouée';
+        return "Échouée";
       default:
         return statut;
     }
@@ -201,13 +224,13 @@ export class TransactionsComponent implements OnInit {
   statutClasses(statut: StatutTransaction): string {
     switch (statut) {
       case StatutTransaction.REUSSIE:
-        return 'statut-pill--reussie';
+        return "statut-pill--reussie";
       case StatutTransaction.EN_ATTENTE:
-        return 'statut-pill--attente';
+        return "statut-pill--attente";
       case StatutTransaction.ECHOUEE:
-        return 'statut-pill--echouee';
+        return "statut-pill--echouee";
       default:
-        return '';
+        return "";
     }
   }
 }

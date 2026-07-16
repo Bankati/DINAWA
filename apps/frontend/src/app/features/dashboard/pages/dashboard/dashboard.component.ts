@@ -6,6 +6,7 @@ import { LokMontantFcfaComponent } from '../../../../shared/components/lok-monta
 import { LokBadgePaiementComponent } from '../../../../shared/components/lok-badge-paiement/lok-badge-paiement.component';
 import { LokBadgeStatutComponent } from '../../../../shared/components/lok-badge-statut/lok-badge-statut.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
+import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
 
 @Component({
   selector: 'app-dashboard',
@@ -16,29 +17,21 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
     LokMontantFcfaComponent,
     LokBadgePaiementComponent,
     LokBadgeStatutComponent,
-    LokSkeletonComponent
+    LokSkeletonComponent,
+    FcfaPipe
   ],
   template: `
     <div class="dash-page">
 
-      <!-- Topbar -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <div class="page-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1"></rect>
-              <rect x="14" y="3" width="7" height="7" rx="1"></rect>
-              <rect x="14" y="14" width="7" height="7" rx="1"></rect>
-              <rect x="3" y="14" width="7" height="7" rx="1"></rect>
-            </svg>
-          </div>
-          <div>
-            <h1 class="page-title">Tableau de bord</h1>
-            <p class="page-sub">{{ dateCourante }}</p>
-          </div>
+      <!-- ── En-tête ── -->
+      <header class="dash-header">
+        <div class="header-left">
+          <h1 class="header-greeting">Bonjour, {{ utilisateurPrenom }}</h1>
+          <p class="header-date">{{ dateCourante }}</p>
         </div>
-        <div class="topbar-right">
-          <div class="notif-btn" [class.has-alertes]="alertes.length > 0">
+        <div class="header-right">
+          <a routerLink="/dashboard/notifications"
+             class="notif-btn" [class.has-alertes]="alertes.length > 0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
               <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -46,160 +39,119 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
             @if (alertes.length > 0) {
               <span class="notif-badge">{{ alertes.length }}</span>
             }
-          </div>
-          <div class="topbar-avatar">{{ initiales }}</div>
-          <div class="topbar-user-info">
-            <p class="topbar-name">{{ utilisateurPrenom }}</p>
-            <p class="topbar-role">Propriétaire</p>
-          </div>
+          </a>
+          <div class="header-avatar">{{ initiales }}</div>
         </div>
       </header>
 
-      <!-- Corps -->
+      <!-- ── Corps ── -->
       <div class="dash-body">
 
-        <!-- Bannière de bienvenue -->
-        <div class="greeting-banner">
-          <div>
-            <h2 class="greeting-title">Bonjour, {{ utilisateurPrenom }}</h2>
-            <p class="greeting-sub">Voici un résumé de votre activité immobilière.</p>
-          </div>
-          <a routerLink="/dashboard/biens" class="btn-accent">
+        <!-- ── KPI asymétrique ── -->
+        <div class="kpi-layout">
+          @if (loadingKPIs) {
+            <div class="kpi-hero-card"><lok-skeleton type="card" style="height:100%;min-height:220px"></lok-skeleton></div>
+            <div class="kpi-biens-card"><lok-skeleton type="card"></lok-skeleton></div>
+            <div class="kpi-taux-card"><lok-skeleton type="card"></lok-skeleton></div>
+            <div class="kpi-impayes-card"><lok-skeleton type="card"></lok-skeleton></div>
+          } @else {
+
+            <!-- Hero : Revenus -->
+            <div class="kpi-hero-card">
+              <p class="kpi-h-eyebrow">Revenus ce mois</p>
+              <p class="kpi-h-amount">{{ kpis.revenusMensuels | fcfa }}</p>
+              <p class="kpi-h-trend">&#8593;&nbsp;+5&nbsp;% vs mois dernier</p>
+              <div class="kpi-h-sep"></div>
+              <div class="kpi-h-footer">
+                <span class="kpi-h-ann-label">Total annuel</span>
+                <span class="kpi-h-ann-val">{{ kpis.revenusAnnuels | fcfa }}</span>
+              </div>
+            </div>
+
+            <!-- Biens (large) -->
+            <div class="kpi-biens-card">
+              <p class="kpi-label">Parc immobilier</p>
+              <div class="kpi-biens-row">
+                <p class="kpi-big">{{ kpis.totalBiens }}</p>
+                <div class="biens-pills">
+                  <span class="biens-pill occ">{{ kpis.biensOccupes }} occupés</span>
+                  <span class="biens-pill vac">{{ kpis.biensVacants }} vacants</span>
+                </div>
+              </div>
+              <div class="biens-bar-track">
+                <div class="biens-bar-fill"
+                  [style.width.%]="kpis.totalBiens > 0 ? (kpis.biensOccupes / kpis.totalBiens * 100) : 0">
+                </div>
+              </div>
+            </div>
+
+            <!-- Taux d'occupation -->
+            <div class="kpi-taux-card">
+              <p class="kpi-label">Occupation</p>
+              <div class="taux-body">
+                <div>
+                  <p class="kpi-big accent">{{ kpis.tauxOccupation }}%</p>
+                  <p class="kpi-sub">{{ kpis.totalLocataires }} locataires</p>
+                </div>
+                <svg viewBox="0 0 44 44" class="ring-svg" aria-hidden="true">
+                  <circle cx="22" cy="22" r="17" class="ring-bg"/>
+                  <circle cx="22" cy="22" r="17" class="ring-fill"
+                    [attr.stroke-dasharray]="(kpis.tauxOccupation / 100 * 106.81).toFixed(2) + ' 106.81'"/>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Impayés -->
+            <div class="kpi-impayes-card">
+              <p class="kpi-label">Impayés</p>
+              <p class="kpi-big danger">{{ kpis.impayes }}</p>
+              <p class="kpi-sub">loyer{{ kpis.impayes !== 1 ? 's' : '' }} en retard</p>
+              @if (kpis.impayes > 0) {
+                <span class="urgent-pill">Urgent</span>
+              } @else {
+                <span class="ok-pill">À jour</span>
+              }
+            </div>
+
+          }
+        </div>
+
+        <!-- ── Actions rapides ── -->
+        <div class="quickactions-strip">
+          <a routerLink="/dashboard/biens" class="qa-btn qa-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
             Ajouter un bien
           </a>
+          <a routerLink="/dashboard/paiements" class="qa-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="1" y="4" width="22" height="16" rx="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
+            Paiement
+          </a>
+          <a routerLink="/dashboard/locataires" class="qa-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <line x1="19" y1="8" x2="19" y2="14"></line>
+              <line x1="22" y1="11" x2="16" y2="11"></line>
+            </svg>
+            Nouveau locataire
+          </a>
+          <a routerLink="/dashboard/annonces" class="qa-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            Publier une annonce
+          </a>
         </div>
 
-        <!-- Cartes KPI -->
-        <div class="kpi-grid">
-          @if (loadingKPIs) {
-            @for (i of [1,2,3,4]; track i) {
-              <lok-skeleton type="card"></lok-skeleton>
-            }
-          } @else {
-
-            <div class="kpi-card kpi-blue">
-              <div class="kpi-icon kpi-icon-blue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-              </div>
-              <div class="kpi-body">
-                <p class="kpi-label">Total biens</p>
-                <p class="kpi-value">{{ kpis.totalBiens }}</p>
-                <div class="kpi-pills">
-                  <span class="pill pill-green">{{ kpis.biensOccupes }} occupés</span>
-                  <span class="pill pill-gray">{{ kpis.biensVacants }} vacants</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="kpi-card kpi-green">
-              <div class="kpi-icon kpi-icon-green">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="1" x2="12" y2="23"></line>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                </svg>
-              </div>
-              <div class="kpi-body">
-                <p class="kpi-label">Revenus mensuels</p>
-                <lok-montant-fcfa [montant]="kpis.revenusMensuels" size="lg" color="primary"></lok-montant-fcfa>
-                <p class="kpi-trend-up">&#8593; +5% vs mois dernier</p>
-              </div>
-            </div>
-
-            <div class="kpi-card kpi-gold">
-              <div class="kpi-icon kpi-icon-gold">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                </svg>
-              </div>
-              <div class="kpi-body">
-                <p class="kpi-label">Taux d'occupation</p>
-                <p class="kpi-value">{{ kpis.tauxOccupation }}%</p>
-                <div class="occ-bar"><div class="occ-fill" [style.width.%]="kpis.tauxOccupation"></div></div>
-                <p class="kpi-sub">{{ kpis.totalLocataires }} locataires actifs</p>
-              </div>
-            </div>
-
-            <div class="kpi-card kpi-red">
-              <div class="kpi-icon kpi-icon-red">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                  <line x1="12" y1="9" x2="12" y2="13"></line>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-              </div>
-              <div class="kpi-body">
-                <p class="kpi-label">Impayés</p>
-                <p class="kpi-value kpi-red-val">{{ kpis.impayes }}</p>
-                <div class="kpi-pills">
-                  <span class="pill pill-red">Traitement urgent</span>
-                </div>
-              </div>
-            </div>
-          }
-        </div>
-
-        <!-- Actions rapides -->
-        <div class="section-card">
-          <h2 class="section-title">Actions rapides</h2>
-          <div class="actions-grid">
-            <a routerLink="/dashboard/biens" class="action-card">
-              <div class="action-icon a-blue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </div>
-              <p class="action-label">Ajouter un bien</p>
-              <p class="action-sub">Nouveau logement</p>
-            </a>
-            <a routerLink="/dashboard/paiements" class="action-card">
-              <div class="action-icon a-green">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="1" y="4" width="22" height="16" rx="2"></rect>
-                  <line x1="1" y1="10" x2="23" y2="10"></line>
-                </svg>
-              </div>
-              <p class="action-label">Paiement</p>
-              <p class="action-sub">Enregistrer un loyer</p>
-            </a>
-            <a routerLink="/dashboard/locataires" class="action-card">
-              <div class="action-icon a-gold">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <line x1="19" y1="8" x2="19" y2="14"></line>
-                  <line x1="22" y1="11" x2="16" y2="11"></line>
-                </svg>
-              </div>
-              <p class="action-label">Nouveau locataire</p>
-              <p class="action-sub">Ajouter un profil</p>
-            </a>
-            <a routerLink="/dashboard/annonces" class="action-card">
-              <div class="action-icon a-purple">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                </svg>
-              </div>
-              <p class="action-label">Publier une annonce</p>
-              <p class="action-sub">Mettre en location</p>
-            </a>
-          </div>
-        </div>
-
-        <!-- Graphique + Alertes -->
+        <!-- ── Graphique + Alertes ── -->
         <div class="chart-alerts-grid">
 
           <div class="section-card chart-card">
@@ -217,37 +169,31 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
               <lok-skeleton type="card"></lok-skeleton>
             } @else {
               <div class="chart-container">
-                <!-- Axe Y -->
                 <div class="y-axis-labels">
                   @for (lbl of yGridLabels; track lbl) {
                     <span class="y-label">{{ lbl }}</span>
                   }
                 </div>
-                <!-- Zone SVG -->
                 <div class="svg-wrapper" (mouseleave)="onPointHover(null)">
                   <svg [attr.viewBox]="'0 0 ' + CHART_W + ' ' + CHART_H"
                        class="area-chart" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="dashAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#0F4C81" stop-opacity="0.22"/>
-                        <stop offset="70%" stop-color="#1e5fa0" stop-opacity="0.07"/>
-                        <stop offset="100%" stop-color="#C9982E" stop-opacity="0.03"/>
+                        <stop offset="0%"   stop-color="#0F4C81" stop-opacity="0.18"/>
+                        <stop offset="65%"  stop-color="#1e5fa0" stop-opacity="0.05"/>
+                        <stop offset="100%" stop-color="#C9982E" stop-opacity="0.02"/>
                       </linearGradient>
                       <linearGradient id="dashLineGrad" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stop-color="#0F4C81"/>
-                        <stop offset="60%" stop-color="#1a6dc0"/>
+                        <stop offset="0%"   stop-color="#0F4C81"/>
+                        <stop offset="60%"  stop-color="#1a6dc0"/>
                         <stop offset="100%" stop-color="#C9982E"/>
                       </linearGradient>
                     </defs>
-                    <!-- Lignes de grille horizontales -->
                     @for (gy of yGridLines; track gy) {
                       <line x1="0" [attr.y1]="gy" [attr.x2]="CHART_W" [attr.y2]="gy" class="grid-line"/>
                     }
-                    <!-- Zone remplie sous la courbe -->
                     <path [attr.d]="svgAreaPath" class="chart-area-fill"/>
-                    <!-- Courbe principale animée -->
                     <path [attr.d]="svgLinePath" class="chart-line" stroke="url(#dashLineGrad)"/>
-                    <!-- Points de données interactifs -->
                     @for (pt of chartPoints; track pt.x; let i = $index) {
                       <g class="data-point" [class.active]="activePointIndex === i"
                          (mouseenter)="onPointHover(i)">
@@ -258,7 +204,6 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
                       </g>
                     }
                   </svg>
-                  <!-- Tooltip flottant -->
                   @if (activePoint) {
                     <div class="chart-tooltip"
                          [style.left.%]="activePoint.xPct"
@@ -269,13 +214,11 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
                   }
                 </div>
               </div>
-              <!-- Axe X -->
               <div class="x-axis-row">
                 @for (r of revenus; track r.mois) {
                   <span class="x-label">{{ r.mois }}</span>
                 }
               </div>
-              <!-- Stats synthèse -->
               <div class="chart-stats-row">
                 <div class="chart-stat">
                   <span class="cs-label">Total</span>
@@ -346,9 +289,10 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
               </div>
             }
           </div>
+
         </div>
 
-        <!-- Paiements + Biens récents -->
+        <!-- ── Paiements + Biens récents ── -->
         <div class="tables-grid">
 
           <div class="section-card">
@@ -414,188 +358,268 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
   `,
   styles: [`
     /* ── Page ── */
-    .dash-page { min-height: 100vh; background: #F1F4F9; font-family: inherit; }
+    .dash-page { min-height: 100vh; background: #F2EFE9; font-family: inherit; }
 
-    /* ── Topbar ── */
-    .topbar {
+    /* ── En-tête ── */
+    .dash-header {
       position: sticky; top: 0; z-index: 10;
-      background: white; border-bottom: 1px solid #E5EAF2;
+      background: #FFFFFF; border-bottom: 1px solid #EDE8DF;
       padding: 0 28px; height: 68px;
       display: flex; align-items: center; justify-content: space-between;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      box-shadow: 0 1px 8px rgba(15,76,129,0.06);
     }
-    .topbar-left { display: flex; align-items: center; gap: 14px; }
-    .page-icon {
-      width: 40px; height: 40px; border-radius: 10px;
-      background: var(--color-primary);
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    .header-left { display: flex; flex-direction: column; justify-content: center; }
+    .header-greeting {
+      font-size: 17px; font-weight: 700;
+      color: var(--color-primary-dark); line-height: 1.2; margin: 0;
     }
-    .page-icon svg { width: 20px; height: 20px; stroke: white; }
-    .page-title { font-size: 17px; font-weight: 700; color: #111827; line-height: 1.2; }
-    .page-sub { font-size: 12px; color: #6B7280; margin-top: 1px; text-transform: capitalize; }
-    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .header-date {
+      font-size: 12px; color: #9CA3AF;
+      margin: 2px 0 0; text-transform: capitalize;
+    }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
     .notif-btn {
-      position: relative; width: 40px; height: 40px; border-radius: 10px;
-      background: #F3F4F6; border: 1px solid #E5E7EB;
-      display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s;
+      position: relative; width: 40px; height: 40px;
+      border-radius: 10px; background: #F5F2ED;
+      border: 1px solid #EDE8DF;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; text-decoration: none; transition: background 0.15s;
     }
-    .notif-btn:hover { background: #E8EDF5; }
-    .notif-btn.has-alertes { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.3); }
-    .notif-btn svg { width: 18px; height: 18px; stroke: #374151; }
+    .notif-btn:hover { background: #EEE9E1; }
+    .notif-btn.has-alertes { background: rgba(220,38,38,0.06); border-color: rgba(220,38,38,0.25); }
+    .notif-btn svg { width: 18px; height: 18px; stroke: #4B5563; }
     .notif-badge {
       position: absolute; top: -4px; right: -4px;
-      background: #EF4444; color: white; font-size: 10px; font-weight: 700;
+      background: #DC2626; color: white; font-size: 10px; font-weight: 700;
       width: 18px; height: 18px; border-radius: 50%; border: 2px solid white;
       display: flex; align-items: center; justify-content: center;
     }
-    .topbar-avatar {
+    .header-avatar {
       width: 38px; height: 38px; border-radius: 10px;
-      background: var(--color-accent); color: var(--color-primary-dark);
+      background: var(--color-primary); color: white;
       font-weight: 700; font-size: 14px;
       display: flex; align-items: center; justify-content: center;
     }
-    .topbar-name { font-size: 13px; font-weight: 600; color: #111827; line-height: 1.3; }
-    .topbar-role { font-size: 11px; color: #6B7280; }
 
     /* ── Corps ── */
-    .dash-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; }
+    .dash-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 
-    /* ── Bannière ── */
-    .greeting-banner {
-      background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
-      border-radius: 16px; padding: 24px 28px;
+    /* ═══════════════════════════════════
+       KPI — grille asymétrique
+       Colonnes : 1.5fr | 1fr | 1fr
+       Hero (col 1) = 2 lignes
+       Biens (cols 2-3) = ligne 1
+       Taux (col 2) + Impayés (col 3) = ligne 2
+    ═══════════════════════════════════ */
+    .kpi-layout {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 16px;
+    }
+
+    /* Positionnement des cellules */
+    .kpi-hero-card    { grid-column: 1;   grid-row: 1 / 3; }
+    .kpi-biens-card   { grid-column: 2 / 4; grid-row: 1; }
+    .kpi-taux-card    { grid-column: 2;   grid-row: 2; }
+    .kpi-impayes-card { grid-column: 3;   grid-row: 2; }
+
+    /* ── Hero card (revenus) ── */
+    .kpi-hero-card {
+      background: var(--color-primary-dark);
+      border-radius: 16px; padding: 26px;
+      display: flex; flex-direction: column;
+      min-height: 200px;
+    }
+    .kpi-h-eyebrow {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.13em;
+      color: var(--color-accent); margin: 0 0 16px;
+    }
+    .kpi-h-amount {
+      font-size: 30px; font-weight: 800;
+      color: var(--color-accent); letter-spacing: -0.02em;
+      line-height: 1.15; flex: 1;
+    }
+    .kpi-h-trend {
+      font-size: 12px; color: rgba(255,255,255,0.6);
+      margin: 10px 0 0;
+    }
+    .kpi-h-sep {
+      height: 1px; background: rgba(255,255,255,0.1);
+      margin: 18px 0;
+    }
+    .kpi-h-footer {
       display: flex; align-items: center; justify-content: space-between;
     }
-    .greeting-title { font-size: 20px; font-weight: 700; color: white; }
-    .greeting-sub { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; }
-    .btn-accent {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--color-accent); color: var(--color-primary-dark);
-      font-size: 13px; font-weight: 700; padding: 11px 20px;
-      border-radius: 10px; text-decoration: none; white-space: nowrap; flex-shrink: 0;
-      transition: opacity 0.15s;
+    .kpi-h-ann-label {
+      font-size: 10.5px; color: rgba(255,255,255,0.45);
+      text-transform: uppercase; letter-spacing: 0.06em;
     }
-    .btn-accent:hover { opacity: 0.88; }
-    .btn-accent svg { width: 16px; height: 16px; }
+    .kpi-h-ann-val {
+      font-size: 12.5px; font-weight: 600;
+      color: rgba(255,255,255,0.7);
+    }
 
-    /* ── KPI ── */
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-    .kpi-card {
-      background: white; border-radius: 14px; padding: 20px;
-      display: flex; align-items: flex-start; gap: 16px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #E5EAF2;
-      border-top: 3px solid transparent;
-      transition: box-shadow 0.15s, transform 0.15s;
+    /* ── Cards secondaires (fond blanc) ── */
+    .kpi-biens-card, .kpi-taux-card, .kpi-impayes-card {
+      background: white; border-radius: 16px; padding: 20px 22px;
+      border: 1px solid #EDE8DF;
+      box-shadow: 0 2px 10px rgba(15,76,129,0.05);
     }
-    .kpi-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.09); transform: translateY(-2px); }
-    .kpi-blue { border-top-color: var(--color-primary); }
-    .kpi-green { border-top-color: #10B981; }
-    .kpi-gold { border-top-color: var(--color-accent); }
-    .kpi-red { border-top-color: #EF4444; }
-    .kpi-icon {
-      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
+
+    /* Labels communs */
+    .kpi-label {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: #A89E8E; margin: 0 0 10px;
     }
-    .kpi-icon svg { width: 22px; height: 22px; }
-    .kpi-icon-blue { background: rgba(15,76,129,0.1); }
-    .kpi-icon-blue svg { stroke: var(--color-primary); }
-    .kpi-icon-green { background: rgba(16,185,129,0.1); }
-    .kpi-icon-green svg { stroke: #10B981; }
-    .kpi-icon-gold { background: rgba(201,152,46,0.12); }
-    .kpi-icon-gold svg { stroke: var(--color-accent); }
-    .kpi-icon-red { background: rgba(239,68,68,0.1); }
-    .kpi-icon-red svg { stroke: #EF4444; }
-    .kpi-body { flex: 1; min-width: 0; }
-    .kpi-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
-    .kpi-value { font-size: 28px; font-weight: 800; color: #111827; line-height: 1.1; }
-    .kpi-red-val { color: #EF4444; }
-    .kpi-sub { font-size: 11.5px; color: #9CA3AF; margin-top: 4px; }
-    .kpi-trend-up { font-size: 11.5px; color: #10B981; font-weight: 600; margin-top: 6px; }
-    .kpi-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-    .pill { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 20px; }
-    .pill-green { background: rgba(16,185,129,0.1); color: #059669; }
-    .pill-gray { background: #F3F4F6; color: #6B7280; }
-    .pill-red { background: rgba(239,68,68,0.1); color: #DC2626; }
-    .occ-bar { width: 100%; height: 6px; background: #E5E7EB; border-radius: 99px; margin: 8px 0 4px; overflow: hidden; }
-    .occ-fill { height: 100%; background: var(--color-accent); border-radius: 99px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+    .kpi-big {
+      font-size: 32px; font-weight: 800;
+      color: var(--color-primary-dark); letter-spacing: -0.03em;
+      line-height: 1; margin: 0;
+    }
+    .kpi-big.accent  { color: var(--color-accent); }
+    .kpi-big.danger  { color: #DC2626; }
+    .kpi-sub { font-size: 12px; color: #9CA3AF; margin: 5px 0 0; }
+
+    /* Biens card */
+    .kpi-biens-row {
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 16px;
+    }
+    .biens-pills { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+    .biens-pill {
+      font-size: 11.5px; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px;
+      white-space: nowrap;
+    }
+    .biens-pill.occ { background: rgba(201,152,46,0.12); color: #996C10; }
+    .biens-pill.vac { background: #F3F4F6; color: #6B7280; }
+    .biens-bar-track {
+      width: 100%; height: 5px; border-radius: 99px;
+      background: #EEE8DF; overflow: hidden; margin-top: 14px;
+    }
+    .biens-bar-fill {
+      height: 100%; background: var(--color-accent);
+      border-radius: 99px;
+      transition: width 0.9s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* Taux card */
+    .taux-body {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .ring-svg {
+      width: 54px; height: 54px;
+      transform: rotate(-90deg); flex-shrink: 0;
+    }
+    .ring-bg  { fill: none; stroke: #EDE8DF; stroke-width: 4.5; }
+    .ring-fill {
+      fill: none; stroke: var(--color-accent); stroke-width: 4.5;
+      stroke-linecap: round;
+      transition: stroke-dasharray 1s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* Impayés card */
+    .kpi-impayes-card {
+      display: flex; flex-direction: column;
+    }
+    .urgent-pill {
+      display: inline-flex; align-items: center;
+      font-size: 10.5px; font-weight: 700;
+      padding: 3px 10px; border-radius: 20px;
+      background: rgba(220,38,38,0.1); color: #DC2626;
+      margin-top: 10px; align-self: flex-start;
+    }
+    .ok-pill {
+      display: inline-flex; align-items: center;
+      font-size: 10.5px; font-weight: 700;
+      padding: 3px 10px; border-radius: 20px;
+      background: rgba(16,185,129,0.1); color: #059669;
+      margin-top: 10px; align-self: flex-start;
+    }
+
+    /* ── Actions rapides (strip horizontal) ── */
+    .quickactions-strip {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    .qa-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 18px; border-radius: 8px;
+      background: white; border: 1px solid #E8E1D8;
+      color: #374151; font-size: 13.5px; font-weight: 500;
+      text-decoration: none; white-space: nowrap;
+      transition: all 0.12s;
+    }
+    .qa-btn svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
+    .qa-btn:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+      background: rgba(15,76,129,0.04);
+    }
+    .qa-btn.qa-primary {
+      background: var(--color-primary);
+      border-color: var(--color-primary); color: white;
+    }
+    .qa-btn.qa-primary svg { opacity: 1; }
+    .qa-btn.qa-primary:hover { background: var(--color-primary-dark); border-color: var(--color-primary-dark); }
 
     /* ── Cards génériques ── */
     .section-card {
-      background: white; border-radius: 14px; padding: 20px 24px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #E5EAF2;
+      background: white; border-radius: 16px; padding: 20px 24px;
+      box-shadow: 0 2px 12px rgba(15,76,129,0.05);
+      border: 1px solid #EDE8DF;
     }
-    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-    .section-title { font-size: 15px; font-weight: 700; color: #111827; }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 700;
+      color: var(--color-primary-dark); margin: 0;
+    }
     .section-tag {
-      font-size: 12px; font-weight: 600; color: var(--color-primary);
-      background: rgba(15,76,129,0.08); padding: 3px 10px; border-radius: 20px;
+      font-size: 11.5px; font-weight: 600; color: var(--color-primary);
+      background: rgba(15,76,129,0.07); padding: 3px 10px; border-radius: 20px;
     }
-    .voir-tout { font-size: 12.5px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
+    .voir-tout {
+      font-size: 12.5px; color: var(--color-accent);
+      font-weight: 600; text-decoration: none;
+    }
     .voir-tout:hover { text-decoration: underline; }
 
-    /* ── Actions rapides ── */
-    .actions-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-    .action-card {
-      display: flex; flex-direction: column; gap: 10px;
-      padding: 16px; border-radius: 12px;
-      background: #F8FAFC; border: 1px solid #E5EAF2;
-      text-decoration: none; transition: all 0.15s; cursor: pointer;
-    }
-    .action-card:hover {
-      background: white; border-color: var(--color-primary);
-      box-shadow: 0 4px 14px rgba(15,76,129,0.12); transform: translateY(-2px);
-    }
-    .action-icon {
-      width: 42px; height: 42px; border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .action-icon svg { width: 20px; height: 20px; }
-    .a-blue { background: rgba(15,76,129,0.1); }
-    .a-blue svg { stroke: var(--color-primary); }
-    .a-green { background: rgba(16,185,129,0.1); }
-    .a-green svg { stroke: #10B981; }
-    .a-gold { background: rgba(201,152,46,0.12); }
-    .a-gold svg { stroke: var(--color-accent); }
-    .a-purple { background: rgba(139,92,246,0.1); }
-    .a-purple svg { stroke: #7C3AED; }
-    .action-label { font-size: 13px; font-weight: 700; color: #111827; }
-    .action-sub { font-size: 11.5px; color: #9CA3AF; }
-
-    /* ── Graphique area chart ── */
+    /* ── Graphique ── */
     .chart-alerts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
     .chart-card { display: flex; flex-direction: column; }
 
     .chart-controls { display: flex; align-items: center; gap: 10px; }
     .chart-tabs {
-      display: flex; background: #F3F4F6; border-radius: 8px; padding: 2px; gap: 1px;
+      display: flex; background: #F5F2ED; border-radius: 8px;
+      padding: 2px; gap: 1px;
     }
     .chart-tab {
       padding: 5px 12px; font-size: 11px; font-weight: 500; border: none;
-      background: transparent; color: #6B7280; border-radius: 6px;
+      background: transparent; color: #7A8899; border-radius: 6px;
       cursor: pointer; transition: all 0.15s;
     }
     .chart-tab.active {
       background: white; color: var(--color-primary);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
-    .chart-container {
-      display: flex; gap: 8px; margin-top: 14px;
-    }
+    .chart-container { display: flex; gap: 8px; margin-top: 14px; }
     .y-axis-labels {
       display: flex; flex-direction: column; justify-content: space-between;
       height: 180px; align-items: flex-end; flex-shrink: 0; width: 32px;
     }
-    .y-label { font-size: 10px; color: #9CA3AF; line-height: 1; }
+    .y-label { font-size: 10px; color: #B0AAA0; line-height: 1; }
 
-    .svg-wrapper {
-      flex: 1; position: relative; height: 180px;
-    }
-    .area-chart { width: 100%; height: 100%; overflow: visible; }
+    .svg-wrapper { flex: 1; position: relative; height: 180px; }
+    .area-chart   { width: 100%; height: 100%; overflow: visible; }
 
-    .grid-line {
-      stroke: #E5E7EB; stroke-width: 1; stroke-dasharray: 4 3;
-    }
+    .grid-line { stroke: #EDE8DF; stroke-width: 1; stroke-dasharray: 4 3; }
     .chart-area-fill { fill: url(#dashAreaGrad); }
     .chart-line {
       fill: none; stroke-width: 2.5;
@@ -610,51 +634,51 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
     .point-glow { fill: var(--color-primary); opacity: 0; transition: opacity 0.2s; }
     .point-ring {
       fill: white; stroke: var(--color-primary); stroke-width: 2;
-      opacity: 0; transition: opacity 0.2s, r 0.15s;
+      opacity: 0; transition: opacity 0.2s;
     }
-    .point-dot { fill: var(--color-primary); transition: r 0.15s; }
-    .data-point.active .point-glow { opacity: 0.14; }
+    .point-dot { fill: var(--color-primary); }
+    .data-point.active .point-glow { opacity: 0.12; }
     .data-point.active .point-ring { opacity: 1; }
 
     .chart-tooltip {
       position: absolute;
       transform: translate(-50%, calc(-100% - 12px));
-      background: #111827; color: white;
-      border-radius: 8px; padding: 6px 11px;
+      background: var(--color-primary-dark); color: white;
+      border-radius: 8px; padding: 6px 12px;
       pointer-events: none; white-space: nowrap;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.18);
-      display: flex; flex-direction: column; gap: 1px;
-      z-index: 10;
+      box-shadow: 0 6px 16px rgba(10,38,80,0.22);
+      display: flex; flex-direction: column; gap: 1px; z-index: 10;
     }
     .chart-tooltip::after {
       content: ''; position: absolute; top: 100%; left: 50%;
       transform: translateX(-50%);
-      border: 5px solid transparent; border-top-color: #111827;
+      border: 5px solid transparent;
+      border-top-color: var(--color-primary-dark);
     }
-    .tt-month  { font-size: 10px; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tt-month  { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.05em; }
     .tt-amount { font-size: 13px; font-weight: 700; }
 
     .x-axis-row {
       display: flex; margin-top: 6px; padding-left: 40px;
-      border-top: 1px solid #F3F4F6; padding-top: 6px;
+      border-top: 1px solid #F0EBE2; padding-top: 6px;
     }
-    .x-label { flex: 1; text-align: center; font-size: 11px; color: #9CA3AF; }
+    .x-label { flex: 1; text-align: center; font-size: 11px; color: #B0AAA0; }
 
     .chart-stats-row {
       display: flex; align-items: center; margin-top: 14px;
-      padding-top: 14px; border-top: 1px solid #F3F4F6;
+      padding-top: 14px; border-top: 1px solid #F0EBE2;
     }
     .chart-stat { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
     .chart-stat:first-child { padding-left: 0; }
-    .cs-sep { width: 1px; height: 30px; background: #E5E7EB; flex-shrink: 0; }
-    .cs-label { font-size: 10.5px; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500; }
-    .cs-value { font-size: 13px; font-weight: 700; color: #111827; }
+    .cs-sep { width: 1px; height: 28px; background: #EDE8DF; flex-shrink: 0; }
+    .cs-label { font-size: 10px; color: #B0AAA0; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+    .cs-value { font-size: 13px; font-weight: 700; color: var(--color-primary-dark); }
     .cs-value.primary { color: var(--color-primary); }
     .cs-value.accent  { color: var(--color-accent); }
 
     /* ── Alertes ── */
     .alertes-badge {
-      background: #FEE2E2; color: #DC2626;
+      background: rgba(220,38,38,0.1); color: #DC2626;
       font-size: 12px; font-weight: 700;
       width: 24px; height: 24px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
@@ -665,38 +689,38 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
       padding: 10px 12px; border-radius: 10px;
       border-left: 3px solid transparent;
     }
-    .alerte-haute { background: rgba(239,68,68,0.06); border-left-color: #EF4444; }
-    .alerte-moyenne { background: rgba(245,158,11,0.06); border-left-color: #F59E0B; }
-    .alerte-basse { background: rgba(59,130,246,0.06); border-left-color: #3B82F6; }
+    .alerte-haute   { background: rgba(220,38,38,0.05); border-left-color: #EF4444; }
+    .alerte-moyenne { background: rgba(245,158,11,0.05); border-left-color: #F59E0B; }
+    .alerte-basse   { background: rgba(59,130,246,0.05); border-left-color: #3B82F6; }
     .alerte-icon-box {
       width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
     }
     .alerte-icon-box svg { width: 14px; height: 14px; }
-    .alerte-haute .alerte-icon-box { background: rgba(239,68,68,0.12); }
-    .alerte-haute .alerte-icon-box svg { stroke: #EF4444; }
-    .alerte-moyenne .alerte-icon-box { background: rgba(245,158,11,0.12); }
+    .alerte-haute   .alerte-icon-box { background: rgba(239,68,68,0.1); }
+    .alerte-haute   .alerte-icon-box svg { stroke: #EF4444; }
+    .alerte-moyenne .alerte-icon-box { background: rgba(245,158,11,0.1); }
     .alerte-moyenne .alerte-icon-box svg { stroke: #F59E0B; }
-    .alerte-basse .alerte-icon-box { background: rgba(59,130,246,0.12); }
-    .alerte-basse .alerte-icon-box svg { stroke: #3B82F6; }
+    .alerte-basse   .alerte-icon-box { background: rgba(59,130,246,0.1); }
+    .alerte-basse   .alerte-icon-box svg { stroke: #3B82F6; }
     .alerte-body { flex: 1; min-width: 0; }
-    .alerte-titre { font-size: 12.5px; font-weight: 600; color: #111827; }
-    .alerte-desc { font-size: 11.5px; color: #6B7280; margin-top: 2px; }
+    .alerte-titre { font-size: 12.5px; font-weight: 600; color: var(--color-primary-dark); }
+    .alerte-desc  { font-size: 11.5px; color: #7A8899; margin-top: 2px; }
     .no-alertes {
       display: flex; flex-direction: column; align-items: center; gap: 8px;
-      padding: 24px 0; color: #9CA3AF;
+      padding: 24px 0; color: #B0AAA0;
     }
     .no-alertes svg { width: 28px; height: 28px; stroke: #10B981; }
-    .no-alertes p { font-size: 13px; }
+    .no-alertes p   { font-size: 13px; }
 
     /* ── Tables ── */
     .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .table-rows { display: flex; flex-direction: column; gap: 2px; }
+    .table-rows  { display: flex; flex-direction: column; gap: 2px; }
     .table-row {
       display: flex; align-items: center; gap: 12px;
       padding: 10px 8px; border-radius: 10px; transition: background 0.1s;
     }
-    .table-row:hover { background: #F8FAFC; }
+    .table-row:hover { background: #F5F2ED; }
     .row-avatar {
       width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
       background: var(--color-primary); color: white;
@@ -705,35 +729,71 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
     }
     .row-bien-icon {
       width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
-      background: rgba(15,76,129,0.1);
+      background: rgba(15,76,129,0.08);
       display: flex; align-items: center; justify-content: center;
     }
     .row-bien-icon svg { width: 16px; height: 16px; stroke: var(--color-primary); }
-    .bi-appartement { background: rgba(201,152,46,0.12) !important; }
-    .bi-appartement svg { stroke: var(--color-accent) !important; }
-    .bi-villa { background: rgba(16,185,129,0.1) !important; }
-    .bi-villa svg { stroke: #10B981 !important; }
-    .bi-commercial, .bi-bureau { background: rgba(139,92,246,0.1) !important; }
+    .bi-appartement                { background: rgba(201,152,46,0.1) !important; }
+    .bi-appartement svg            { stroke: var(--color-accent) !important; }
+    .bi-villa                      { background: rgba(16,185,129,0.08) !important; }
+    .bi-villa svg                  { stroke: #059669 !important; }
+    .bi-commercial, .bi-bureau     { background: rgba(139,92,246,0.08) !important; }
     .bi-commercial svg, .bi-bureau svg { stroke: #7C3AED !important; }
     .row-info { flex: 1; min-width: 0; }
-    .row-name { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .row-sub { font-size: 11.5px; color: #9CA3AF; margin-top: 1px; }
+    .row-name { font-size: 13px; font-weight: 600; color: var(--color-primary-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-sub  { font-size: 11.5px; color: #9CA3AF; margin-top: 1px; }
     .row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 
     /* ── Responsive ── */
-    @media (max-width: 1200px) {
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-      .actions-grid { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 1280px) {
+      .kpi-layout { grid-template-columns: 1.3fr 1fr 1fr; }
+    }
+    @media (max-width: 1100px) {
+      .kpi-layout {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto auto;
+      }
+      .kpi-hero-card    { grid-column: 1 / 3; grid-row: 1; min-height: unset; }
+      .kpi-biens-card   { grid-column: 1;     grid-row: 2; }
+      .kpi-taux-card    { grid-column: 2;     grid-row: 2; }
+      .kpi-impayes-card { grid-column: 1 / 3; grid-row: 3; }
     }
     @media (max-width: 900px) {
       .chart-alerts-grid { grid-template-columns: 1fr; }
-      .tables-grid { grid-template-columns: 1fr; }
+      .tables-grid       { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .dash-header { padding: 0 16px 0 64px; }
     }
     @media (max-width: 640px) {
-      .dash-body { padding: 16px; }
-      .topbar { padding: 0 16px; }
-      .topbar-user-info { display: none; }
-      .greeting-banner { flex-direction: column; align-items: flex-start; gap: 16px; }
+      .dash-body { padding: 12px; gap: 12px; }
+      .header-greeting { font-size: 15px; }
+
+      .kpi-layout { grid-template-columns: 1fr 1fr; }
+      .kpi-hero-card    { grid-column: 1 / 3; grid-row: 1; min-height: unset; }
+      .kpi-biens-card   { grid-column: 1 / 3; grid-row: 2; }
+      .kpi-taux-card    { grid-column: 1;     grid-row: 3; }
+      .kpi-impayes-card { grid-column: 2;     grid-row: 3; }
+
+      .kpi-hero-card { padding: 20px; }
+      .kpi-h-amount  { font-size: 24px; }
+      .kpi-big       { font-size: 26px; }
+      .kpi-biens-card, .kpi-taux-card, .kpi-impayes-card { padding: 16px; }
+
+      .quickactions-strip { overflow-x: auto; flex-wrap: nowrap; }
+
+      .chart-stats-row { flex-direction: column; gap: 10px; padding-top: 12px; margin-top: 12px; }
+      .cs-sep { display: none; }
+      .chart-stat { padding: 0; flex-direction: row; justify-content: space-between; }
+
+      .section-card { padding: 14px; }
+    }
+    @media (max-width: 440px) {
+      .kpi-layout { grid-template-columns: 1fr; }
+      .kpi-hero-card, .kpi-biens-card,
+      .kpi-taux-card, .kpi-impayes-card {
+        grid-column: 1; grid-row: auto;
+      }
     }
   `]
 })
@@ -748,21 +808,21 @@ export class DashboardComponent implements OnInit {
   derniersPaiements: DernierPaiement[] = [];
   derniersBiens: DernierBien[] = [];
 
-  loadingKPIs = true;
-  loadingRevenus = true;
-  loadingAlertes = true;
+  loadingKPIs     = true;
+  loadingRevenus  = true;
+  loadingAlertes  = true;
   loadingPaiements = true;
-  loadingBiens = true;
+  loadingBiens    = true;
 
   utilisateurPrenom = 'Propriétaire';
-  initiales = 'P';
+  initiales   = 'P';
   dateCourante = '';
   anneeEnCours = new Date().getFullYear();
 
   readonly CHART_W = 540;
   readonly CHART_H = 160;
-  readonly PAD_T = 12;
-  readonly PAD_B = 8;
+  readonly PAD_T   = 12;
+  readonly PAD_B   = 8;
   activePointIndex: number | null = null;
 
   constructor(private dashboardService: DashboardService) {}
@@ -774,11 +834,12 @@ export class DashboardComponent implements OnInit {
   }
 
   loadDashboardData(): void {
-    this.dashboardService.getKPIs().subscribe({ next: d => { this.kpis = d; this.loadingKPIs = false; } });
-    this.dashboardService.getRevenusMensuels().subscribe({ next: d => { this.revenus = d; this.loadingRevenus = false; } });
-    this.dashboardService.getAlertes().subscribe({ next: d => { this.alertes = d; this.loadingAlertes = false; } });
-    this.dashboardService.getDerniersPaiements().subscribe({ next: d => { this.derniersPaiements = d; this.loadingPaiements = false; } });
-    this.dashboardService.getDerniersBiens().subscribe({ next: d => { this.derniersBiens = d; this.loadingBiens = false; } });
+    const done = (flag: keyof this) => () => { (this as any)[flag] = false; };
+    this.dashboardService.getKPIs().subscribe({ next: d => { this.kpis = d; this.loadingKPIs = false; }, error: done('loadingKPIs') });
+    this.dashboardService.getRevenusMensuels().subscribe({ next: d => { this.revenus = d; this.loadingRevenus = false; }, error: done('loadingRevenus') });
+    this.dashboardService.getAlertes().subscribe({ next: d => { this.alertes = d; this.loadingAlertes = false; }, error: done('loadingAlertes') });
+    this.dashboardService.getDerniersPaiements().subscribe({ next: d => { this.derniersPaiements = d; this.loadingPaiements = false; }, error: done('loadingPaiements') });
+    this.dashboardService.getDerniersBiens().subscribe({ next: d => { this.derniersBiens = d; this.loadingBiens = false; }, error: done('loadingBiens') });
   }
 
   setDateCourante(): void {
@@ -789,7 +850,7 @@ export class DashboardComponent implements OnInit {
 
   loadUtilisateur(): void {
     try {
-      const raw = localStorage.getItem('warah_user');
+      const raw = localStorage.getItem('WARAH_user');
       if (raw) {
         const u = JSON.parse(raw);
         this.utilisateurPrenom = u.prenom || 'Propriétaire';
@@ -820,7 +881,7 @@ export class DashboardComponent implements OnInit {
     const n = this.revenus.length;
     if (!n) return [];
     const innerH = this.CHART_H - this.PAD_T - this.PAD_B;
-    const max = this.maxRevenu;
+    const max    = this.maxRevenu;
     return this.revenus.map((r, i) => {
       const x = n > 1 ? (i * this.CHART_W / (n - 1)) : this.CHART_W / 2;
       const y = this.PAD_T + innerH * (1 - r.montant / max);
@@ -853,7 +914,7 @@ export class DashboardComponent implements OnInit {
   }
 
   get svgAreaPath(): string {
-    const pts = this.chartPoints;
+    const pts    = this.chartPoints;
     if (!pts.length) return '';
     const bottomY = this.CHART_H - this.PAD_B;
     return `${this.svgLinePath} L ${pts[pts.length - 1].x},${bottomY} L ${pts[0].x},${bottomY} Z`;

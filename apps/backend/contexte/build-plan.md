@@ -50,7 +50,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 - Décorateur custom `@CurrentUser()` — extrait l'utilisateur courant dans les controllers
 - Synchronisation automatique : à la première connexion d'un utilisateur Supabase, création de la ligne correspondante dans `User` côté Prisma si absente
 - Helper `canActOnProperty(user, propertyId)` — autorité unique pour décider qui peut agir sur un bien : le propriétaire si pas de mandat actif, le gestionnaire mandataire si un mandat est actif, l'admin toujours. Tous les services métier passent par ce helper.
-- Endpoint `GET /api/auth/me` — renvoie le profil de l'utilisateur courant selon son rôle, statut du compte et préférences de notification
+- Endpoint `GET /api/auth/me` — renvoie le profil de l'utilisateur courant selon son rôle, statut du compte et préférences de notification. Depuis la révision de l'unité 08 (2026-07-16), inclut aussi `identityVerifiedAt` (date de la dernière `IdentityVerification` en statut `VERIFIED`, `null` sinon) — badge de vérification visible uniquement par l'utilisateur lui-même, aucune surface publique pour l'instant.
 
 ### 04 Service emails transactionnels (Resend)
 
@@ -67,7 +67,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Service `StorageService` (`src/modules/storage/storage.service.ts`) — wrapper sur le SDK Supabase Storage
-- Buckets dédiés : `property-photos`, `property-documents`, `id-documents`, `manager-documents`, `payment-proofs` — aucun bucket pour les quittances ou rapports (générés à la volée)
+- Buckets dédiés : `property-photos`, `property-documents`, `id-documents`, `manager-documents`, `payment-proofs` — aucun bucket pour les quittances ou rapports (générés à la volée). `manager-documents` reste défini mais n'est plus utilisé par aucun flux depuis le retrait du document de référence gestionnaire (voir unité 09 révisée, 2026-07-16) — conservé au cas où un usage futur apparaîtrait.
 - Méthode `upload(bucket, path, file)` — upload avec compression image (sharp) si applicable
 - Méthode `getSignedUrl(bucket, path, expiresIn)` — URLs signées avec expiration courte pour les fichiers privés
 - Validation systématique des types MIME et de la taille (5 Mo max pour photos, 10 Mo pour documents)
@@ -108,10 +108,10 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 **Logique :**
 
-- Endpoint `POST /api/auth/signup/owner` — création du compte Supabase Auth, création du `User` et de l'`OwnerProfile` en une transaction Prisma
+- Endpoint `POST /api/auth/signup/owner` — création du compte Supabase Auth, création du `User` (avec `phone`, `city`, obligatoires) et de l'`OwnerProfile` en une transaction Prisma
 - Distinction local / diaspora via le champ `residenceCountry` (`TG` ou autre code ISO)
-- Upload obligatoire de la pièce d'identité avec vérification automatique via le pipeline de l'étape 07
-- Tant que `IdVerificationStatus !== VERIFIED`, le propriétaire peut se connecter mais ne peut pas ajouter de biens ni publier d'annonces — accès en lecture seule de son profil uniquement
+- Pièce d'identité **facultative** à l'inscription (revu le 2026-07-16 avec le développeur, voir /architect — initialement obligatoire) : si `image`/`imageBack` sont fournis, la vérification démarre immédiatement via le pipeline de l'étape 07 ; sinon elle peut être soumise plus tard via `POST /api/identity/verify`
+- Le verrou fonctionnel n'est plus à l'inscription mais à `POST /api/properties` : tant que `idVerificationStatus !== VERIFIED`, la création de bien est refusée (`ForbiddenException`, voir `assertIdentityVerified()`) — aucune autre action n'est bloquée par ce statut
 - Envoi automatique de l'email de confirmation Supabase ; tant que l'email n'est pas confirmé, le `SupabaseAuthGuard` rejette les requêtes avec un code d'erreur explicite
 
 ### 09 Inscription locataire et gestionnaire
@@ -120,10 +120,10 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 - Endpoint `POST /api/auth/invite/tenant` — réservé au propriétaire ou au gestionnaire mandaté du bien, envoie au locataire un lien d'invitation contenant un token signé (expiration 7 jours)
 - Endpoint `POST /api/auth/signup/tenant?token=...` — création du compte locataire lié au propriétaire invitant via le token ; pièce d'identité **optionnelle**, aucune vérification CNI déclenchée tant qu'elle n'est pas fournie
-- Endpoint `POST /api/auth/signup/manager` — création du compte gestionnaire ; pièce d'identité obligatoire avec vérification CNI automatique (étape 07), upload des références professionnelles
-- Le statut du gestionnaire passe à `active` automatiquement dès que la CNI est `VERIFIED` — aucune validation admin requise
-- Un gestionnaire possède le rôle `MANAGER`, ce qui lui permet à la fois d'enregistrer ses propres biens (avec tous les droits d'un propriétaire dessus) **et** d'être mandataire de biens d'autres propriétaires via le modèle `Mandate`
-- Si la CNI du gestionnaire est `REJECTED`, le compte reste en accès restreint jusqu'à une nouvelle soumission validée
+- Endpoint `POST /api/auth/signup/manager` — création du compte gestionnaire (avec `phone`, `city`, obligatoires) ; même mécanique que l'inscription propriétaire (CNI facultative à l'inscription, voir unité 08 révisée)
+- Document de référence professionnelle (PDF) **retiré** (revu le 2026-07-16 avec le développeur, voir /architect — jugé non indispensable, sans consommateur produit tant que la Phase 8 n'existe pas) : plus d'upload `referenceDocuments`, plus de colonne `ManagerProfile.referenceDocumentPaths`
+- Un gestionnaire possède le rôle `MANAGER`, ce qui lui permet à la fois d'enregistrer ses propres biens (avec tous les droits d'un propriétaire dessus, sous réserve du verrou identité de l'unité 08) **et** d'être mandataire de biens d'autres propriétaires via le modèle `Mandate`
+- Principe retenu pour l'unité 31 (mandats, non construite) : accepter un mandat ne nécessitera pas de vérification d'identité propre au gestionnaire — la confiance transite par le propriétaire, déjà vérifié pour avoir pu créer son bien
 
 ### 10 Sécurité d'accès et gestion du profil
 
@@ -173,7 +173,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 - Endpoint `DELETE /api/properties/:id/photos/:photoId` — supprime la ligne Prisma et le fichier Storage
 - Endpoint `POST /api/properties/:id/documents` — upload de documents (état des lieux, titre, assurance), max 20 par bien, 10 Mo par fichier, types acceptés PDF/JPG/PNG
 - Endpoint `GET /api/properties/:id/documents` — liste des documents avec URLs signées (expiration 15 min)
-- Toutes les URLs servies aux clients sont signées et non publiques
+- Toutes les URLs servies aux clients sont signées et non publiques/
 
 ### 14 Locataires
 

@@ -1,8 +1,15 @@
-import { Component, AfterViewInit, ElementRef, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import {
+  Component,
+  AfterViewInit,
+  ElementRef,
+  OnDestroy,
+  PLATFORM_ID,
+  inject,
+} from "@angular/core";
+import { isPlatformBrowser } from "@angular/common";
 
 @Component({
-  selector: 'app-particles-background',
+  selector: "app-particles-background",
   standalone: true,
   template: `<canvas #canvas class="particles-canvas"></canvas>`,
   styles: `
@@ -15,7 +22,7 @@ import { isPlatformBrowser } from '@angular/common';
       z-index: 0;
       pointer-events: none;
     }
-  `
+  `,
 })
 export class ParticlesBackgroundComponent implements AfterViewInit, OnDestroy {
   private canvas!: HTMLCanvasElement;
@@ -25,17 +32,16 @@ export class ParticlesBackgroundComponent implements AfterViewInit, OnDestroy {
   private resizeObserver!: ResizeObserver;
 
   private readonly platformId = inject(PLATFORM_ID);
-
-  constructor(private elementRef: ElementRef) {}
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
 
   ngAfterViewInit(): void {
     if (!isPlatformBrowser(this.platformId)) {
       return;
     }
 
-    this.canvas = this.elementRef.nativeElement.querySelector('canvas');
-    this.ctx = this.canvas.getContext('2d')!;
-    
+    this.canvas = this.elementRef.nativeElement.querySelector("canvas")!;
+    this.ctx = this.canvas.getContext("2d")!;
+
     this.resizeCanvas();
     this.initParticles();
     this.animate();
@@ -60,8 +66,10 @@ export class ParticlesBackgroundComponent implements AfterViewInit, OnDestroy {
 
   private initParticles(): void {
     this.particles = [];
-    const particleCount = Math.floor((this.canvas.width * this.canvas.height) / 15000);
-    
+    const particleCount = Math.floor(
+      (this.canvas.width * this.canvas.height) / 15000,
+    );
+
     for (let i = 0; i < particleCount; i++) {
       this.particles.push({
         x: Math.random() * this.canvas.width,
@@ -70,15 +78,15 @@ export class ParticlesBackgroundComponent implements AfterViewInit, OnDestroy {
         speedX: (Math.random() - 0.5) * 0.3,
         speedY: (Math.random() - 0.5) * 0.3,
         opacity: Math.random() * 0.25 + 0.1,
-        color: Math.random() > 0.7 ? '#F59E0B' : '#0F4C81'
+        color: Math.random() > 0.7 ? "#F59E0B" : "#0F4C81",
       });
     }
   }
 
   private animate(): void {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    
-    this.particles.forEach(particle => {
+
+    this.particles.forEach((particle) => {
       particle.x += particle.speedX;
       particle.y += particle.speedY;
 

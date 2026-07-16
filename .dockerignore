@@ -30,8 +30,25 @@ docs/
 .gitignore
 .github/
 
-# Angular (inutile pour le backend)
+# Angular (inutile pour le backend) — apps/frontend/ (ancien emplacement)
+# ET le frontend Angular racine (restructuration Vercel du compagnon,
+# voir apps/backend/contexte/progress-tracker.md) : src/, angular.json,
+# etc. Le Dockerfile ne copie que apps/backend/, mais le contexte
+# complet est quand même transféré au démon Docker sans ces exclusions.
 apps/frontend/
+src/
+angular.json
+tailwind.config.js
+postcss.config.js
+tsconfig.json
+tsconfig.app.json
+tsconfig.server.json
+tsconfig.spec.json
+jest.config.ts
+setup-jest.ts
+vercel.json
+image logo/
+*.docx
 
 # Logs
 *.log

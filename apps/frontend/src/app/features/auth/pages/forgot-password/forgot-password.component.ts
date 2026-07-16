@@ -1,21 +1,34 @@
-import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
-import { Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { AuthService, ForgotPasswordRequest } from '../../../../core/services/auth.service';
-import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from "@angular/core";
+import {
+  AbstractControl,
+  FormBuilder,
+  ValidationErrors,
+  Validators,
+  ReactiveFormsModule,
+} from "@angular/forms";
+import { Router, ActivatedRoute, RouterModule } from "@angular/router";
+import { HttpErrorResponse } from "@angular/common/http";
+import {
+  AuthService,
+  ForgotPasswordRequest,
+} from "../../../../core/services/auth.service";
+import { LokAlerteComponent } from "../../../../shared/components/lok-alerte/lok-alerte.component";
+import { CommonModule } from "@angular/common";
+import { extractErrorMessage } from "@core/utils/http-error.util";
 
 @Component({
-  selector: 'app-forgot-password',
+  selector: "app-forgot-password",
   standalone: true,
   imports: [
     CommonModule,
     ReactiveFormsModule,
     RouterModule,
-    LokAlerteComponent
+    LokAlerteComponent,
   ],
   template: `
-    <div class="min-h-screen bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center p-4">
+    <div
+      class="min-h-screen bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center p-4"
+    >
       <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
         <!-- Logo et titre -->
         <div class="text-center mb-8">
@@ -35,21 +48,34 @@ import { CommonModule } from '@angular/common';
 
         <!-- Étape 1 : Demande de réinitialisation -->
         @if (!showResetForm) {
-          <form [formGroup]="forgotPasswordForm" (ngSubmit)="onSubmit()" class="space-y-6">
+          <form
+            [formGroup]="forgotPasswordForm"
+            (ngSubmit)="onSubmit()"
+            class="space-y-6"
+          >
             <p class="text-sm text-gray-600 mb-4">
-              Entrez votre adresse email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+              Entrez votre adresse email et nous vous enverrons un lien pour
+              réinitialiser votre mot de passe.
             </p>
 
             <!-- Email -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <label
+                class="block text-sm font-medium text-gray-700 mb-2"
+                for="forgot-password-email"
+                >Email</label
+              >
               <input
+                id="forgot-password-email"
                 type="email"
                 formControlName="email"
                 class="input-field"
                 placeholder="exemple@email.com"
               />
-              @if (forgotPasswordForm.get('email')?.touched && forgotPasswordForm.get('email')?.invalid) {
+              @if (
+                forgotPasswordForm.get("email")?.touched &&
+                forgotPasswordForm.get("email")?.invalid
+              ) {
                 <p class="text-red-500 text-xs mt-1">Email invalide</p>
               }
             </div>
@@ -61,9 +87,24 @@ import { CommonModule } from '@angular/common';
               class="btn-primary w-full"
             >
               @if (isLoading) {
-                <svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  class="animate-spin h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Envoi en cours...
               } @else {
@@ -75,21 +116,33 @@ import { CommonModule } from '@angular/common';
 
         <!-- Étape 2 : Formulaire de réinitialisation -->
         @if (showResetForm) {
-          <form [formGroup]="resetPasswordForm" (ngSubmit)="onResetPassword()" class="space-y-6">
+          <form
+            [formGroup]="resetPasswordForm"
+            (ngSubmit)="onResetPassword()"
+            class="space-y-6"
+          >
             <p class="text-sm text-gray-600 mb-4">
               Entrez votre nouveau mot de passe.
             </p>
 
             <!-- Nouveau mot de passe -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Nouveau mot de passe</label>
+              <label
+                class="block text-sm font-medium text-gray-700 mb-2"
+                for="forgot-password-nouveau"
+                >Nouveau mot de passe</label
+              >
               <input
+                id="forgot-password-nouveau"
                 type="password"
                 formControlName="nouveauMotDePasse"
                 class="input-field"
                 placeholder="••••••••"
               />
-              @if (resetPasswordForm.get('nouveauMotDePasse')?.touched && resetPasswordForm.get('nouveauMotDePasse')?.invalid) {
+              @if (
+                resetPasswordForm.get("nouveauMotDePasse")?.touched &&
+                resetPasswordForm.get("nouveauMotDePasse")?.invalid
+              ) {
                 <p class="text-red-500 text-xs mt-1">
                   Le mot de passe doit contenir au moins 8 caractères
                 </p>
@@ -98,16 +151,28 @@ import { CommonModule } from '@angular/common';
 
             <!-- Confirmation mot de passe -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le mot de passe</label>
+              <label
+                class="block text-sm font-medium text-gray-700 mb-2"
+                for="forgot-password-confirm"
+                >Confirmer le mot de passe</label
+              >
               <input
+                id="forgot-password-confirm"
                 type="password"
                 formControlName="confirmMotDePasse"
                 class="input-field"
                 placeholder="••••••••"
               />
-              @if (resetPasswordForm.get('confirmMotDePasse')?.touched && resetPasswordForm.get('confirmMotDePasse')?.invalid) {
+              @if (
+                resetPasswordForm.get("confirmMotDePasse")?.touched &&
+                resetPasswordForm.get("confirmMotDePasse")?.invalid
+              ) {
                 <p class="text-red-500 text-xs mt-1">
-                  @if (resetPasswordForm.get('confirmMotDePasse')?.errors?.['required']) {
+                  @if (
+                    resetPasswordForm.get("confirmMotDePasse")?.errors?.[
+                      "required"
+                    ]
+                  ) {
                     La confirmation est requise
                   } @else {
                     Les mots de passe ne correspondent pas
@@ -123,9 +188,24 @@ import { CommonModule } from '@angular/common';
               class="btn-primary w-full"
             >
               @if (isLoading) {
-                <svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  class="animate-spin h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Réinitialisation...
               } @else {
@@ -137,7 +217,10 @@ import { CommonModule } from '@angular/common';
 
         <!-- Lien retour -->
         <p class="text-center text-sm text-gray-600 mt-6">
-          <a routerLink="/auth/login" class="text-primary font-semibold hover:underline">
+          <a
+            routerLink="/auth/login"
+            class="text-primary font-semibold hover:underline"
+          >
             Retour à la connexion
           </a>
         </p>
@@ -146,35 +229,52 @@ import { CommonModule } from '@angular/common';
   `,
 })
 export class ForgotPasswordComponent implements OnInit {
-  forgotPasswordForm: FormGroup;
-  resetPasswordForm: FormGroup;
+  // Type inféré depuis fb.nonNullable.group() — jamais annoter en
+  // `FormGroup` nu (voir /review frontend).
+  forgotPasswordForm: ReturnType<
+    ForgotPasswordComponent["buildForgotPasswordForm"]
+  >;
+  resetPasswordForm: ReturnType<
+    ForgotPasswordComponent["buildResetPasswordForm"]
+  >;
   isLoading: boolean = false;
-  errorMessage: string = '';
-  successMessage: string = '';
+  errorMessage: string = "";
+  successMessage: string = "";
   showResetForm: boolean = false;
-  private resetToken: string = '';
+  private resetToken: string = "";
 
-  constructor(
-    private fb: FormBuilder,
-    private authService: AuthService,
-    private router: Router,
-    private route: ActivatedRoute
-  ) {
-    this.forgotPasswordForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]]
-    });
+  private readonly fb = inject(FormBuilder);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
-    this.resetPasswordForm = this.fb.group({
-      nouveauMotDePasse: ['', [Validators.required, Validators.minLength(8)]],
-      confirmMotDePasse: ['', Validators.required]
-    }, {
-      validators: this.passwordMatchValidator
+  constructor() {
+    this.forgotPasswordForm = this.buildForgotPasswordForm();
+    this.resetPasswordForm = this.buildResetPasswordForm();
+  }
+
+  private buildForgotPasswordForm() {
+    return this.fb.nonNullable.group({
+      email: ["", [Validators.required, Validators.email]],
     });
+  }
+
+  private buildResetPasswordForm() {
+    return this.fb.nonNullable.group(
+      {
+        nouveauMotDePasse: ["", [Validators.required, Validators.minLength(8)]],
+        confirmMotDePasse: ["", Validators.required],
+      },
+      {
+        validators: ForgotPasswordComponent.passwordMatchValidator,
+      },
+    );
   }
 
   ngOnInit(): void {
     // Vérifier si un token de réinitialisation est présent dans l'URL
-    const token = this.route.snapshot.queryParams['token'];
+    const token = this.route.snapshot.queryParams["token"] as
+      string | undefined;
     if (token) {
       this.resetToken = token;
       this.showResetForm = true;
@@ -184,12 +284,14 @@ export class ForgotPasswordComponent implements OnInit {
   /**
    * Validateur personnalisé pour vérifier que les mots de passe correspondent
    */
-  passwordMatchValidator(form: FormGroup): any {
-    const password = form.get('nouveauMotDePasse')?.value;
-    const confirmPassword = form.get('confirmMotDePasse')?.value;
+  private static passwordMatchValidator(
+    form: AbstractControl,
+  ): ValidationErrors | null {
+    const password = form.get("nouveauMotDePasse")?.value as string;
+    const confirmPassword = form.get("confirmMotDePasse")?.value as string;
 
     if (password !== confirmPassword) {
-      form.get('confirmMotDePasse')?.setErrors({ mismatch: true });
+      form.get("confirmMotDePasse")?.setErrors({ mismatch: true });
       return { mismatch: true };
     }
 
@@ -205,22 +307,26 @@ export class ForgotPasswordComponent implements OnInit {
     }
 
     this.isLoading = true;
-    this.errorMessage = '';
-    this.successMessage = '';
+    this.errorMessage = "";
+    this.successMessage = "";
 
     const data: ForgotPasswordRequest = {
-      email: this.forgotPasswordForm.value.email
+      email: this.forgotPasswordForm.getRawValue().email,
     };
 
     this.authService.forgotPassword(data).subscribe({
-      next: (response: any) => {
+      next: () => {
         this.isLoading = false;
-        this.successMessage = 'Un lien de réinitialisation a été envoyé à votre adresse email.';
+        this.successMessage =
+          "Un lien de réinitialisation a été envoyé à votre adresse email.";
       },
-      error: (error: any) => {
+      error: (error: HttpErrorResponse) => {
         this.isLoading = false;
-        this.errorMessage = error.error?.message || 'Une erreur est survenue lors de l\'envoi du lien';
-      }
+        this.errorMessage = extractErrorMessage(
+          error,
+          "Une erreur est survenue lors de l'envoi du lien",
+        );
+      },
     });
   }
 
@@ -233,26 +339,33 @@ export class ForgotPasswordComponent implements OnInit {
     }
 
     this.isLoading = true;
-    this.errorMessage = '';
-    this.successMessage = '';
+    this.errorMessage = "";
+    this.successMessage = "";
 
-    this.authService.resetPassword({
-      token: this.resetToken,
-      nouveauMotDePasse: this.resetPasswordForm.value.nouveauMotDePasse
-    }).subscribe({
-      next: (response: any) => {
-        this.isLoading = false;
-        this.successMessage = 'Mot de passe réinitialisé avec succès ! Redirection vers la connexion...';
-        
-        // Rediriger vers la page de connexion après 2 secondes
-        setTimeout(() => {
-          this.router.navigate(['/auth/login']);
-        }, 2000);
-      },
-      error: (error: any) => {
-        this.isLoading = false;
-        this.errorMessage = error.error?.message || 'Une erreur est survenue lors de la réinitialisation';
-      }
-    });
+    this.authService
+      .resetPassword({
+        token: this.resetToken,
+        nouveauMotDePasse:
+          this.resetPasswordForm.getRawValue().nouveauMotDePasse,
+      })
+      .subscribe({
+        next: () => {
+          this.isLoading = false;
+          this.successMessage =
+            "Mot de passe réinitialisé avec succès ! Redirection vers la connexion...";
+
+          // Rediriger vers la page de connexion après 2 secondes
+          setTimeout(() => {
+            void this.router.navigate(["/auth/login"]);
+          }, 2000);
+        },
+        error: (error: HttpErrorResponse) => {
+          this.isLoading = false;
+          this.errorMessage = extractErrorMessage(
+            error,
+            "Une erreur est survenue lors de la réinitialisation",
+          );
+        },
+      });
   }
 }

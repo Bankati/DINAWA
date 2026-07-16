@@ -15,6 +15,13 @@ import { PushModule } from './modules/push/push.module';
 import { NotifyModule } from './modules/notify/notify.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { IdentityModule } from './modules/identity/identity.module';
+import { ProfileModule } from './modules/profile/profile.module';
+import { AccountModule } from './modules/account/account.module';
+import { SchedulingModule } from './modules/scheduling/scheduling.module';
+import { PropertiesModule } from './modules/properties/properties.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { LeasesModule } from './modules/leases/leases.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -67,6 +74,27 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Authentification et profil courant
     AuthModule,
+
+    // Vérification automatique CNI togolaise (OCR Tesseract.js)
+    IdentityModule,
+
+    // Gestion du profil (infos personnelles, photo, préférences, anonymisation)
+    ProfileModule,
+
+    // Statut de compte + réactivation (voir build-plan.md unité 11)
+    AccountModule,
+
+    // Cron d'inactivité — suspension/réactivation automatique
+    SchedulingModule,
+
+    // CRUD biens immobiliers (voir build-plan.md unité 12)
+    PropertiesModule,
+
+    // Blocage locataire par bien + historiques baux (voir build-plan.md unité 14)
+    TenantsModule,
+
+    // Création/résiliation des baux, génération du calendrier d'échéances (voir build-plan.md unité 15)
+    LeasesModule,
   ],
   providers: [
     {

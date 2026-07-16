@@ -2,7 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { LocatairesService, LocataireRequest } from '../../services/locataires.service';
+import { BiensService } from '../../../biens/services/biens.service';
 import { Locataire, StatutLocataire } from '@core/models/locataire.model';
+import { Bien } from '@core/models/bien.model';
 import { LokTelephoneTogoComponent } from '../../../../shared/components/lok-telephone-togo/lok-telephone-togo.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
@@ -29,7 +31,7 @@ import { CommonModule } from '@angular/common';
             <p class="text-sm text-gray-600">{{ isEditMode ? 'Modifiez les informations du locataire' : 'Remplissez les informations pour ajouter un nouveau locataire' }}</p>
           </div>
           <button
-            routerLink="/locataires"
+            routerLink='/dashboard/locataires'
             class="btn-secondary"
           >
             Annuler
@@ -223,17 +225,16 @@ import { CommonModule } from '@angular/common';
                 <!-- Bien -->
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Bien *</label>
-                  <select
-                    formControlName="bienId"
-                    class="input-field"
-                  >
-                    <option value="">Sélectionnez un bien</option>
-                    <option value="1">Appartement Lomé Centre</option>
-                    <option value="2">Villa Sokodé</option>
-                    <option value="3">Studio Kara</option>
-                    <option value="4">Bureau Kpalimé</option>
-                    <option value="5">Local Commercial Lomé</option>
-                  </select>
+                  @if (loadingBiens) {
+                    <lok-skeleton type="text"></lok-skeleton>
+                  } @else {
+                    <select formControlName="bienId" class="input-field">
+                      <option value="">Sélectionnez un bien</option>
+                      @for (bien of biens; track bien.id) {
+                        <option [value]="bien.id">{{ bien.titre }} — {{ bien.adresse.ville }}</option>
+                      }
+                    </select>
+                  }
                   @if (locataireForm.get('bienId')?.touched && locataireForm.get('bienId')?.invalid) {
                     <p class="text-red-500 text-xs mt-1">Le bien est requis</p>
                   }
@@ -308,7 +309,7 @@ import { CommonModule } from '@angular/common';
             <div class="flex justify-end gap-3">
               <button
                 type="button"
-                routerLink="/locataires"
+                routerLink='/dashboard/locataires'
                 class="btn-secondary"
               >
                 Annuler
@@ -337,16 +338,19 @@ import { CommonModule } from '@angular/common';
 })
 export class LocataireFormComponent implements OnInit {
   locataireForm: FormGroup;
-  isEditMode: boolean = false;
-  loading: boolean = false;
-  isSubmitting: boolean = false;
-  errorMessage: string = '';
+  isEditMode = false;
+  loading = false;
+  isSubmitting = false;
+  errorMessage = '';
   locataireId: string | null = null;
-  telephone: string = '';
+  telephone = '';
+  biens: Bien[] = [];
+  loadingBiens = false;
 
   constructor(
     private fb: FormBuilder,
     private locatairesService: LocatairesService,
+    private biensService: BiensService,
     private router: Router,
     private route: ActivatedRoute
   ) {
@@ -381,6 +385,15 @@ export class LocataireFormComponent implements OnInit {
       this.isEditMode = true;
       this.loadLocataire(this.locataireId);
     }
+    this.chargerBiens();
+  }
+
+  private chargerBiens(): void {
+    this.loadingBiens = true;
+    this.biensService.getBiens().subscribe({
+      next: (data) => { this.biens = data; this.loadingBiens = false; },
+      error: () => { this.loadingBiens = false; }
+    });
   }
 
   /**
@@ -454,7 +467,7 @@ export class LocataireFormComponent implements OnInit {
       this.locatairesService.updateLocataire(this.locataireId, locataireData).subscribe({
         next: () => {
           this.isSubmitting = false;
-          this.router.navigate(['/locataires']);
+          this.router.navigate(['/dashboard/locataires']);
         },
         error: (error: any) => {
           this.isSubmitting = false;
@@ -465,7 +478,7 @@ export class LocataireFormComponent implements OnInit {
       this.locatairesService.createLocataire(locataireData).subscribe({
         next: () => {
           this.isSubmitting = false;
-          this.router.navigate(['/locataires']);
+          this.router.navigate(['/dashboard/locataires']);
         },
         error: (error: any) => {
           this.isSubmitting = false;

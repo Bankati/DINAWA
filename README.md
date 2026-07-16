@@ -1,92 +1,199 @@
-# WARAH — Plateforme de gestion locative
+# LOKATO - Frontend
 
-WARAH permet aux propriétaires immobiliers togolais (résidant au Togo ou à l'étranger) de gérer leurs
-locations en temps réel : encaissement des loyers via mobile money (T-Money et Flooz), génération de
-quittances officielles, tableau de bord analytique et gestion des mandats.
+Plateforme de gestion locative immobilière pour le Togo.
 
-**Périmètre V1 :** Togo uniquement · Devise FCFA · Langue française · UTC+0 (Africa/Lomé)
+## 🏠 À propos
 
----
+LOKATO est une SaaS B2B conçue spécifiquement pour le marché togolais, permettant aux propriétaires immobiliers (locaux et diaspora) de gérer leurs biens, encaisser les loyers et automatiser les quittances.
 
-## Structure du monorepo
+### Stack Technique
 
-```
-warah/
-├── apps/
-│   ├── backend/          NestJS 10 — déployé sur Railway
-│   └── frontend/         Angular 20 — déployé sur Vercel
-├── .github/
-│   └── workflows/        CI (ci.yml) + CD backend (cd-backend.yml)
-├── docs/
-│   ├── DEPLOYMENT.md     Procédure de premier déploiement
-│   ├── ROLLBACK.md       Procédure de rollback
-│   ├── ENV.md            Référence de toutes les variables d'environnement
-│   └── ARCHITECTURE.md   Vue d'ensemble de l'architecture
-├── .husky/               Pre-commit hooks (lint-staged + commitlint)
-├── package.json          Racine npm workspaces
-└── CONTRIBUTING.md       Conventions de contribution
-```
+- **Frontend** : Angular 20 (Standalone Components)
+- **Styling** : Tailwind CSS
+- **Backend** : Next.js 14/15+ (API REST) - À implémenter
+- **Base de données** : PostgreSQL + Supabase - À implémenter
+- **Paiements** : T-Money + Flooz via Paygate Globale - À implémenter
 
----
+## 📦 Installation
 
-## Prérequis
+### Prérequis
 
-- **Node.js** `22.12.0` (utilise `.nvmrc` — `nvm use` suffit)
-- **npm** `>=10.0.0`
-- Accès aux services : Supabase, Railway, Vercel, Resend
+- Node.js 20+
+- npm ou yarn
 
----
-
-## Installation
+### Étapes
 
 ```bash
-# Installer toutes les dépendances des workspaces
+# Installer les dépendances
 npm install
 
-# Activer les git hooks
-npm run prepare
+# Démarrer le serveur de développement
+npm start
+
+# Builder pour la production
+npm run build
 ```
 
+## 🏗️ Structure du Projet
+
+```
+src/
+├── app/
+│   ├── core/              # Guards, interceptors, services globaux
+│   │   └── models/        # Interfaces TypeScript (Bien, Paiement, etc.)
+│   ├── shared/            # Composants réutilisables
+│   │   ├── components/    # Composants UI partagés
+│   │   └── pipes/         # Pipes Angular personnalisés
+│   ├── features/          # Modules fonctionnels
+│   │   ├── auth/          # Authentification
+│   │   ├── dashboard/     # Tableau de bord
+│   │   ├── biens/         # Gestion des biens
+│   │   ├── locataires/    # Gestion des locataires
+│   │   ├── paiements/     # Collecte des loyers
+│   │   └── annonces/      # Module annonces public
+│   └── layouts/           # Shell propriétaire, shell public
+```
+
+## 🎨 Composants Partagés
+
+### LokBadgeStatut
+Badge coloré pour les statuts de bien (OCCUPÉ, VACANT, EN TRAVAUX, ARCHIVÉ).
+
+```html
+<lok-badge-statut [statut]="bien.statut"></lok-badge-statut>
+```
+
+### LokBadgePaiement
+Badge coloré pour les statuts de paiement (PAYÉ, EN RETARD, IMPAYÉ, PARTIEL).
+
+```html
+<lok-badge-paiement [statut]="paiement.statut"></lok-badge-paiement>
+```
+
+### LokMontantFcfa
+Composant et pipe pour formater les montants en FCFA.
+
+```html
+<lok-montant-fcfa [montant]="150000" size="lg" color="primary"></lok-montant-fcfa>
+<!-- ou avec le pipe -->
+{{ 150000 | fcfa }}  <!-- Affiche : "150 000 FCFA" -->
+```
+
+### LokCardBien
+Card réutilisable pour afficher un bien immobilier.
+
+```html
+<lok-card-bien 
+  [bien]="bien" 
+  [showActions]="true"
+  (onCardClick)="navigateToBien($event)"
+  (onEdit)="editBien($event)"
+  (onView)="viewBien($event)"
+></lok-card-bien>
+```
+
+### LokAlerte
+Composant d'alerte (info, warning, error, success).
+
+```html
+<lok-alerte 
+  type="error" 
+  titre="Erreur" 
+  message="Une erreur est survenue"
+  [dismissible]="true"
+></lok-alerte>
+```
+
+### LokSkeleton
+Skeleton loader pour les états de chargement.
+
+```html
+<lok-skeleton type="card"></lok-skeleton>
+<lok-skeleton type="list" [count]="5"></lok-skeleton>
+```
+
+### LokEmptyState
+État vide avec illustration et CTA.
+
+```html
+<lok-empty-state 
+  titre="Aucun bien ajouté"
+  description="Commencez par ajouter votre premier bien immobilier."
+  ctaLabel="Ajouter un bien"
+  icon="bien"
+  (ctaAction)="addBien()"
+></lok-empty-state>
+```
+
+### LokConfirmModal
+Modal de confirmation pour les actions destructives.
+
+```html
+<lok-confirm-modal 
+  titre="Supprimer le bien"
+  message="Êtes-vous sûr de vouloir supprimer ce bien ?"
+  (onConfirm)="deleteBien()"
+  (onCancel)="closeModal()"
+></lok-confirm-modal>
+```
+
+### LokUpload
+Composant d'upload de fichiers (images + PDF) avec drag & drop.
+
+```html
+<lok-upload 
+  accept="image/*,.pdf"
+  [maxSize]="5"
+  [multiple]="true"
+  [maxFiles]="10"
+  (filesChange)="onFilesChange($event)"
+></lok-upload>
+```
+
+### LokTelephoneTogo
+Input de téléphone avec préfixe +228 et validation du format togolais.
+
+```html
+<lok-telephone-togo 
+  [formControl]="telephoneControl"
+  [showError]="true"
+></lok-telephone-togo>
+```
+
+## 🎨 Palette de Couleurs
+
+- **Primaire** : Vert profond `#1A7A4A`
+- **Secondaire** : Or/Ambre `#F59E0B`
+- **Fond** : Blanc cassé `#F9FAFB`
+- **Texte principal** : Gris très foncé `#111827`
+- **Succès** : Vert `#10B981`
+- **Erreur** : Rouge `#EF4444`
+- **Avertissement** : Orange `#F59E0B`
+
+## 📝 Règles de Développement
+
+- Utiliser des composants Angular standalone
+- TypeScript strict avec interfaces pour tous les modèles
+- Tailwind CSS pour le styling
+- Reactive Forms pour les formulaires
+- RxJS pour la gestion des états asynchrones
+- Commentaires en français dans le code
+- Loading states et empty states pour chaque liste
+- Zones cliquables ≥ 44px (accessibilité mobile)
+
+## 🚀 Scripts Disponibles
+
+```bash
+npm start          # Démarrer le serveur de développement
+npm run build      # Builder pour la production
+npm test           # Exécuter les tests
+npm run lint       # Linter le code
+```
+
+## 📄 Licence
+
+Confidentiel - Usage interne LOKATO
+
 ---
 
-## Commandes principales
-
-| Commande                 | Description                          |
-| ------------------------ | ------------------------------------ |
-| `npm run dev:backend`    | Démarre le backend en watch mode     |
-| `npm run dev:frontend`   | Démarre le frontend en dev mode      |
-| `npm run build`          | Build toutes les apps                |
-| `npm run test`           | Lance tous les tests                 |
-| `npm run lint`           | Lint tout le monorepo                |
-| `npm run typecheck`      | Vérification TypeScript stricte      |
-| `npm run build:backend`  | Build le backend uniquement          |
-| `npm run build:frontend` | Build le frontend en mode production |
-
----
-
-## Premier déploiement
-
-Voir [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) pour la procédure complète pas-à-pas.
-
-## Variables d'environnement
-
-Voir [`docs/ENV.md`](docs/ENV.md) pour la liste exhaustive avec descriptions et procédures de génération.
-
-## Architecture
-
-Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Contribution
-
-Voir [`CONTRIBUTING.md`](CONTRIBUTING.md) pour les conventions de commit, nommage des branches et processus de PR.
-
----
-
-## Rôles utilisateurs
-
-| Rôle      | Description                                                                     |
-| --------- | ------------------------------------------------------------------------------- |
-| `OWNER`   | Propriétaire de biens immobiliers                                               |
-| `TENANT`  | Locataire                                                                       |
-| `MANAGER` | Gestionnaire immobilier professionnel (peut être mandataire et/ou propriétaire) |
-| `ADMIN`   | Administrateur de la plateforme                                                 |
+*LOKATO — Gérez vos biens. Encaissez vos loyers. Dormez tranquille.*

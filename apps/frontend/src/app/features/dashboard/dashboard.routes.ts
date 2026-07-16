@@ -33,6 +33,10 @@ export const dashboardRoutes: Routes = [
       {
         path: 'annonces',
         loadChildren: () => import('../annonces/annonces.routes').then(m => m.annoncesRoutes)
+      },
+      {
+        path: 'abonnements',
+        loadChildren: () => import('../abonnements/abonnements.routes').then(m => m.abonnementsRoutes)
       }
     ]
   }

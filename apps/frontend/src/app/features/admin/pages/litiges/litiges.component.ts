@@ -1,21 +1,29 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { AdminService } from '../../services/admin.service';
-import { Litige, StatutLitige, PrioriteLitige } from '@core/models/admin.model';
-import { LokBadgeStatutLitigeComponent } from '../../../../shared/components/lok-badge-statut-litige/lok-badge-statut-litige.component';
-import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
-import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
+import { Component, OnInit, inject } from "@angular/core";
+import { CommonModule } from "@angular/common";
+import { FormsModule } from "@angular/forms";
+import { AdminService } from "../../services/admin.service";
+import { Litige, StatutLitige, PrioriteLitige } from "@core/models/admin.model";
+import { LokBadgeStatutLitigeComponent } from "../../../../shared/components/lok-badge-statut-litige/lok-badge-statut-litige.component";
+import { LokSkeletonComponent } from "../../../../shared/components/lok-skeleton/lok-skeleton.component";
+import { LokEmptyStateComponent } from "../../../../shared/components/lok-empty-state/lok-empty-state.component";
 
 @Component({
-  selector: 'app-litiges',
+  selector: "app-litiges",
   standalone: true,
-  imports: [CommonModule, FormsModule, LokBadgeStatutLitigeComponent, LokSkeletonComponent, LokEmptyStateComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    LokBadgeStatutLitigeComponent,
+    LokSkeletonComponent,
+    LokEmptyStateComponent,
+  ],
   template: `
     <div class="admin-page">
       <div class="admin-header">
         <h1 class="admin-title">Gestion des litiges</h1>
-        <p class="admin-subtitle">Différends signalés entre propriétaires, gestionnaires et locataires</p>
+        <p class="admin-subtitle">
+          Différends signalés entre propriétaires, gestionnaires et locataires
+        </p>
       </div>
 
       @if (loading) {
@@ -34,28 +42,46 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
                 <div>
                   <h2 class="litige-sujet">{{ litige.sujet }}</h2>
                   <div class="litige-meta">
-                    <span class="priorite-pill" [class]="prioriteClasses(litige.priorite)">{{ labelPriorite(litige.priorite) }}</span>
-                    <span class="litige-date">Ouvert le {{ litige.dateOuverture }}</span>
+                    <span
+                      class="priorite-pill"
+                      [class]="prioriteClasses(litige.priorite)"
+                      >{{ labelPriorite(litige.priorite) }}</span
+                    >
+                    <span class="litige-date"
+                      >Ouvert le {{ litige.dateOuverture }}</span
+                    >
                   </div>
                 </div>
-                <lok-badge-statut-litige [statut]="litige.statut"></lok-badge-statut-litige>
+                <lok-badge-statut-litige
+                  [statut]="litige.statut"
+                ></lok-badge-statut-litige>
               </div>
 
               <p class="litige-description">{{ litige.description }}</p>
 
               <div class="litige-parties">
                 <span><strong>Plaignant :</strong> {{ litige.plaignant }}</span>
-                <span><strong>Mis en cause :</strong> {{ litige.misEnCause }}</span>
+                <span
+                  ><strong>Mis en cause :</strong> {{ litige.misEnCause }}</span
+                >
               </div>
 
               @if (litige.resolution) {
                 <div class="litige-resolution">
-                  <strong>Résolution ({{ litige.dateResolution }}) :</strong> {{ litige.resolution }}
+                  <strong>Résolution ({{ litige.dateResolution }}) :</strong>
+                  {{ litige.resolution }}
                 </div>
               }
 
-              @if (litige.statut === StatutLitige.OUVERT || litige.statut === StatutLitige.EN_COURS) {
-                <button type="button" class="action-btn" (click)="ouvrirResolution(litige)">
+              @if (
+                litige.statut === StatutLitige.OUVERT ||
+                litige.statut === StatutLitige.EN_COURS
+              ) {
+                <button
+                  type="button"
+                  class="action-btn"
+                  (click)="ouvrirResolution(litige)"
+                >
                   Résoudre ce litige
                 </button>
               }
@@ -68,7 +94,9 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
     @if (litigeCible) {
       <div class="resolution-overlay">
         <div class="resolution-box">
-          <label class="resolution-label" for="resolution-text">Détail de la résolution</label>
+          <label class="resolution-label" for="resolution-text"
+            >Détail de la résolution</label
+          >
           <textarea
             id="resolution-text"
             class="resolution-textarea"
@@ -77,8 +105,19 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
             placeholder="Ex : Vérification effectuée, paiement confirmé..."
           ></textarea>
           <div class="resolution-actions">
-            <button type="button" class="resolution-btn resolution-btn--cancel" (click)="litigeCible = null">Annuler</button>
-            <button type="button" class="resolution-btn resolution-btn--confirm" [disabled]="!texteResolution.trim()" (click)="confirmerResolution()">
+            <button
+              type="button"
+              class="resolution-btn resolution-btn--cancel"
+              (click)="litigeCible = null"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              class="resolution-btn resolution-btn--confirm"
+              [disabled]="!texteResolution.trim()"
+              (click)="confirmerResolution()"
+            >
               Marquer comme résolu
             </button>
           </div>
@@ -291,19 +330,19 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
         font-size: 1.5rem;
       }
     }
-  `
+  `,
 })
 export class LitigesComponent implements OnInit {
   litiges: Litige[] = [];
   loading = true;
   litigeCible: Litige | null = null;
-  texteResolution = '';
+  texteResolution = "";
   readonly StatutLitige = StatutLitige;
 
-  constructor(private adminService: AdminService) {}
+  private readonly adminService = inject(AdminService);
 
   ngOnInit(): void {
-    this.adminService.getLitiges().subscribe(litiges => {
+    this.adminService.getLitiges().subscribe((litiges) => {
       this.litiges = litiges;
       this.loading = false;
     });
@@ -311,30 +350,32 @@ export class LitigesComponent implements OnInit {
 
   ouvrirResolution(litige: Litige): void {
     this.litigeCible = litige;
-    this.texteResolution = '';
+    this.texteResolution = "";
   }
 
   confirmerResolution(): void {
     if (!this.litigeCible || !this.texteResolution.trim()) {
       return;
     }
-    this.adminService.resoudreLitige(this.litigeCible.id, this.texteResolution.trim()).subscribe(litigeMaj => {
-      const index = this.litiges.findIndex(l => l.id === litigeMaj.id);
-      if (index !== -1) {
-        this.litiges[index] = litigeMaj;
-      }
-      this.litigeCible = null;
-    });
+    this.adminService
+      .resoudreLitige(this.litigeCible.id, this.texteResolution.trim())
+      .subscribe((litigeMaj) => {
+        const index = this.litiges.findIndex((l) => l.id === litigeMaj.id);
+        if (index !== -1) {
+          this.litiges[index] = litigeMaj;
+        }
+        this.litigeCible = null;
+      });
   }
 
   labelPriorite(priorite: PrioriteLitige): string {
     switch (priorite) {
       case PrioriteLitige.HAUTE:
-        return 'Priorité haute';
+        return "Priorité haute";
       case PrioriteLitige.MOYENNE:
-        return 'Priorité moyenne';
+        return "Priorité moyenne";
       case PrioriteLitige.BASSE:
-        return 'Priorité basse';
+        return "Priorité basse";
       default:
         return priorite;
     }
@@ -343,13 +384,13 @@ export class LitigesComponent implements OnInit {
   prioriteClasses(priorite: PrioriteLitige): string {
     switch (priorite) {
       case PrioriteLitige.HAUTE:
-        return 'priorite-pill--haute';
+        return "priorite-pill--haute";
       case PrioriteLitige.MOYENNE:
-        return 'priorite-pill--moyenne';
+        return "priorite-pill--moyenne";
       case PrioriteLitige.BASSE:
-        return 'priorite-pill--basse';
+        return "priorite-pill--basse";
       default:
-        return '';
+        return "";
     }
   }
 }

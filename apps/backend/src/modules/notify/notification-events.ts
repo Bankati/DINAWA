@@ -53,10 +53,20 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: 'Votre compte a été suspendu : {reason}.',
     url: '/dashboard/account',
   },
+  'account-reactivated': {
+    title: 'Compte réactivé',
+    body: 'Votre compte WARAH est de nouveau pleinement actif.',
+    url: '/dashboard/account',
+  },
   'tenant-invitation': {
     title: 'Invitation WARAH',
     body: '{inviterName} vous invite à rejoindre WARAH.',
     url: '/dashboard',
+  },
+  'lease-created': {
+    title: 'Nouveau bail',
+    body: 'Vous avez un nouveau bail pour {propertyAddress}.',
+    url: '/dashboard/leases',
   },
 };
 

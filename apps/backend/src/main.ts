@@ -69,6 +69,7 @@ async function bootstrap(): Promise<void> {
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
       .addTag('Health', 'Sondes de disponibilité Railway')
       .addTag('Auth', 'Authentification Supabase')
+      .addTag('Identity', 'Vérification automatique de la CNI togolaise')
       .addTag('Properties', 'Gestion des biens immobiliers')
       .addTag('Leases', 'Contrats de location')
       .addTag('Payments', 'Paiements mobile money')

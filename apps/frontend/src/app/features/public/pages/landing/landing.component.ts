@@ -22,7 +22,7 @@ import { isPlatformBrowser } from '@angular/common';
 
           <!-- Logo -->
           <a href="/" class="navbar-logo">
-            <img src="/assets/warah-logo.png" alt="WARAH" class="logo-img">
+            <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
           </a>
 
           <!-- Navigation principale (desktop) -->
@@ -140,14 +140,6 @@ import { isPlatformBrowser } from '@angular/common';
               <line x1="4" y1="12" x2="20" y2="12"></line>
             </svg>
             Bureau
-          </a>
-          <a href="/annonces?type=terrain" class="filter-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Terrain
           </a>
           <a href="/annonces?type=villa" class="filter-pill">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -517,29 +509,15 @@ import { isPlatformBrowser } from '@angular/common';
               </svg>
             </a>
 
-            <a href="/annonces?type=terrain" class="category-card cat-terrain">
-              <div class="cat-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="17 8 12 3 7 8"></polyline>
-                  <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-              </div>
-              <div class="cat-body">
-                <span class="cat-name">Terrain</span>
-                <span class="cat-badge">150 annonces</span>
-              </div>
-              <svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </a>
 
             <a href="/annonces?type=villa" class="category-card cat-villa">
               <div class="cat-icon-wrap">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                  <line x1="9" y1="12" x2="15" y2="12"></line>
+                  <path d="M2 22V11L12 3l10 8v11H2z"></path>
+                  <path d="M2 22h20"></path>
+                  <rect x="5" y="12" width="3" height="4"></rect>
+                  <rect x="16" y="12" width="3" height="4"></rect>
+                  <path d="M10 22v-6h4v6"></path>
                 </svg>
               </div>
               <div class="cat-body">
@@ -911,7 +889,7 @@ import { isPlatformBrowser } from '@angular/common';
         <div class="footer-container">
           <div class="footer-section footer-brand">
             <div class="footer-logo">
-              <img src="/assets/warah-logo.png" alt="WARAH" class="logo-img">
+              <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
             </div>
             <p class="footer-description">La plateforme immobilière n°1 au Togo. Trouvez votre logement ou gérez vos biens facilement.</p>
             <div class="footer-payment">
@@ -959,7 +937,6 @@ import { isPlatformBrowser } from '@angular/common';
             <a href="/annonces?type=appartement" class="footer-link">Appartements</a>
             <a href="/annonces?type=maison" class="footer-link">Maisons</a>
             <a href="/annonces?type=bureau" class="footer-link">Bureaux</a>
-            <a href="/annonces?type=terrain" class="footer-link">Terrains</a>
           </div>
           
           <div class="footer-section">
@@ -977,12 +954,12 @@ import { isPlatformBrowser } from '@angular/common';
               </svg>
               +228 90 00 00 00
             </a>
-            <a href="mailto:contact@warah.tg" class="footer-link">
+            <a href="mailto:contact@WARAH.tg" class="footer-link">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="footer-link-icon">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                 <polyline points="22,6 12,13 2,6"></polyline>
               </svg>
-              contact@warah.tg
+              contact@WARAH.tg
             </a>
           </div>
         </div>
@@ -1839,15 +1816,15 @@ import { isPlatformBrowser } from '@angular/common';
 
     .categories-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 1rem;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+      padding: 0 0.25rem;
     }
 
     /* Couleurs par type — CSS custom properties */
     .cat-maison    { --cat-color: #1A7A4A; --cat-bg: rgba(26,122,74,0.1);   --cat-border: rgba(26,122,74,0.35); }
     .cat-appartement { --cat-color: #1A6B9E; --cat-bg: rgba(26,107,158,0.1); --cat-border: rgba(26,107,158,0.35); }
     .cat-bureau    { --cat-color: #7C3AED; --cat-bg: rgba(124,58,237,0.1);  --cat-border: rgba(124,58,237,0.35); }
-    .cat-terrain   { --cat-color: #B45309; --cat-bg: rgba(180,83,9,0.1);    --cat-border: rgba(180,83,9,0.35); }
     .cat-villa     { --cat-color: #0F766E; --cat-bg: rgba(15,118,110,0.1);  --cat-border: rgba(15,118,110,0.35); }
 
     .category-card {

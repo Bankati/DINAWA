@@ -8,7 +8,6 @@ import { RouterModule } from '@angular/router';
   imports: [CommonModule, RouterModule],
   template: `
     <div class="layout">
-      <!-- Bouton menu mobile -->
       <button class="mobile-btn" type="button" (click)="sidebarOpen = !sidebarOpen" aria-label="Menu">
         <span></span><span></span><span></span>
       </button>
@@ -18,10 +17,10 @@ import { RouterModule } from '@angular/router';
       }
 
       <aside class="sidebar" [class.open]="sidebarOpen">
-        <!-- Logo -->
+
         <div class="sidebar-logo">
-          <div class="logo-box">
-            <img src="/assets/warah-logo.png" alt="WARAH" class="logo-img">
+          <div class="logo-wrap">
+            <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
           </div>
           <button class="close-btn" type="button" (click)="sidebarOpen = false" aria-label="Fermer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -31,18 +30,9 @@ import { RouterModule } from '@angular/router';
           </button>
         </div>
 
-        <!-- Utilisateur -->
-        <div class="user-card">
-          <div class="user-avatar">{{ initiales }}</div>
-          <div class="user-info">
-            <p class="user-name">{{ prenom }} {{ nom }}</p>
-            <span class="user-role">Propriétaire</span>
-          </div>
-        </div>
-
-        <!-- Navigation -->
         <nav class="sidebar-nav" (click)="sidebarOpen = false">
-          <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}" class="nav-item">
+          <a routerLink="/dashboard" routerLinkActive="active"
+             [routerLinkActiveOptions]="{exact:true}" class="nav-item">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7" rx="1"></rect>
               <rect x="14" y="3" width="7" height="7" rx="1"></rect>
@@ -52,7 +42,7 @@ import { RouterModule } from '@angular/router';
             <span>Tableau de bord</span>
           </a>
 
-          <div class="nav-section-label">Gestion</div>
+          <p class="nav-group">Gestion</p>
 
           <a routerLink="/dashboard/biens" routerLinkActive="active" class="nav-item">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -87,7 +77,7 @@ import { RouterModule } from '@angular/router';
             <span>Annonces</span>
           </a>
 
-          <div class="nav-section-label">Compte</div>
+          <p class="nav-group">Compte</p>
 
           <a routerLink="/dashboard/notifications" routerLinkActive="active" class="nav-item">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -107,24 +97,33 @@ import { RouterModule } from '@angular/router';
           </a>
         </nav>
 
-        <!-- Footer -->
-        <div class="sidebar-footer">
-          <a routerLink="/" class="footer-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
-            <span>Accueil</span>
-          </a>
-          <button class="logout-btn" type="button" (click)="deconnecter()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-            <span>Déconnexion</span>
-          </button>
+        <div class="sidebar-bottom">
+          <div class="user-card">
+            <div class="user-avatar">{{ initiales }}</div>
+            <div class="user-info">
+              <p class="user-name">{{ prenom }} {{ nom }}</p>
+              <span class="user-role">Propriétaire</span>
+            </div>
+          </div>
+          <div class="sidebar-footer">
+            <a routerLink="/" class="footer-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+              <span>Accueil</span>
+            </a>
+            <button class="logout-btn" type="button" (click)="deconnecter()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              <span>Déconnexion</span>
+            </button>
+          </div>
         </div>
+
       </aside>
 
       <main class="main-content">
@@ -136,219 +135,148 @@ import { RouterModule } from '@angular/router';
     .layout {
       display: flex;
       min-height: 100vh;
-      background: #F5F7FA;
+      background: #F2EFE9;
     }
 
+    /* ── Bouton hamburger mobile ── */
     .mobile-btn {
       display: none;
       position: fixed;
-      top: 1rem;
-      left: 1rem;
-      z-index: 200;
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      border: none;
+      top: 1rem; left: 1rem; z-index: 200;
+      width: 44px; height: 44px;
+      border-radius: 10px; border: none;
       background: var(--color-primary);
-      box-shadow: 0 4px 12px rgba(15,76,129,0.4);
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(15,76,129,0.35);
+      flex-direction: column; align-items: center;
+      justify-content: center; gap: 5px; cursor: pointer;
     }
     .mobile-btn span {
-      display: block;
-      width: 20px;
-      height: 2px;
-      background: white;
-      border-radius: 2px;
+      display: block; width: 20px; height: 2px;
+      background: white; border-radius: 2px;
       transition: all 0.2s;
     }
 
     .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      z-index: 99;
-      backdrop-filter: blur(2px);
+      position: fixed; inset: 0; z-index: 99;
+      background: rgba(10,20,45,0.4);
+      backdrop-filter: blur(3px);
     }
 
+    /* ── Sidebar ── */
     .sidebar {
-      width: 260px;
-      background: linear-gradient(180deg,
-        var(--color-primary-900) 0%,
-        var(--color-primary-dark) 40%,
-        var(--color-primary) 100%);
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      left: 0;
-      top: 0;
-      height: 100vh;
-      z-index: 100;
-      box-shadow: 4px 0 24px rgba(0,0,0,0.18);
+      width: 256px;
+      background: #FFFFFF;
+      border-right: 1px solid #E8E1D8;
+      display: flex; flex-direction: column;
+      position: fixed; left: 0; top: 0;
+      height: 100vh; z-index: 100;
+      box-shadow: 2px 0 24px rgba(15,76,129,0.05);
       transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
     }
 
+    /* ── Logo ── */
+    .sidebar-logo {
+      padding: 20px 18px 18px;
+      border-bottom: 1px solid #EEE8DF;
+      display: flex; align-items: center;
+      justify-content: space-between; flex-shrink: 0;
+    }
+    .logo-wrap {
+      padding: 4px 8px; border-radius: 8px;
+      background: rgba(15,76,129,0.05);
+      display: inline-flex; align-items: center;
+    }
+    .logo-img { height: 38px; width: auto; display: block; }
+
     .close-btn {
-      display: none;
-      background: none;
-      border: none;
-      color: rgba(255,255,255,0.6);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 6px;
-      transition: all 0.15s;
+      display: none; background: none; border: none;
+      color: #9CA3AF; cursor: pointer;
+      padding: 4px; border-radius: 6px; transition: all 0.15s;
     }
     .close-btn svg { width: 20px; height: 20px; }
-    .close-btn:hover { color: white; background: rgba(255,255,255,0.1); }
+    .close-btn:hover { color: #4B5563; background: #F3F4F6; }
 
-    .sidebar-logo {
-      padding: 20px 20px 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .logo-box {
-      background: white;
-      border-radius: 10px;
-      padding: 6px 12px;
-      display: inline-flex;
-      align-items: center;
-    }
-    .logo-img {
-      height: 44px;
-      width: auto;
-      display: block;
-    }
-
-    .user-card {
-      padding: 16px 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .user-avatar {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      background: var(--color-accent);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 15px;
-      color: var(--color-primary-dark);
-      flex-shrink: 0;
-      letter-spacing: 0.5px;
-    }
-    .user-name {
-      font-size: 13.5px;
-      font-weight: 600;
-      color: white;
-      line-height: 1.3;
-    }
-    .user-role {
-      display: inline-block;
-      font-size: 10.5px;
-      font-weight: 600;
-      color: var(--color-accent);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-top: 3px;
-    }
-
+    /* ── Navigation ── */
     .sidebar-nav {
-      flex: 1;
-      padding: 12px 12px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(255,255,255,0.1) transparent;
+      flex: 1; padding: 14px 10px;
+      overflow-y: auto; scrollbar-width: thin;
+      scrollbar-color: #E8E1D8 transparent;
     }
 
-    .nav-section-label {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.3);
-      padding: 12px 12px 6px;
+    .nav-group {
+      font-size: 9.5px; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: #C4B99E; padding: 14px 12px 6px; margin: 0;
     }
 
     .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      padding: 10px 14px;
-      border-radius: 10px;
-      color: rgba(255,255,255,0.62);
-      text-decoration: none;
-      font-size: 13.5px;
-      font-weight: 500;
-      transition: all 0.15s ease;
-      margin-bottom: 1px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 8px;
+      color: #54626E; text-decoration: none;
+      font-size: 13.5px; font-weight: 500;
+      transition: all 0.12s ease;
+      margin-bottom: 2px;
       border-left: 3px solid transparent;
     }
     .nav-item:hover {
-      background: rgba(255,255,255,0.09);
-      color: white;
-      border-left-color: rgba(255,255,255,0.2);
+      background: #F4F0EA;
+      color: var(--color-primary-dark);
     }
     .nav-item.active {
-      background: rgba(201,152,46,0.15);
-      color: white;
+      background: rgba(15,76,129,0.07);
+      color: var(--color-primary);
       border-left-color: var(--color-accent);
       font-weight: 600;
     }
-    .nav-icon {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-      opacity: 0.8;
-    }
+    .nav-icon { width: 17px; height: 17px; flex-shrink: 0; opacity: 0.75; }
+    .nav-item:hover .nav-icon,
     .nav-item.active .nav-icon { opacity: 1; }
 
+    /* ── Bas de sidebar : utilisateur + déconnexion ── */
+    .sidebar-bottom { border-top: 1px solid #EEE8DF; flex-shrink: 0; }
+
+    .user-card {
+      padding: 14px 18px; border-bottom: 1px solid #EEE8DF;
+      display: flex; align-items: center; gap: 11px;
+    }
+    .user-avatar {
+      width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
+      background: var(--color-primary); color: white;
+      font-weight: 700; font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .user-name {
+      font-size: 13px; font-weight: 600;
+      color: var(--color-primary-dark); line-height: 1.3;
+    }
+    .user-role {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      color: var(--color-accent); letter-spacing: 0.08em;
+      text-transform: uppercase; margin-top: 2px;
+    }
+
     .sidebar-footer {
-      padding: 12px 12px 16px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      padding: 8px 10px 16px;
+      display: flex; flex-direction: column; gap: 1px;
     }
     .footer-item, .logout-btn {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      padding: 10px 14px;
-      border-radius: 10px;
-      color: rgba(255,255,255,0.55);
-      font-size: 13.5px;
-      font-weight: 500;
-      text-decoration: none;
-      transition: all 0.15s;
-      background: none;
-      border: none;
-      cursor: pointer;
-      width: 100%;
-      text-align: left;
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 14px; border-radius: 7px;
+      color: #54626E; font-size: 13.5px; font-weight: 500;
+      text-decoration: none; transition: all 0.12s;
+      background: none; border: none; cursor: pointer;
+      width: 100%; text-align: left;
     }
     .footer-item svg, .logout-btn svg {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
+      width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7;
     }
-    .footer-item:hover { background: rgba(255,255,255,0.08); color: white; }
-    .logout-btn:hover { background: rgba(239,68,68,0.15); color: #FCA5A5; }
+    .footer-item:hover { background: #F4F0EA; color: var(--color-primary-dark); }
+    .logout-btn:hover { background: rgba(220,38,38,0.07); color: #DC2626; }
 
+    /* ── Contenu principal ── */
     .main-content {
-      flex: 1;
-      margin-left: 260px;
-      min-height: 100vh;
-      overflow-x: hidden;
+      flex: 1; margin-left: 256px;
+      min-height: 100vh; overflow-x: hidden;
     }
 
     @media (max-width: 1024px) {
@@ -358,11 +286,8 @@ import { RouterModule } from '@angular/router';
 
     @media (max-width: 768px) {
       .mobile-btn { display: flex; }
-      .close-btn { display: flex; }
-      .sidebar {
-        transform: translateX(-100%);
-        width: 280px;
-      }
+      .close-btn  { display: flex; }
+      .sidebar { transform: translateX(-100%); width: 280px; }
       .sidebar.open { transform: translateX(0); }
       .main-content { margin-left: 0; padding-top: 3.5rem; }
     }
@@ -376,7 +301,7 @@ export class ProprietaireLayoutComponent implements OnInit {
 
   ngOnInit(): void {
     try {
-      const raw = localStorage.getItem('warah_user');
+      const raw = localStorage.getItem('WARAH_user');
       if (raw) {
         const u = JSON.parse(raw);
         this.prenom = u.prenom || '';
@@ -387,8 +312,8 @@ export class ProprietaireLayoutComponent implements OnInit {
   }
 
   deconnecter(): void {
-    localStorage.removeItem('warah_token');
-    localStorage.removeItem('warah_user');
+    localStorage.removeItem('WARAH_token');
+    localStorage.removeItem('WARAH_user');
     window.location.href = '/auth/login';
   }
 }
