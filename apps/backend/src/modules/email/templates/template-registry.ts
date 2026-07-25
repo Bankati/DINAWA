@@ -11,8 +11,6 @@ import * as inactivityWarning from './inactivity-warning.template';
 import * as accountSuspended from './account-suspended.template';
 import * as accountReactivated from './account-reactivated.template';
 import * as leaseCreated from './lease-created.template';
-import * as delegationGranted from './delegation-granted.template';
-import * as delegationRevoked from './delegation-revoked.template';
 import { TemplateModule, TemplateVariables } from './types';
 
 export type EmailTemplate =
@@ -28,9 +26,7 @@ export type EmailTemplate =
   | 'inactivity-warning'
   | 'account-suspended'
   | 'account-reactivated'
-  | 'lease-created'
-  | 'delegation-granted'
-  | 'delegation-revoked';
+  | 'lease-created';
 
 const registry: Record<EmailTemplate, TemplateModule> = {
   'signup-confirmation': signupConfirmation,
@@ -46,8 +42,6 @@ const registry: Record<EmailTemplate, TemplateModule> = {
   'account-suspended': accountSuspended,
   'account-reactivated': accountReactivated,
   'lease-created': leaseCreated,
-  'delegation-granted': delegationGranted,
-  'delegation-revoked': delegationRevoked,
 };
 
 export function subjectFor(template: EmailTemplate, variables: TemplateVariables): string {

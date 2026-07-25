@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AccountStatus,
+  IdVerificationStatus,
   LeaseStatus,
   PaymentFrequency,
   Prisma,
@@ -46,6 +48,20 @@ export type PaginatedLeaseHistory = {
   page: number;
   limit: number;
   total: number;
+};
+
+export type TenantSummary = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  role: 'TENANT';
+  accountStatus: AccountStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  idVerificationStatus: IdVerificationStatus;
+  activeLease: { propertyId: string; address: string } | null;
 };
 
 @Injectable()
@@ -114,7 +130,7 @@ export class TenantsService {
   }
 
   // Retourne le profil d'un locataire unique accessible par le proprio/gestionnaire courant.
-  async getTenantById(user: AuthenticatedUser, tenantUserId: string) {
+  async getTenantById(user: AuthenticatedUser, tenantUserId: string): Promise<TenantSummary> {
     const tenant = await this.prisma.user.findFirst({
       where: {
         id: tenantUserId,
@@ -122,9 +138,14 @@ export class TenantsService {
         tenantProfile: { invitedByUserId: user.id },
       },
       select: {
-        id: true, firstName: true, lastName: true,
-        email: true, phone: true, accountStatus: true,
-        createdAt: true, updatedAt: true,
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        accountStatus: true,
+        createdAt: true,
+        updatedAt: true,
         tenantProfile: { select: { idVerificationStatus: true } },
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
@@ -148,7 +169,10 @@ export class TenantsService {
       updatedAt: tenant.updatedAt,
       idVerificationStatus: tenant.tenantProfile?.idVerificationStatus ?? 'PENDING',
       activeLease: tenant.leasesAsTenant[0]
-        ? { propertyId: tenant.leasesAsTenant[0].propertyId, address: tenant.leasesAsTenant[0].property.address }
+        ? {
+            propertyId: tenant.leasesAsTenant[0].propertyId,
+            address: tenant.leasesAsTenant[0].property.address,
+          }
         : null,
     };
   }
@@ -172,7 +196,7 @@ export class TenantsService {
   // Liste tous les locataires invités par l'utilisateur courant (via TenantProfile.invitedByUserId).
   // Retourne également les locataires sans bail actif, ce que l'approche par
   // historique de baux ne permettait pas.
-  async listInvitedTenants(user: AuthenticatedUser) {
+  async listInvitedTenants(user: AuthenticatedUser): Promise<TenantSummary[]> {
     const tenants = await this.prisma.user.findMany({
       where: {
         role: 'TENANT',
@@ -209,7 +233,10 @@ export class TenantsService {
       updatedAt: t.updatedAt,
       idVerificationStatus: t.tenantProfile?.idVerificationStatus ?? 'PENDING',
       activeLease: t.leasesAsTenant[0]
-        ? { propertyId: t.leasesAsTenant[0].propertyId, address: t.leasesAsTenant[0].property.address }
+        ? {
+            propertyId: t.leasesAsTenant[0].propertyId,
+            address: t.leasesAsTenant[0].property.address,
+          }
         : null,
     }));
   }

@@ -5,7 +5,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD } from '@nestjs/core';
-import { DelegationGuard } from './common/guards/delegation.guard';
 import { validate } from './config/env.validation';
 import { pinoConfig } from './config/logger.config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -23,10 +22,6 @@ import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { LeasesModule } from './modules/leases/leases.module';
-import { ListingsModule } from './modules/listings/listings.module';
-import { AdminModule } from './modules/admin/admin.module';
-import { ExportsModule } from './modules/exports/exports.module';
-import { DelegationModule } from './modules/delegation/delegation.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -100,18 +95,6 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Création/résiliation des baux, génération du calendrier d'échéances (voir build-plan.md unité 15)
     LeasesModule,
-
-    // Annonces publiques (listings) — accès sans authentification
-    ListingsModule,
-
-    // Administration — gestion des comptes et supervision
-    AdminModule,
-
-    // Export de données (biens, locataires, paiements, contrats) en PDF/Excel/CSV
-    ExportsModule,
-
-    // Délégation de pouvoir propriétaire → gestionnaire
-    DelegationModule,
   ],
   providers: [
     {
@@ -127,11 +110,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
-    },
-    // Bloque les mutations OWNER si délégation active (lecture seule pendant délégation)
-    {
-      provide: APP_GUARD,
-      useClass: DelegationGuard,
     },
   ],
 })

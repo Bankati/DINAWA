@@ -44,6 +44,7 @@ describe('AuthService', () => {
   let supabaseAdmin: {
     auth: {
       admin: {
+        generateLink: jest.Mock;
         createUser: jest.Mock;
         deleteUser: jest.Mock;
         updateUserById: jest.Mock;
@@ -119,24 +120,16 @@ describe('AuthService', () => {
     supabaseAdmin = {
       auth: {
         admin: {
-          // Depuis le retrait de generateLink() (voir /architect révision
-          // inscription owner/manager v2 — email_confirm: true en attendant
-          // que le domaine Resend soit vérifié en prod), signupOwner/
-          // signupManager/inviteTenant appellent tous createUser(). L'id
-          // renvoyé dépend du rôle pour rester lisible dans les assertions.
-          createUser: jest.fn().mockImplementation((params: { user_metadata: { role: string } }) =>
-            Promise.resolve({
-              data: {
-                user: {
-                  id:
-                    params.user_metadata.role === 'TENANT'
-                      ? 'supabase-uid-tenant'
-                      : 'supabase-uid-1',
-                },
-              },
-              error: null,
-            }),
-          ),
+          generateLink: jest.fn().mockResolvedValue({
+            data: {
+              user: { id: 'supabase-uid-1' },
+              properties: { action_link: 'https://supabase.example/auth/v1/verify?token=abc' },
+            },
+            error: null,
+          }),
+          createUser: jest
+            .fn()
+            .mockResolvedValue({ data: { user: { id: 'supabase-uid-tenant' } }, error: null }),
           deleteUser: jest.fn().mockResolvedValue({ error: null }),
           updateUserById: jest.fn().mockResolvedValue({ error: null }),
         },
@@ -306,18 +299,14 @@ describe('AuthService', () => {
   });
 
   describe('signupOwner', () => {
-    it("crée le compte Supabase (email_confirm: true), le User+OwnerProfile (avec phone/city), envoie l'email de confirmation et déclenche la vérification CNI quand une image est fournie", async () => {
+    it("crée le compte Supabase, le User+OwnerProfile (avec phone/city), envoie l'email de confirmation et déclenche la vérification CNI quand une image est fournie", async () => {
       const result = await service.signupOwner(ownerDto, files);
 
-      // email_confirm: true — le compte est immédiatement utilisable, en
-      // attendant que le domaine Resend soit vérifié en prod (voir
-      // AuthService.createConfirmedAccount()). Pas de lien de confirmation
-      // réel tant que ce contournement est en place.
-      expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
+      expect(supabaseAdmin.auth.admin.generateLink).toHaveBeenCalledWith({
+        type: 'signup',
         email: ownerDto.email,
         password: ownerDto.password,
-        email_confirm: true,
-        user_metadata: { role: 'OWNER' },
+        options: { data: { role: 'OWNER' }, redirectTo: 'http://localhost:4200' },
       });
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
@@ -336,7 +325,10 @@ describe('AuthService', () => {
       expect(emailService.sendEmail).toHaveBeenCalledWith({
         to: ownerDto.email,
         template: 'signup-confirmation',
-        variables: { firstName: ownerDto.firstName, confirmationUrl: '' },
+        variables: {
+          firstName: ownerDto.firstName,
+          confirmationUrl: 'https://supabase.example/auth/v1/verify?token=abc',
+        },
       });
       expect(identityService.verify).toHaveBeenCalledWith(createdUser, files);
       expect(result).toEqual({
@@ -351,7 +343,7 @@ describe('AuthService', () => {
     it('crée le compte sans aucune CNI fournie, sans appeler identityService.verify()', async () => {
       const result = await service.signupOwner(ownerDto, {});
 
-      expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalled();
+      expect(supabaseAdmin.auth.admin.generateLink).toHaveBeenCalled();
       expect(identityService.verify).not.toHaveBeenCalled();
       expect(result).toEqual({ user: createdUser, identityVerification: null });
     });
@@ -364,7 +356,7 @@ describe('AuthService', () => {
     });
 
     it('convertit une erreur Supabase email_exists en 409, sans toucher à Prisma', async () => {
-      supabaseAdmin.auth.admin.createUser.mockResolvedValueOnce({
+      supabaseAdmin.auth.admin.generateLink.mockResolvedValue({
         data: null,
         error: { code: 'email_exists', message: 'User already registered' },
       });
@@ -475,8 +467,8 @@ describe('AuthService', () => {
       expect(emailArgs.template).toBe('tenant-invitation');
       expect(emailArgs.variables.inviterName).toBe('Jean Dupont');
       expect(emailArgs.variables.propertyAddress).toBe(property.address);
-      expect(emailArgs.variables.invitationUrl).toContain('/auth/activate?token=');
-      expect(result.invitationUrl).toContain('/auth/activate?token=');
+      expect(emailArgs.variables.invitationUrl).toContain('/activate-account?token=');
+      expect(result.invitationUrl).toContain('/activate-account?token=');
     });
 
     it('rejette avec 404 si le bien est introuvable', async () => {

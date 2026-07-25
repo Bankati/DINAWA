@@ -365,12 +365,21 @@ export class PropertiesService {
     return property;
   }
 
+  // Seule autorité pour les transitions de statut (voir /architect unité
+  // 12) — OCCUPIED est piloté exclusivement par LeasesService.create()
+  // (unité 15), jamais via ce PATCH ; ARCHIVED n'est atteignable que via
+  // remove().
   private async assertValidTransition(property: Property, next: PropertyStatus): Promise<void> {
     if (property.status === 'ARCHIVED') {
       throw new BadRequestException('Un bien archivé ne peut plus changer de statut');
     }
     if (next === 'ARCHIVED') {
       throw new BadRequestException('Utilisez DELETE /properties/:id pour archiver un bien');
+    }
+    if (next === 'OCCUPIED') {
+      throw new BadRequestException(
+        "Le statut OCCUPIED est déterminé automatiquement à la création d'un bail — voir POST /api/leases",
+      );
     }
     if (property.status === 'OCCUPIED' && next === 'VACANT') {
       const activeLease = await this.prisma.lease.findFirst({

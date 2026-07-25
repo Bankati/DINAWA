@@ -68,16 +68,6 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: 'Vous avez un nouveau bail pour {propertyAddress}.',
     url: '/dashboard/leases',
   },
-  'delegation-granted': {
-    title: 'Délégation de gestion reçue',
-    body: '{ownerName} vous a confié la gestion de son portefeuille.',
-    url: '/gestionnaire/dashboard',
-  },
-  'delegation-revoked': {
-    title: 'Délégation de gestion révoquée',
-    body: '{ownerName} a repris la gestion de son portefeuille.',
-    url: '/gestionnaire/dashboard',
-  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {

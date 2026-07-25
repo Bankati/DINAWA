@@ -4,7 +4,7 @@ import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
-import { TenantsService, PaginatedLeaseHistory } from './tenants.service';
+import { TenantsService, PaginatedLeaseHistory, TenantSummary } from './tenants.service';
 import { LeaseHistoryQueryDto } from './dto/lease-history-query.dto';
 
 @ApiTags('Tenants')
@@ -15,18 +15,22 @@ export class TenantsController {
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Liste les locataires invités par le propriétaire/gestionnaire courant' })
-  listTenants(@CurrentUser() user: AuthenticatedUser) {
+  @ApiOperation({
+    summary: 'Liste les locataires invités par le propriétaire/gestionnaire courant',
+  })
+  listTenants(@CurrentUser() user: AuthenticatedUser): Promise<TenantSummary[]> {
     return this.tenantsService.listInvitedTenants(user);
   }
 
   @Get(':tenantUserId')
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Détail d\'un locataire invité par le propriétaire/gestionnaire courant' })
+  @ApiOperation({
+    summary: "Détail d'un locataire invité par le propriétaire/gestionnaire courant",
+  })
   getTenant(
     @CurrentUser() user: AuthenticatedUser,
     @Param('tenantUserId') tenantUserId: string,
-  ) {
+  ): Promise<TenantSummary> {
     return this.tenantsService.getTenantById(user, tenantUserId);
   }
 

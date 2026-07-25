@@ -225,8 +225,6 @@ model User {
   passwordResetOtps      PasswordResetOtp[]
   notifications          Notification[]
   auditLogs              AuditLog[]
-  delegationsAsOwner     PowerDelegation[]      @relation("DelegationOwner")
-  delegationsAsManager   PowerDelegation[]      @relation("DelegationManager")
 
   @@map("users")
 }
@@ -701,30 +699,6 @@ model Notification {
   @@index([userId])
   @@index([event])
   @@map("notifications")
-}
-
-// ────────────────────────────────────────────────────────────────
-// Délégation de pouvoir propriétaire → gestionnaire
-// ────────────────────────────────────────────────────────────────
-
-enum DelegationStatus {
-  ACTIVE
-  REVOKED
-}
-
-model PowerDelegation {
-  id          String           @id @default(cuid())
-  ownerId     String
-  owner       User             @relation("DelegationOwner", fields: [ownerId], references: [id])
-  managerId   String
-  manager     User             @relation("DelegationManager", fields: [managerId], references: [id])
-  status      DelegationStatus @default(ACTIVE)
-  grantedAt   DateTime         @default(now()) @db.Timestamptz(6)
-  revokedAt   DateTime?        @db.Timestamptz(6)
-
-  @@index([ownerId, status])
-  @@index([managerId, status])
-  @@map("power_delegations")
 }
 
 model AuditLog {

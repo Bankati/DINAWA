@@ -31,7 +31,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 **Logique :**
 
-- Modèles : `User`, `OwnerProfile`, `TenantProfile`, `ManagerProfile`, `AdminProfile`, `Property`, `PropertyPhoto`, `PropertyDocument`, `Lease`, `Payment`, `PaymentDeclaration`, `PaymentScheduleEntry`, `Listing`, `ListingContact`, `Mandate`, `ManagerReview`, `Subscription`, `SubscriptionInvoice`, `IdentityVerification`, `PushSubscription`, `AuditLog`, `Notification`
+- Modèles : `User`, `OwnerProfile`, `TenantProfile`, `ManagerProfile`, `AdminProfile`, `Property`, `PropertyPhoto`, `PropertyDocument`, `Lease`, `Payment`, `PaymentDeclaration`, `PaymentScheduleEntry`, `Listing`, `Mandate`, `ManagerReview`, `Subscription`, `SubscriptionInvoice`, `IdentityVerification`, `PushSubscription`, `AuditLog`, `Notification` (`ListingContact` retiré le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Pas de modèle `Receipt`, `MonthlyReport` ni `Invoice` — les PDFs sont générés à la volée, jamais stockés
 - Énumérations : `UserRole` (OWNER / TENANT / MANAGER / ADMIN), `PropertyStatus` (OCCUPIED / VACANT / RENOVATION / ARCHIVED), `LeaseStatus` (ACTIVE / TERMINATED / EXPIRED), `PaymentFrequency` (MONTHLY / QUARTERLY / BIANNUAL / ANNUAL), `PaymentStatus` (PENDING / PENDING_CONFIRMATION / PAID / PARTIAL / LATE / OVERDUE / REJECTED), `PaymentSource` (CASHPAY_API / MANUAL_OWNER / TENANT_DECLARATION), `PaymentMethod` (TMONEY / FLOOZ / CASH / BANK_TRANSFER), `SubscriptionTier` (STARTER / PRO / PREMIUM), `IdVerificationStatus` (PENDING / VERIFIED / REJECTED), `NotificationConsent` (NOT_ASKED / ACCEPTED / DECLINED), `AccountStatus` (ACTIVE / SUSPENDED_INACTIVITY / SUSPENDED_ADMIN / SUSPENDED_PAYMENT)
 - Contrainte : un `User` a exactement un rôle actif, lié à un profil unique selon ce rôle
@@ -57,7 +57,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Client Resend configuré dans `src/modules/email/email.service.ts`
-- Templates fournis par le client intégrés tels quels dans `src/modules/email/templates/` — la liste exacte sera précisée à la livraison, mais couvre au minimum : confirmation d'inscription, réinitialisation de mot de passe, invitation locataire, quittance de loyer, rappel d'échéance, alerte impayé, déclaration de paiement à confirmer, rapport mensuel gestionnaire, notification de contact d'annonce, blocage de compte imminent, compte bloqué
+- Templates fournis par le client intégrés tels quels dans `src/modules/email/templates/` — la liste exacte sera précisée à la livraison, mais couvre au minimum : confirmation d'inscription, réinitialisation de mot de passe, invitation locataire, quittance de loyer, rappel d'échéance, alerte impayé, déclaration de paiement à confirmer, rapport mensuel gestionnaire, blocage de compte imminent, compte bloqué (« notification de contact d'annonce » retirée le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Méthode `sendEmail({ to, template, variables, attachments? })` — point d'entrée unique pour tout envoi
 - Gestion des échecs avec retry exponentiel (max 3 tentatives) et log dans `AuditLog`
 - Limite de débit respectée pour ne pas saturer Resend en cas de cron de masse
@@ -339,7 +339,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 - Endpoint `GET /api/dashboard/owner/summary` — nombre total de biens, biens occupés vs vacants, taux de recouvrement périodique (loyers encaissés / loyers attendus selon la fréquence contractuelle de chaque bien), distinction explicite entre biens **auto-gérés** (le propriétaire agit dessus) et biens **sous mandat** (un gestionnaire agit dessus, le propriétaire est en lecture seule)
 - Endpoint `GET /api/dashboard/owner/revenue?months=12` — évolution mensuelle des revenus sur les 12 derniers mois, avec comparaison mois courant vs mois précédent
-- Endpoint `GET /api/dashboard/owner/alerts` — liste consolidée : biens auto-gérés avec loyer en retard, baux expirant dans moins de 30 jours, demandes de contact d'annonces non lues, déclarations de paiement en attente de confirmation, biens sous mandat dont le rapport mensuel vient d'arriver
+- Endpoint `GET /api/dashboard/owner/alerts` — liste consolidée : biens auto-gérés avec loyer en retard, baux expirant dans moins de 30 jours, déclarations de paiement en attente de confirmation, biens sous mandat dont le rapport mensuel vient d'arriver (« demandes de contact d'annonces non lues » retiré le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Endpoint `GET /api/dashboard/owner/properties/:id/performance` — taux de paiement à temps sur les 6 derniers mois pour le bien donné
 - Les calculs sont faits côté serveur via des requêtes Prisma optimisées (jamais d'agrégation côté client)
 - Cible de performance : réponse en moins de 500 ms pour le `summary`
@@ -364,24 +364,22 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Module `ListingsModule` — gestion des annonces
-- Endpoint `POST /api/listings` — création d'une annonce pour un bien dont le statut est `VACANT` uniquement, sinon rejet ; appel à `canActOnProperty()` pour décider qui peut publier (propriétaire ou gestionnaire mandaté)
-- Le montant du loyer affiché doit correspondre exactement au loyer enregistré dans la fiche du bien — toute divergence bloque la publication
-- Endpoints publics sans authentification : `GET /api/public/listings` (paginé, filtres par type, quartier, fourchette de loyer, nombre de pièces) et `GET /api/public/listings/:slug` (fiche détaillée)
+- **Publication automatique** (révisé le 2026-07-24 avec le développeur, remplace la publication manuelle initialement prévue) : dès qu'un bien passe au statut `VACANT` (création d'un nouveau bien, ou repassage en `VACANT` après résiliation d'un bail), une annonce est créée et activée automatiquement — aucun appel `POST /api/listings` explicite par le propriétaire/gestionnaire, aucune étape de publication manuelle
+- Le montant du loyer affiché est toujours celui de la fiche du bien au moment de la génération — cohérence garantie par construction puisque l'annonce est dérivée automatiquement, pas saisie séparément
+- Endpoints publics sans authentification (inchangés) : `GET /api/public/listings` (paginé, filtres par type, quartier, fourchette de loyer, nombre de pièces) et `GET /api/public/listings/:slug` (fiche détaillée)
 - Le `slug` est généré automatiquement (`{type}-{quartier}-{ville}-{loyer}-fcfa`) pour favoriser le SEO côté frontend
-- L'adresse exacte du bien n'est jamais exposée publiquement — seuls le quartier et la ville sont visibles
+- **Toutes les informations saisies par le propriétaire sont visibles publiquement, y compris l'adresse exacte** (révisé le 2026-07-24 — décision explicite du développeur après qu'un risque de sécurité physique a été signalé : un bien `VACANT` publié avec adresse exacte est par définition un logement inoccupé et localisable ; le développeur a maintenu sa décision en connaissance de cause)
 - Désactivation automatique de l'annonce dès qu'un locataire est rattaché au bien (statut `OCCUPIED`)
 - Conservation de l'historique de toutes les annonces publiées par bien avec dates d'activation/désactivation
 
-### 29 Formulaire de contact candidat locataire
+### 29 Contact candidat locataire via WhatsApp
 
 **Logique :**
 
-- Endpoint public `POST /api/public/listings/:id/contact` — body : prénom, téléphone, message court (max 500 caractères)
-- Rate limiting strict par IP (max 5 demandes par heure) pour éviter le spam
-- Création d'une ligne `ListingContact` liée à l'annonce
-- Notification immédiate via `notifyUser()` au propriétaire ou au gestionnaire mandataire (selon `canActOnProperty()`) avec les coordonnées du candidat
-- Si la notification se fait par email, lien `wa.me` inclus pour permettre un contact WhatsApp direct
-- Endpoint `GET /api/listings/:id/contacts` — réservé à celui qui peut agir sur le bien, liste de toutes les demandes reçues avec statut lu/non lu
+- **Formulaire de contact supprimé** (révisé le 2026-07-24 avec le développeur, remplace le formulaire + notification backend initialement prévus) : plus de `POST /api/public/listings/:id/contact`, plus de modèle `ListingContact`, plus de rate limiting anti-spam dédié (devenu sans objet), plus de template email "notification de contact d'annonce" — le candidat contacte directement le propriétaire/gestionnaire par WhatsApp, sans passer par le backend
+- `GET /api/public/listings/:slug` (fiche détaillée, unité 28) expose le `phone` du propriétaire/gestionnaire — le même numéro que celui utilisé pour se connecter au compte (décision explicite du développeur : pas de champ "numéro de contact public" séparé)
+- Le frontend construit un lien `https://wa.me/<phone>?text=<message pré-rempli>` — le message pré-rempli identifie le bien (type, quartier, ville) avant même que le candidat n'écrive quoi que ce soit ; entièrement côté frontend, aucun endpoint backend dédié nécessaire
+- Suppression en cascade déjà appliquée dans ce document : `ListingContact` retiré de la liste des modèles, "notification de contact d'annonce" retirée de la liste des templates email, "demandes de contact d'annonces non lues" retirée de `GET /api/dashboard/owner/alerts` (unité 26) et "nouveaux contacts d'annonces" retiré de `GET /api/dashboard/manager/alerts` (unité 32)
 
 ### 30 Modération et suspension automatique
 
@@ -414,7 +412,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 - Endpoint `GET /api/dashboard/manager/summary` — nombre total de biens gérés (avec distinction biens propres / biens sous mandat), répartition par statut (occupés / vacants / en travaux), nombre de propriétaires mandants
 - Endpoint `GET /api/dashboard/manager/revenue` — encaissements du mois en cours et du mois précédent sur l'ensemble des biens gérés, avec comparaison et ventilation biens propres / biens sous mandat
-- Endpoint `GET /api/dashboard/manager/alerts` — retards et impayés en cours, baux expirant dans moins de 30 jours, déclarations de paiement locataire en attente de confirmation, nouveaux contacts d'annonces
+- Endpoint `GET /api/dashboard/manager/alerts` — retards et impayés en cours, baux expirant dans moins de 30 jours, déclarations de paiement locataire en attente de confirmation (« nouveaux contacts d'annonces » retiré le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Endpoint `GET /api/dashboard/manager/owners` — liste des propriétaires mandants avec le nombre de biens confiés et le statut de la relation
 - Endpoint `GET /api/dashboard/manager/upcoming-payments` — calendrier des prochaines échéances triées par date
 - Endpoint `GET /api/dashboard/manager/properties/:id/performance` — taux de recouvrement à temps sur les 6 derniers mois pour un bien donné
