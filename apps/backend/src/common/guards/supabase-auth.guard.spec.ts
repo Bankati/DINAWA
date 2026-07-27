@@ -6,7 +6,7 @@ import { ALLOW_WHILE_SUSPENDED_KEY } from '../decorators/allow-while-suspended.d
 describe('SupabaseAuthGuard', () => {
   let guard: SupabaseAuthGuard;
   let reflector: { getAllAndOverride: jest.Mock };
-  let supabaseAdmin: { auth: { getUser: jest.Mock } };
+  let supabaseAdmin: { auth: { getUser: jest.Mock }; withRetry: jest.Mock };
   let prisma: { user: { findUnique: jest.Mock } };
 
   const confirmedSupabaseUser = {
@@ -47,6 +47,7 @@ describe('SupabaseAuthGuard', () => {
           .fn()
           .mockResolvedValue({ data: { user: confirmedSupabaseUser }, error: null }),
       },
+      withRetry: jest.fn((fn: () => unknown) => fn()),
     };
     prisma = {
       user: {

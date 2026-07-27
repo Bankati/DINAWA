@@ -36,7 +36,13 @@ export class SupabaseAuthGuard implements CanActivate {
     const token = this.extractBearerToken(request);
     if (!token) throw new UnauthorizedException('Token manquant');
 
-    const { data, error } = await this.supabaseAdmin.auth.getUser(token);
+    // Budget de retry plus court qu'ailleurs (voir SupabaseAdminService.withRetry)
+    // — ce guard tourne sur chaque requête authentifiée, un blip réseau ne
+    // doit pas ajouter les ~30s du retry par défaut à chaque appel.
+    const { data, error } = await this.supabaseAdmin.withRetry(
+      () => this.supabaseAdmin.auth.getUser(token),
+      { retries: 2, minTimeout: 500, maxTimeout: 4000 },
+    );
     if (error || !data.user) throw new UnauthorizedException('Token invalide');
 
     // Email non confirmé : rejet total, contrairement à SUSPENDED_INACTIVITY/

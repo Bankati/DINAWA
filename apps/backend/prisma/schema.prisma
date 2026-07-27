@@ -171,35 +171,35 @@ enum NotificationDispatchStatus {
 // ────────────────────────────────────────────────────────────────
 
 model User {
-  id                  String              @id @default(cuid())
-  supabaseId          String?             @unique
-  email               String?             @unique
-  phone               String?             @unique
-  role                UserRole
-  firstName           String
-  lastName            String
+  id                        String              @id @default(cuid())
+  supabaseId                String?             @unique
+  email                     String?             @unique
+  phone                     String?             @unique
+  role                      UserRole
+  firstName                 String
+  lastName                  String
   // Ville de résidence — texte libre, aucune logique métier attachée
   // (contrairement à OwnerProfile.residenceCountry qui pilote la distinction
   // local/diaspora). Voir /architect révision inscription owner/manager.
-  city                String?
-  accountStatus       AccountStatus       @default(ACTIVE)
-  notificationConsent NotificationConsent @default(NOT_ASKED)
-  reminderDaysBefore  Int                 @default(5)
-  overdueGraceDays    Int                 @default(3)
-  profilePhotoPath    String?
+  city                      String?
+  accountStatus             AccountStatus       @default(ACTIVE)
+  notificationConsent       NotificationConsent @default(NOT_ASKED)
+  reminderDaysBefore        Int                 @default(5)
+  overdueGraceDays          Int                 @default(3)
+  profilePhotoPath          String?
   // Blocage temporaire après 5 échecs de connexion consécutifs (voir
   // build-plan.md unité 10) — remis à zéro sur connexion réussie.
-  failedLoginAttempts Int                 @default(0)
-  lockedUntil         DateTime?           @db.Timestamptz(6)
+  failedLoginAttempts       Int                 @default(0)
+  lockedUntil               DateTime?           @db.Timestamptz(6)
   // Anti-doublon pour les rappels d'inactivité (voir build-plan.md unité 11)
   // — remis à `null` dès que le compte redevient actif, pour que le prochain
   // cycle d'inactivité reparte de zéro.
-  inactivityWarning30SentAt DateTime?     @db.Timestamptz(6)
-  inactivityWarning7SentAt  DateTime?     @db.Timestamptz(6)
-  inactivityWarning1SentAt  DateTime?     @db.Timestamptz(6)
-  anonymizedAt        DateTime?           @db.Timestamptz(6)
-  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime            @updatedAt @db.Timestamptz(6)
+  inactivityWarning30SentAt DateTime?           @db.Timestamptz(6)
+  inactivityWarning7SentAt  DateTime?           @db.Timestamptz(6)
+  inactivityWarning1SentAt  DateTime?           @db.Timestamptz(6)
+  anonymizedAt              DateTime?           @db.Timestamptz(6)
+  createdAt                 DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime            @updatedAt @db.Timestamptz(6)
 
   ownerProfile   OwnerProfile?
   tenantProfile  TenantProfile?
@@ -318,7 +318,7 @@ model IdentityVerification {
   // checksum MRZ est un signal secondaire (bruit OCR fréquent sur cette
   // police dense), jamais une autorité de décision à lui seul.
   storagePathBack       String?
-  rawTextBack           String? @db.Text
+  rawTextBack           String?  @db.Text
   emergencyContactRaw   String?
   emergencyContactPhone String?
   mrzChecksumValid      Boolean?
@@ -349,11 +349,11 @@ model Property {
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
 
-  photos    PropertyPhoto[]
-  documents PropertyDocument[]
-  leases    Lease[]
-  mandates  Mandate[]
-  listings  Listing[]
+  photos       PropertyPhoto[]
+  documents    PropertyDocument[]
+  leases       Lease[]
+  mandates     Mandate[]
+  listings     Listing[]
   tenantBlocks TenantPropertyBlock[]
 
   @@index([ownerId])
@@ -393,15 +393,15 @@ model PropertyDocument {
 // par n'importe quel autre propriétaire. Vérifié dès l'invitation
 // (AuthService.inviteTenant()), pas seulement à la création du bail.
 model TenantPropertyBlock {
-  id             String   @id @default(cuid())
-  propertyId     String
-  property       Property @relation(fields: [propertyId], references: [id])
-  tenantUserId   String
-  tenant         User     @relation("TenantPropertyBlockTenant", fields: [tenantUserId], references: [id])
+  id              String   @id @default(cuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id])
+  tenantUserId    String
+  tenant          User     @relation("TenantPropertyBlockTenant", fields: [tenantUserId], references: [id])
   blockedByUserId String
-  blockedBy      User     @relation("TenantPropertyBlockAuthor", fields: [blockedByUserId], references: [id])
-  reason         String
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  blockedBy       User     @relation("TenantPropertyBlockAuthor", fields: [blockedByUserId], references: [id])
+  reason          String
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([propertyId, tenantUserId])
   @@index([tenantUserId])
@@ -435,8 +435,8 @@ model Lease {
   // globaux distincts, non utilisés par cette unité). Optionnels : `null`
   // signifie aucun rappel/alerte configuré pour ce bail. Stockage
   // uniquement — l'envoi effectif reste pour les unités 24/25.
-  reminderDaysBefore     Int?
-  overdueAlertWindowDays Int?
+  reminderDaysBefore      Int?
+  overdueAlertWindowDays  Int?
   createdAt               DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt               DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -527,6 +527,11 @@ model PaymentDeclaration {
   proofStoragePath String?
   note             String?
   editedAt         DateTime?     @db.Timestamptz(6)
+  // Anti-doublon des relances (voir build-plan.md unité 20, cron
+  // PaymentDeclarationReminderTask) — posés après envoi, jamais réinitialisés
+  // tant que la déclaration reste PENDING_CONFIRMATION.
+  reminder3SentAt  DateTime?     @db.Timestamptz(6)
+  reminder7SentAt  DateTime?     @db.Timestamptz(6)
   createdAt        DateTime      @default(now()) @db.Timestamptz(6)
 
   @@map("payment_declarations")

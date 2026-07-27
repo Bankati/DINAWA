@@ -19,3 +19,9 @@ export const INACTIVITY_WARNING_DAYS = [30, 7, 1] as const;
 // les lignes déjà en base, jamais seulement sur la taille de l'appel en cours.
 export const MAX_PHOTOS_PER_PROPERTY = 10;
 export const MAX_DOCUMENTS_PER_PROPERTY = 20;
+
+// Relance des déclarations de paiement en attente de confirmation (voir
+// build-plan.md unité 20) — un passage quotidien suffit, contrairement aux
+// rappels d'échéance (unité 24, pas encore construite) qui devront rester horaires.
+export const CRON_PAYMENT_DECLARATION_REMINDERS = '0 8 * * *';
+export const PAYMENT_DECLARATION_REMINDER_DAYS = [3, 7] as const;

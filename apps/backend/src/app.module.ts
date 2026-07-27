@@ -22,6 +22,9 @@ import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { LeasesModule } from './modules/leases/leases.module';
+import { ReceiptsModule } from './modules/receipts/receipts.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { PaymentDeclarationsModule } from './modules/payment-declarations/payment-declarations.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -95,6 +98,15 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Création/résiliation des baux, génération du calendrier d'échéances (voir build-plan.md unité 15)
     LeasesModule,
+
+    // Génération de quittance PDF à la volée + écouteur payment.confirmed (voir build-plan.md unités 21-22)
+    ReceiptsModule,
+
+    // Saisie manuelle, historique, confirmation/rejet des paiements (voir build-plan.md unités 16, 19-20)
+    PaymentsModule,
+
+    // Déclaration de paiement par le locataire + relances (voir build-plan.md unité 20)
+    PaymentDeclarationsModule,
   ],
   providers: [
     {

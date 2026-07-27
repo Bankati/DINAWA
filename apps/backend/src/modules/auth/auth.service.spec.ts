@@ -39,6 +39,9 @@ describe('AuthService', () => {
     ownerProfile: { create: jest.Mock };
     managerProfile: { create: jest.Mock };
     tenantProfile: { create: jest.Mock };
+    lease: { create: jest.Mock };
+    paymentScheduleEntry: { createMany: jest.Mock };
+    property: { update: jest.Mock };
   };
   let config: { getOrThrow: jest.Mock };
   let supabaseAdmin: {
@@ -51,9 +54,11 @@ describe('AuthService', () => {
       };
     };
     anonAuth: { signInWithPassword: jest.Mock };
+    withRetry: jest.Mock;
   };
   let emailService: { sendEmail: jest.Mock };
   let identityService: { verify: jest.Mock };
+  let notify: { notifyUser: jest.Mock };
 
   const CONFIG_VALUES: Record<string, string> = {
     FRONTEND_URL: 'http://localhost:4200',
@@ -89,6 +94,7 @@ describe('AuthService', () => {
   } as Express.Multer.File;
   const files: IdentityVerificationFiles = { image: [frontFile], imageBack: [backFile] };
   const createdUser = { id: 'user-1', email: ownerDto.email, role: 'OWNER' };
+  const createdLease = { id: 'lease-1', propertyId: 'property-1', tenantUserId: 'tenant-1' };
 
   beforeEach(() => {
     tx = {
@@ -96,6 +102,9 @@ describe('AuthService', () => {
       ownerProfile: { create: jest.fn().mockResolvedValue({}) },
       managerProfile: { create: jest.fn().mockResolvedValue({}) },
       tenantProfile: { create: jest.fn().mockResolvedValue({}) },
+      lease: { create: jest.fn().mockResolvedValue(createdLease) },
+      paymentScheduleEntry: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      property: { update: jest.fn().mockResolvedValue({}) },
     };
     prisma = {
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)),
@@ -140,9 +149,11 @@ describe('AuthService', () => {
           error: null,
         }),
       },
+      withRetry: jest.fn((fn: () => unknown) => fn()),
     };
     emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
     identityService = { verify: jest.fn().mockResolvedValue({ id: 'verif-1', status: 'PENDING' }) };
+    notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
 
     service = new AuthService(
       prisma as never,
@@ -150,6 +161,7 @@ describe('AuthService', () => {
       supabaseAdmin as never,
       emailService as never,
       identityService as never,
+      notify as never,
     );
   });
 
@@ -429,14 +441,24 @@ describe('AuthService', () => {
       phone: '90330557',
       firstName: 'Ama',
       lastName: 'Kodjo',
+      monthlyRent: 50000,
+      monthlyCharges: 5000,
+      paymentFrequency: 'MONTHLY',
+      startDate: '2026-01-01',
+      securityDeposit: 100000,
     };
 
     beforeEach(() => {
       prisma.property.findUnique.mockResolvedValue(property);
       tx.user.create.mockResolvedValue({ id: 'tenant-1', role: 'TENANT' });
+      tx.lease.create.mockResolvedValue({
+        id: 'lease-1',
+        propertyId: 'property-1',
+        tenantUserId: 'tenant-1',
+      });
     });
 
-    it("crée le compte locataire (email confirmé), l'associe à l'inviteur et envoie l'email avec l'adresse du bien", async () => {
+    it("crée le compte locataire (email confirmé), l'associe à l'inviteur, crée le bail et l'échéancier, envoie l'email avec l'adresse du bien", async () => {
       const result = await service.inviteTenant(owner as never, inviteDto);
 
       expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
@@ -457,6 +479,20 @@ describe('AuthService', () => {
       expect(tx.tenantProfile.create).toHaveBeenCalledWith({
         data: { userId: 'tenant-1', invitedByUserId: owner.id },
       });
+
+      const [leaseCreateArgs] = tx.lease.create.mock.calls[0] as [
+        { data: { ownerId: string; tenantUserId: string; monthlyRent: number } },
+      ];
+      expect(leaseCreateArgs.data.ownerId).toBe('owner-1');
+      expect(leaseCreateArgs.data.tenantUserId).toBe('tenant-1');
+      expect(leaseCreateArgs.data.monthlyRent).toBe(50000);
+
+      expect(tx.paymentScheduleEntry.createMany).toHaveBeenCalled();
+      expect(tx.property.update).toHaveBeenCalledWith({
+        where: { id: 'property-1' },
+        data: { status: 'OCCUPIED' },
+      });
+
       type SendEmailArgs = {
         to: string;
         template: string;
@@ -469,6 +505,27 @@ describe('AuthService', () => {
       expect(emailArgs.variables.propertyAddress).toBe(property.address);
       expect(emailArgs.variables.invitationUrl).toContain('/activate-account?token=');
       expect(result.invitationUrl).toContain('/activate-account?token=');
+      expect(result.lease).toEqual({
+        id: 'lease-1',
+        propertyId: 'property-1',
+        tenantUserId: 'tenant-1',
+      });
+
+      expect(notify.notifyUser).toHaveBeenCalledWith({
+        userId: 'tenant-1',
+        event: 'lease-created',
+        variables: {
+          propertyAddress: property.address,
+          ownerName: 'Jean Dupont',
+          startDate: '01/01/2026',
+          monthlyAmount: 55000,
+        },
+      });
+    });
+
+    it('ne fait pas échouer la création si la notification lease-created échoue', async () => {
+      notify.notifyUser.mockRejectedValueOnce(new Error('push down'));
+      await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toBeDefined();
     });
 
     it('rejette avec 404 si le bien est introuvable', async () => {
@@ -559,6 +616,72 @@ describe('AuthService', () => {
         prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
         await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toBeDefined();
       });
+    });
+
+    // Voir /architect révision paiements, 2026-07-25 : un locataire déjà
+    // connu de la plateforme (ex. bail précédent résilié, nouveau bien) est
+    // rattaché à un nouveau bail sans nouveau compte Supabase ni ré-invitation.
+    describe('locataire déjà existant sur la plateforme', () => {
+      const existingTenant = {
+        id: 'existing-tenant-1',
+        role: 'TENANT',
+        email: inviteDto.email,
+        phone: inviteDto.phone,
+      };
+
+      beforeEach(() => {
+        prisma.user.findFirst.mockResolvedValueOnce(existingTenant);
+        prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
+        tx.lease.create.mockResolvedValue({
+          id: 'lease-2',
+          propertyId: 'property-1',
+          tenantUserId: 'existing-tenant-1',
+        });
+      });
+
+      it('ne crée ni compte Supabase ni User ni email d’invitation — réutilise le locataire existant', async () => {
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+        expect(tx.user.create).not.toHaveBeenCalled();
+        expect(tx.tenantProfile.create).not.toHaveBeenCalled();
+        expect(emailService.sendEmail).not.toHaveBeenCalled();
+        expect(result.invitationUrl).toBeNull();
+        expect(result.user).toBe(existingTenant);
+      });
+
+      it('crée le bail et l’échéancier rattachés au locataire existant, et le notifie', async () => {
+        await service.inviteTenant(owner as never, inviteDto);
+
+        const [leaseCreateArgs] = tx.lease.create.mock.calls[0] as [
+          { data: { tenantUserId: string; ownerId: string } },
+        ];
+        expect(leaseCreateArgs.data.tenantUserId).toBe('existing-tenant-1');
+        expect(leaseCreateArgs.data.ownerId).toBe('owner-1');
+        expect(tx.property.update).toHaveBeenCalledWith({
+          where: { id: 'property-1' },
+          data: { status: 'OCCUPIED' },
+        });
+        expect(notify.notifyUser).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: 'existing-tenant-1', event: 'lease-created' }),
+        );
+      });
+    });
+
+    it('mappe la contrainte leases_tenant_active_unique en 409 avec un message dédié (locataire déjà en bail actif)', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
+      prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the constraint: `leases_tenant_active_unique`',
+          { code: 'P2002', clientVersion: '5.22.0' },
+        ),
+      );
+
+      await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
+        'Ce locataire a déjà un bail actif',
+      );
+      expect(supabaseAdmin.auth.admin.deleteUser).not.toHaveBeenCalled();
     });
   });
 

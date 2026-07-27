@@ -1,11 +1,10 @@
-import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Lease, UserRole } from '@prisma/client';
+import { Lease, PaymentScheduleEntry, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { LeasesService } from './leases.service';
-import { CreateLeaseDto } from './dto/create-lease.dto';
 import { TerminateLeaseDto } from './dto/terminate-lease.dto';
 
 @ApiTags('Leases')
@@ -14,16 +13,6 @@ import { TerminateLeaseDto } from './dto/terminate-lease.dto';
 @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
 export class LeasesController {
   constructor(private readonly leasesService: LeasesService) {}
-
-  @Post()
-  @HttpCode(201)
-  @Roles(UserRole.OWNER, UserRole.MANAGER)
-  @ApiOperation({
-    summary: "Crée un bail — génère le calendrier d'échéances et passe le bien à OCCUPIED",
-  })
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateLeaseDto): Promise<Lease> {
-    return this.leasesService.create(user, dto);
-  }
 
   @Post(':id/terminate')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
@@ -34,5 +23,17 @@ export class LeasesController {
     @Body() dto: TerminateLeaseDto,
   ): Promise<Lease> {
     return this.leasesService.terminate(user, id, dto);
+  }
+
+  @Get(':id/schedule')
+  // Accessible au locataire lui-même en plus des rôles habituels (voir
+  // LeasesService.getSchedule()).
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN, UserRole.TENANT)
+  @ApiOperation({ summary: "Calendrier complet des échéances d'un bail" })
+  getSchedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<PaymentScheduleEntry[]> {
+    return this.leasesService.getSchedule(user, id);
   }
 }

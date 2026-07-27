@@ -85,7 +85,10 @@ export class ProfileService {
     // de se reconnecter. La ligne Prisma est conservée (jamais supprimée) :
     // Payment/Lease y font référence pour les obligations légales.
     if (user.supabaseId) {
-      await this.supabaseAdmin.auth.admin.deleteUser(user.supabaseId);
+      const supabaseId = user.supabaseId;
+      await this.supabaseAdmin.withRetry(() =>
+        this.supabaseAdmin.auth.admin.deleteUser(supabaseId),
+      );
     }
 
     await this.prisma.user.update({

@@ -75,7 +75,7 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!mrz/)"
+      "/node_modules/(?!(mrz|p-retry|is-network-error)/)"
     ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"

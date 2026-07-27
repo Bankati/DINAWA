@@ -4,11 +4,13 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IdentityVerification, Prisma, User } from '@prisma/client';
+import { addMonths, format } from 'date-fns';
+import { Lease, IdentityVerification, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { canActOnProperty } from '../../common/permissions/property-access';
@@ -17,6 +19,8 @@ import { createInvitationToken, verifyInvitationToken } from '../../common/utils
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { EmailService } from '../email/email.service';
 import { IdentityService, IdentityVerificationFiles } from '../identity/identity.service';
+import { NotifyService } from '../notify/notify.service';
+import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
@@ -70,7 +74,11 @@ export type SignupManagerResponse = {
 
 export type InviteTenantResponse = {
   user: User;
-  invitationUrl: string;
+  lease: Lease;
+  // null quand le locataire existait déjà sur la plateforme (bail
+  // précédent résilié, nouveau bail sur un autre bien) — pas de nouvelle
+  // invitation Supabase dans ce cas, voir AuthService.inviteTenant().
+  invitationUrl: string | null;
 };
 
 export type LoginResponse = {
@@ -81,12 +89,15 @@ export type LoginResponse = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly emailService: EmailService,
     private readonly identityService: IdentityService,
+    private readonly notify: NotifyService,
   ) {}
 
   async getMe(user: AuthenticatedUser): Promise<AuthMeResponse> {
@@ -133,10 +144,12 @@ export class AuthService {
       );
     }
 
-    const { data, error } = await this.supabaseAdmin.anonAuth.signInWithPassword({
-      email: dto.email,
-      password: dto.password,
-    });
+    const { data, error } = await this.supabaseAdmin.withRetry(() =>
+      this.supabaseAdmin.anonAuth.signInWithPassword({
+        email: dto.email,
+        password: dto.password,
+      }),
+    );
 
     if (error || !data.session) {
       if (user) {
@@ -209,6 +222,7 @@ export class AuthService {
     if (!user || !user.supabaseId) {
       throw new BadRequestException('Code invalide ou expiré');
     }
+    const supabaseId = user.supabaseId;
 
     const otp = await this.prisma.passwordResetOtp.findFirst({
       where: {
@@ -228,9 +242,11 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    const { error } = await this.supabaseAdmin.auth.admin.updateUserById(user.supabaseId, {
-      password: dto.newPassword,
-    });
+    const { error } = await this.supabaseAdmin.withRetry(() =>
+      this.supabaseAdmin.auth.admin.updateUserById(supabaseId, {
+        password: dto.newPassword,
+      }),
+    );
     if (error) {
       throw new BadRequestException(error.message);
     }
@@ -322,6 +338,19 @@ export class AuthService {
     return { user, identityVerification };
   }
 
+  // Fusionne l'invitation du locataire et la création du bail (voir
+  // /architect révision paiements, 2026-07-25 — remplace le flux en deux
+  // étapes invite puis POST /api/leases). Deux chemins selon que
+  // l'email/téléphone correspond déjà à un locataire existant :
+  //   - Nouveau locataire : crée le compte Supabase (email_confirm: true,
+  //     voir signupOwner/signupManager) + User + TenantProfile + Lease +
+  //     échéancier, envoie l'email d'invitation.
+  //   - Locataire déjà connu de la plateforme (ex. bail précédent résilié,
+  //     nouveau bien) : aucun nouveau compte, juste un nouveau Lease sur ce
+  //     bien — notifié comme pour n'importe quel nouveau bail, pas
+  //     ré-invité. Referme le gap qu'aurait laissé un retrait pur et simple
+  //     de POST /api/leases : sans ce chemin, un locataire existant ne
+  //     pourrait plus jamais être rattaché à un nouveau bien.
   async inviteTenant(
     inviter: AuthenticatedUser,
     dto: InviteTenantDto,
@@ -352,62 +381,173 @@ export class AuthService {
       await assertTenantNotBlocked(this.prisma, dto.propertyId, existingTenant.id);
     }
 
-    // Le compte est créé à l'invitation, pas à l'activation — le locataire
-    // n'a plus qu'à poser un mot de passe en cliquant le lien (voir
-    // build-plan.md unité 09, décision prise avec le développeur).
-    const { data, error } = await this.supabaseAdmin.auth.admin.createUser({
-      email: dto.email,
-      email_confirm: true,
-      user_metadata: { role: 'TENANT' },
-    });
-
-    if (error) {
-      if (error.code === 'email_exists' || error.code === 'user_already_exists') {
-        throw new ConflictException('Cette adresse email est déjà utilisée');
-      }
-      throw new BadRequestException(error.message);
-    }
-
-    const supabaseUserId = data.user.id;
+    const startDate = new Date(dto.startDate);
+    const endDate = dto.endDate ? new Date(dto.endDate) : null;
+    const scheduleEndDate = endDate ?? addMonths(startDate, ROLLING_WINDOW_MONTHS);
 
     let user: User;
-    try {
-      user = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.user.create({
-          data: {
-            supabaseId: supabaseUserId,
-            email: dto.email,
-            phone: dto.phone,
-            role: 'TENANT',
-            firstName: dto.firstName,
-            lastName: dto.lastName,
-          },
+    let lease: Lease;
+    let invitationUrl: string | null = null;
+
+    if (existingTenant) {
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          const createdLease = await this.createLeaseWithinTransaction(
+            tx,
+            property,
+            existingTenant.id,
+            dto,
+            startDate,
+            endDate,
+            scheduleEndDate,
+          );
+          return { user: existingTenant, lease: createdLease };
         });
-        await tx.tenantProfile.create({
-          data: { userId: created.id, invitedByUserId: inviter.id },
+        user = result.user;
+        lease = result.lease;
+      } catch (dbError) {
+        throw this.mapDuplicateError(dbError);
+      }
+    } else {
+      // Le compte est créé à l'invitation, pas à l'activation — le locataire
+      // n'a plus qu'à poser un mot de passe en cliquant le lien (voir
+      // build-plan.md unité 09, décision prise avec le développeur).
+      const { data, error } = await this.supabaseAdmin.withRetry(() =>
+        this.supabaseAdmin.auth.admin.createUser({
+          email: dto.email,
+          email_confirm: true,
+          user_metadata: { role: 'TENANT' },
+        }),
+      );
+
+      if (error) {
+        if (error.code === 'email_exists' || error.code === 'user_already_exists') {
+          throw new ConflictException('Cette adresse email est déjà utilisée');
+        }
+        throw new BadRequestException(error.message);
+      }
+
+      const supabaseUserId = data.user.id;
+
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.user.create({
+            data: {
+              supabaseId: supabaseUserId,
+              email: dto.email,
+              phone: dto.phone,
+              role: 'TENANT',
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+            },
+          });
+          await tx.tenantProfile.create({
+            data: { userId: created.id, invitedByUserId: inviter.id },
+          });
+          const createdLease = await this.createLeaseWithinTransaction(
+            tx,
+            property,
+            created.id,
+            dto,
+            startDate,
+            endDate,
+            scheduleEndDate,
+          );
+          return { user: created, lease: createdLease };
         });
-        return created;
+        user = result.user;
+        lease = result.lease;
+      } catch (dbError) {
+        await this.supabaseAdmin.withRetry(() =>
+          this.supabaseAdmin.auth.admin.deleteUser(supabaseUserId),
+        );
+        throw this.mapDuplicateError(dbError);
+      }
+
+      const secret = this.config.getOrThrow<string>('INVITATION_TOKEN_SECRET');
+      const token = createInvitationToken(user.id, secret);
+      invitationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/activate-account?token=${token}`;
+
+      await this.emailService.sendEmail({
+        to: dto.email,
+        template: 'tenant-invitation',
+        variables: {
+          inviterName: `${inviter.firstName} ${inviter.lastName}`,
+          propertyAddress: property.address,
+          invitationUrl,
+        },
       });
-    } catch (dbError) {
-      await this.supabaseAdmin.auth.admin.deleteUser(supabaseUserId);
-      throw this.mapDuplicateError(dbError);
     }
 
-    const secret = this.config.getOrThrow<string>('INVITATION_TOKEN_SECRET');
-    const token = createInvitationToken(user.id, secret);
-    const invitationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/activate-account?token=${token}`;
+    // Événement métier, jamais un email direct (voir architecture.md,
+    // invariant #7). Une notification manquée ne doit jamais faire échouer
+    // la création du bail elle-même — même réflexe que l'ancien
+    // LeasesService.create() (voir /review unité 15).
+    try {
+      await this.notify.notifyUser({
+        userId: user.id,
+        event: 'lease-created',
+        variables: {
+          propertyAddress: property.address,
+          ownerName: `${inviter.firstName} ${inviter.lastName}`,
+          startDate: format(startDate, 'dd/MM/yyyy'),
+          monthlyAmount: dto.monthlyRent + dto.monthlyCharges,
+        },
+      });
+    } catch (notifyError) {
+      this.logger.error(`[lease-created] notification échouée pour tenant=${user.id}`, notifyError);
+    }
 
-    await this.emailService.sendEmail({
-      to: dto.email,
-      template: 'tenant-invitation',
-      variables: {
-        inviterName: `${inviter.firstName} ${inviter.lastName}`,
-        propertyAddress: property.address,
-        invitationUrl,
+    return { user, lease, invitationUrl };
+  }
+
+  // Utilisé pour les deux chemins de inviteTenant() (nouveau locataire ou
+  // locataire déjà existant) — toujours appelé à l'intérieur d'une
+  // transaction Prisma déjà ouverte par l'appelant.
+  private async createLeaseWithinTransaction(
+    tx: Prisma.TransactionClient,
+    property: { id: string; ownerId: string },
+    tenantUserId: string,
+    dto: InviteTenantDto,
+    startDate: Date,
+    endDate: Date | null,
+    scheduleEndDate: Date,
+  ): Promise<Lease> {
+    const lease = await tx.lease.create({
+      data: {
+        propertyId: property.id,
+        ownerId: property.ownerId,
+        tenantUserId,
+        monthlyRent: dto.monthlyRent,
+        monthlyCharges: dto.monthlyCharges,
+        paymentFrequency: dto.paymentFrequency,
+        startDate,
+        endDate,
+        securityDeposit: dto.securityDeposit,
+        depositReturnConditions: dto.depositReturnConditions,
+        reminderDaysBefore: dto.reminderDaysBefore,
+        overdueAlertWindowDays: dto.overdueAlertWindowDays,
       },
     });
 
-    return { user, invitationUrl };
+    const entries = buildScheduleEntries(
+      lease.id,
+      startDate,
+      scheduleEndDate,
+      dto.paymentFrequency,
+      dto.monthlyRent,
+      dto.monthlyCharges,
+    );
+    if (entries.length > 0) {
+      await tx.paymentScheduleEntry.createMany({ data: entries });
+    }
+
+    // Jamais via PropertiesService.update() — le passage à OCCUPIED est
+    // exclusivement piloté par la création d'un bail, PATCH /properties le
+    // refuse explicitement (voir assertValidTransition()).
+    await tx.property.update({ where: { id: property.id }, data: { status: 'OCCUPIED' } });
+
+    return lease;
   }
 
   async completeTenantSignup(
@@ -421,10 +561,13 @@ export class AuthService {
     if (!user || user.role !== 'TENANT' || !user.supabaseId) {
       throw new BadRequestException("Lien d'invitation invalide");
     }
+    const supabaseId = user.supabaseId;
 
-    const { error } = await this.supabaseAdmin.auth.admin.updateUserById(user.supabaseId, {
-      password: dto.password,
-    });
+    const { error } = await this.supabaseAdmin.withRetry(() =>
+      this.supabaseAdmin.auth.admin.updateUserById(supabaseId, {
+        password: dto.password,
+      }),
+    );
     if (error) {
       throw new BadRequestException(error.message);
     }
@@ -446,15 +589,17 @@ export class AuthService {
     // renvoie le lien de confirmation en un seul appel — pas besoin d'un
     // `admin.createUser()` séparé (voir library-docs.md, section Supabase
     // Auth, et la doc du SDK : generateLink gère la création pour 'signup').
-    const { data, error } = await this.supabaseAdmin.auth.admin.generateLink({
-      type: 'signup',
-      email: params.email,
-      password: params.password,
-      options: {
-        data: { role: params.role },
-        redirectTo: this.config.getOrThrow<string>('FRONTEND_URL'),
-      },
-    });
+    const { data, error } = await this.supabaseAdmin.withRetry(() =>
+      this.supabaseAdmin.auth.admin.generateLink({
+        type: 'signup',
+        email: params.email,
+        password: params.password,
+        options: {
+          data: { role: params.role },
+          redirectTo: this.config.getOrThrow<string>('FRONTEND_URL'),
+        },
+      }),
+    );
 
     if (error) {
       if (error.code === 'email_exists' || error.code === 'user_already_exists') {
@@ -485,7 +630,9 @@ export class AuthService {
     } catch (dbError) {
       // Évite un compte Supabase orphelin qui bloquerait toute nouvelle
       // tentative de signup avec le même email.
-      await this.supabaseAdmin.auth.admin.deleteUser(supabaseUserId);
+      await this.supabaseAdmin.withRetry(() =>
+        this.supabaseAdmin.auth.admin.deleteUser(supabaseUserId),
+      );
       throw this.mapDuplicateError(dbError);
     }
 
@@ -494,7 +641,23 @@ export class AuthService {
 
   private mapDuplicateError(dbError: unknown): unknown {
     if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2002') {
-      const target = ((dbError.meta?.['target'] as string[] | undefined) ?? []).join(',');
+      // Index partiel créé en SQL brut (pas un `@@unique` du schéma) — Prisma
+      // rapporte son nom directement dans le message, jamais dans
+      // `meta.target` sous forme de colonnes. Vérifié avant le cas
+      // email/phone générique (voir /architect révision paiements,
+      // 2026-07-25 : la fusion bail↔locataire peut désormais heurter cette
+      // contrainte, plus seulement LeasesService.create()).
+      if (dbError.message.includes('leases_tenant_active_unique')) {
+        return new ConflictException(
+          "Ce locataire a déjà un bail actif — un locataire ne peut avoir qu'un seul bail actif à la fois",
+        );
+      }
+      const rawTarget = dbError.meta?.['target'];
+      const target = Array.isArray(rawTarget)
+        ? rawTarget.join(',')
+        : typeof rawTarget === 'string'
+          ? rawTarget
+          : '';
       const field = target.includes('phone') ? 'Ce numéro de téléphone' : 'Cette adresse email';
       return new ConflictException(`${field} est déjà utilisé(e)`);
     }

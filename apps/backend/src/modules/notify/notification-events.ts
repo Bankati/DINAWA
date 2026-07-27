@@ -33,6 +33,11 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{tenantName} a déclaré un paiement pour {propertyAddress}.',
     url: '/dashboard/payments',
   },
+  'payment-rejected': {
+    title: 'Déclaration rejetée',
+    body: 'Votre déclaration de paiement pour {propertyAddress} a été rejetée.',
+    url: '/dashboard/payments',
+  },
   'monthly-report': {
     title: 'Rapport mensuel disponible',
     body: 'Votre rapport pour {period} est prêt.',

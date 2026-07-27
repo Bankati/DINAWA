@@ -1,6 +1,24 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { PaymentFrequency } from '@prisma/client';
 
+// Fusionne l'invitation du locataire et la création du bail en un seul
+// appel (voir /architect révision paiements, 2026-07-25 — remplace le
+// flux en deux étapes invite puis POST /api/leases). Les champs de bail
+// sont obligatoires : il n'existe plus de chemin pour inviter un
+// locataire sans immédiatement établir les conditions d'occupation.
 export class InviteTenantDto {
   @ApiProperty()
   @IsString()
@@ -26,4 +44,62 @@ export class InviteTenantDto {
   @ApiProperty()
   @IsString()
   lastName!: string;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  monthlyRent!: number;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  monthlyCharges!: number;
+
+  @ApiProperty({ enum: PaymentFrequency })
+  @IsEnum(PaymentFrequency)
+  paymentFrequency!: PaymentFrequency;
+
+  @ApiProperty({ description: 'Date de début du bail (ISO 8601)' })
+  @IsDateString()
+  startDate!: string;
+
+  @ApiPropertyOptional({ description: 'Absent = bail ouvert, calendrier glissant sur 12 mois' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  securityDeposit!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  depositReturnConditions?: string;
+
+  @ApiPropertyOptional({
+    description: 'Jours avant échéance pour le rappel — omis = pas de rappel configuré',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  reminderDaysBefore?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Fenêtre (en jours) de l'alerte de retard après échéance — omis = pas d'alerte configurée",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  overdueAlertWindowDays?: number;
 }
