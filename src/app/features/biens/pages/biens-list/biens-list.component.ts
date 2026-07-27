@@ -7,6 +7,7 @@ import { Bien, PROPERTY_TYPE_LABELS } from '@core/models/bien.model';
 import { LokBadgeStatutComponent } from '../../../../shared/components/lok-badge-statut/lok-badge-statut.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
+import { environment } from '@env/environment';
 
 @Component({
   selector: 'app-biens-list',
@@ -233,6 +234,18 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
     .ftab-on  { padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; background:#0F4C81; color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
     .ftab-off { padding:7px 14px; border-radius:10px; font-size:12px; font-weight:500; background:#F3F4F6; color:#6b7280; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
     .ftab-off:hover { background:#E5E7EB; color:#374151; }
+    .cni-banner {
+      display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+      background:#FFF7ED; border-left:4px solid #F59E0B;
+      padding:14px 24px; font-size:13.5px; color:#92400E;
+    }
+    .cni-btn {
+      margin-left:auto; background:#F59E0B; color:white;
+      border-radius:8px; padding:6px 14px; font-size:12px;
+      font-weight:700; text-decoration:none; white-space:nowrap;
+      transition:background .15s;
+    }
+    .cni-btn:hover { background:#D97706; }
     .bien-card { transition:transform .22s ease, box-shadow .22s ease; }
     .bien-card:hover { transform:translateY(-5px); box-shadow:0 16px 48px rgba(10,38,80,.18) !important; }
     .desc-clamp { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.4em; }
@@ -252,7 +265,6 @@ export class BiensListComponent implements OnInit {
   filteredBiens: Bien[] = [];
   loading = true;
   total = 0;
-
   searchTerm = '';
   filters: BiensFilters = {};
   imgErrors: Record<string, boolean> = {};

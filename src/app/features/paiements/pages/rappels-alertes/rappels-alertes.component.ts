@@ -6,6 +6,7 @@ import { Paiement, StatutPaiement } from '@core/models/paiement.model';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { CommonModule } from '@angular/common';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-rappels-alertes',
@@ -15,7 +16,8 @@ import { CommonModule } from '@angular/common';
     ReactiveFormsModule,
     RouterModule,
     LokAlerteComponent,
-    LokMontantFcfaComponent
+    LokMontantFcfaComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -184,7 +186,7 @@ import { CommonModule } from '@angular/common';
                           {{ getStatutLabel(paiement.statut) }}
                         </span>
                         <span class="text-sm text-gray-600">
-                          Échéance: {{ paiement.dateEcheance | date:'dd/MM/yyyy' }}
+                          Échéance: {{ paiement.dateEcheance | lokDate:'date' }}
                         </span>
                       </div>
                       
@@ -243,7 +245,7 @@ import { CommonModule } from '@angular/common';
                     <div>
                       <p class="font-medium text-gray-900">{{ rappel.destinataire }}</p>
                       <p class="text-sm text-gray-600">{{ rappel.message }}</p>
-                      <p class="text-xs text-gray-500 mt-1">{{ rappel.date | date:'dd/MM/yyyy HH:mm' }}</p>
+                      <p class="text-xs text-gray-500 mt-1">{{ rappel.date | lokDate }}</p>
                     </div>
                     <span
                       [class]="rappel.statut === 'envoye' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"

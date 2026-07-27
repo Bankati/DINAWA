@@ -7,11 +7,12 @@ import { BailAvecLocataire, LEASE_STATUS_LABELS, LeaseStatus, PAYMENT_FREQUENCY_
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-bails-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, LokSkeletonComponent, LokEmptyStateComponent, LokAlerteComponent],
+  imports: [CommonModule, FormsModule, RouterModule, LokSkeletonComponent, LokEmptyStateComponent, LokAlerteComponent, LokDatePipe],
   template: `
     <div class="min-h-screen bg-gray-50">
       <!-- ── HEADER ── -->
@@ -102,12 +103,12 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
 
                 <div class="border-t border-gray-100 mt-4 pt-3 flex items-center justify-between flex-wrap gap-2">
                   <div class="flex gap-4 text-xs text-gray-500">
-                    <span>Début : <strong class="text-gray-700">{{ b.startDate | date:'dd/MM/yyyy' }}</strong></span>
+                    <span>Début : <strong class="text-gray-700">{{ b.startDate | lokDate:'date' }}</strong></span>
                     @if (b.endDate) {
-                      <span>Fin : <strong class="text-gray-700">{{ b.endDate | date:'dd/MM/yyyy' }}</strong></span>
+                      <span>Fin : <strong class="text-gray-700">{{ b.endDate | lokDate:'date' }}</strong></span>
                     }
                     @if (b.status === 'TERMINATED' && b.terminatedAt) {
-                      <span>Résilié le : <strong class="text-red-600">{{ b.terminatedAt | date:'dd/MM/yyyy' }}</strong></span>
+                      <span>Résilié le : <strong class="text-red-600">{{ b.terminatedAt | lokDate }}</strong></span>
                     }
                   </div>
                   @if (b.status === 'ACTIVE') {

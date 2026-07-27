@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD } from '@nestjs/core';
+import { CacheModule } from './common/cache/cache.module';
 import { validate } from './config/env.validation';
 import { pinoConfig } from './config/logger.config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -53,6 +54,9 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Événements internes découplés
     EventEmitterModule.forRoot({ wildcard: false }),
+
+    // Cache in-memory TTL disponible globalement
+    CacheModule,
 
     // Prisma disponible globalement via @Global()
     PrismaModule,

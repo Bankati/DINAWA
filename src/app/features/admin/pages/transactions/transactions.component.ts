@@ -5,11 +5,12 @@ import { TransactionSupervisee, StatutTransaction } from '@core/models/admin.mod
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-transactions',
   standalone: true,
-  imports: [CommonModule, LokMontantFcfaComponent, LokSkeletonComponent, LokEmptyStateComponent],
+  imports: [CommonModule, LokMontantFcfaComponent, LokSkeletonComponent, LokEmptyStateComponent, LokDatePipe],
   template: `
     <div class="admin-page">
       <div class="admin-header">
@@ -56,7 +57,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
                   <td>{{ labelMode(txn.modePaiement) }}</td>
                   <td><lok-montant-fcfa [montant]="txn.montant" size="sm"></lok-montant-fcfa></td>
                   <td><lok-montant-fcfa [montant]="txn.commission" size="sm" color="primary"></lok-montant-fcfa></td>
-                  <td>{{ txn.date | date:'dd/MM/yyyy' }}</td>
+                  <td>{{ txn.date | lokDate }}</td>
                   <td>
                     <span class="statut-pill" [class]="statutClasses(txn.statut)">{{ labelStatut(txn.statut) }}</span>
                   </td>

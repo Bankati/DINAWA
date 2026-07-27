@@ -167,6 +167,16 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
             </div>
             @if (loadingRevenus) {
               <lok-skeleton type="card"></lok-skeleton>
+            } @else if (!hasRevenusData) {
+              <div class="chart-no-data">
+                <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M4 36 L14 24 L22 30 L32 16 L44 22" stroke-linecap="round" stroke-linejoin="round" opacity=".25"/>
+                  <circle cx="24" cy="24" r="20" stroke-dasharray="4 4" opacity=".18"/>
+                  <path d="M16 28 h16 M20 32 h8" stroke-linecap="round" opacity=".35"/>
+                </svg>
+                <p class="chart-no-data-title">Aucun revenu pour {{ anneeEnCours }}</p>
+                <p class="chart-no-data-sub">Les revenus s'afficheront dès qu'un bail actif générera des paiements</p>
+              </div>
             } @else {
               <div class="chart-container">
                 <div class="y-axis-labels">
@@ -208,7 +218,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
                     <div class="chart-tooltip"
                          [style.left.%]="activePoint.xPct"
                          [style.top.%]="activePoint.yPct">
-                      <span class="tt-month">{{ activePoint.r.mois }}</span>
+                      <span class="tt-month">{{ formatMoisLong(activePoint.r.mois) }}</span>
                       <span class="tt-amount">{{ (activePoint.r.montant / 1000) | number:'1.0-0' }} k FCFA</span>
                     </div>
                   }
@@ -216,7 +226,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
               </div>
               <div class="x-axis-row">
                 @for (r of revenus; track r.mois) {
-                  <span class="x-label">{{ r.mois }}</span>
+                  <span class="x-label">{{ formatMoisCourt(r.mois) }}</span>
                 }
               </div>
               <div class="chart-stats-row">
@@ -302,6 +312,17 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
             </div>
             @if (loadingPaiements) {
               <lok-skeleton type="list" [count]="5"></lok-skeleton>
+            } @else if (derniersPaiements.length === 0) {
+              <div class="table-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <rect x="1" y="4" width="22" height="16" rx="2"/>
+                  <line x1="1" y1="10" x2="23" y2="10"/>
+                  <line x1="7" y1="15" x2="10" y2="15"/>
+                  <line x1="14" y1="15" x2="17" y2="15"/>
+                </svg>
+                <p class="table-empty-title">Aucun paiement enregistré</p>
+                <p class="table-empty-sub">Les paiements reçus apparaîtront ici</p>
+              </div>
             } @else {
               <div class="table-rows">
                 @for (p of derniersPaiements; track p.id) {
@@ -328,6 +349,15 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
             </div>
             @if (loadingBiens) {
               <lok-skeleton type="list" [count]="5"></lok-skeleton>
+            } @else if (derniersBiens.length === 0) {
+              <div class="table-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                <p class="table-empty-title">Aucun bien ajouté</p>
+                <p class="table-empty-sub">Ajoutez votre premier bien pour commencer</p>
+              </div>
             } @else {
               <div class="table-rows">
                 @for (b of derniersBiens; track b.id) {
@@ -358,12 +388,12 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
   `,
   styles: [`
     /* ── Page ── */
-    .dash-page { min-height: 100vh; background: #F2EFE9; font-family: inherit; }
+    .dash-page { min-height: 100vh; background: #F0F4FA; font-family: inherit; }
 
     /* ── En-tête ── */
     .dash-header {
       position: sticky; top: 0; z-index: 10;
-      background: #FFFFFF; border-bottom: 1px solid #EDE8DF;
+      background: #FFFFFF; border-bottom: 1px solid #E5E7EB;
       padding: 0 28px; height: 68px;
       display: flex; align-items: center; justify-content: space-between;
       box-shadow: 0 1px 8px rgba(15,76,129,0.06);
@@ -381,12 +411,12 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
 
     .notif-btn {
       position: relative; width: 40px; height: 40px;
-      border-radius: 10px; background: #F5F2ED;
-      border: 1px solid #EDE8DF;
+      border-radius: 10px; background: #F0F4FA;
+      border: 1px solid #E5E7EB;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; text-decoration: none; transition: background 0.15s;
     }
-    .notif-btn:hover { background: #EEE9E1; }
+    .notif-btn:hover { background: #E5EDF7; }
     .notif-btn.has-alertes { background: rgba(220,38,38,0.06); border-color: rgba(220,38,38,0.25); }
     .notif-btn svg { width: 18px; height: 18px; stroke: #4B5563; }
     .notif-badge {
@@ -465,7 +495,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     /* ── Cards secondaires (fond blanc) ── */
     .kpi-biens-card, .kpi-taux-card, .kpi-impayes-card {
       background: white; border-radius: 16px; padding: 20px 22px;
-      border: 1px solid #EDE8DF;
+      border: 1px solid #E5E7EB;
       box-shadow: 0 2px 10px rgba(15,76,129,0.05);
     }
 
@@ -473,7 +503,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     .kpi-label {
       font-size: 10px; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.12em;
-      color: #A89E8E; margin: 0 0 10px;
+      color: #9CA3AF; margin: 0 0 10px;
     }
     .kpi-big {
       font-size: 32px; font-weight: 800;
@@ -499,7 +529,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     .biens-pill.vac { background: #F3F4F6; color: #6B7280; }
     .biens-bar-track {
       width: 100%; height: 5px; border-radius: 99px;
-      background: #EEE8DF; overflow: hidden; margin-top: 14px;
+      background: #E5E7EB; overflow: hidden; margin-top: 14px;
     }
     .biens-bar-fill {
       height: 100%; background: var(--color-accent);
@@ -515,7 +545,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
       width: 54px; height: 54px;
       transform: rotate(-90deg); flex-shrink: 0;
     }
-    .ring-bg  { fill: none; stroke: #EDE8DF; stroke-width: 4.5; }
+    .ring-bg  { fill: none; stroke: #E5E7EB; stroke-width: 4.5; }
     .ring-fill {
       fill: none; stroke: var(--color-accent); stroke-width: 4.5;
       stroke-linecap: round;
@@ -548,7 +578,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     .qa-btn {
       display: inline-flex; align-items: center; gap: 7px;
       padding: 9px 18px; border-radius: 8px;
-      background: white; border: 1px solid #E8E1D8;
+      background: white; border: 1px solid #E5E7EB;
       color: #374151; font-size: 13.5px; font-weight: 500;
       text-decoration: none; white-space: nowrap;
       transition: all 0.12s;
@@ -570,7 +600,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     .section-card {
       background: white; border-radius: 16px; padding: 20px 24px;
       box-shadow: 0 2px 12px rgba(15,76,129,0.05);
-      border: 1px solid #EDE8DF;
+      border: 1px solid #E5E7EB;
     }
     .section-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -596,7 +626,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
 
     .chart-controls { display: flex; align-items: center; gap: 10px; }
     .chart-tabs {
-      display: flex; background: #F5F2ED; border-radius: 8px;
+      display: flex; background: #EEF2F9; border-radius: 8px;
       padding: 2px; gap: 1px;
     }
     .chart-tab {
@@ -614,12 +644,12 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
       display: flex; flex-direction: column; justify-content: space-between;
       height: 180px; align-items: flex-end; flex-shrink: 0; width: 32px;
     }
-    .y-label { font-size: 10px; color: #B0AAA0; line-height: 1; }
+    .y-label { font-size: 10px; color: #9CA3AF; line-height: 1; }
 
     .svg-wrapper { flex: 1; position: relative; height: 180px; }
     .area-chart   { width: 100%; height: 100%; overflow: visible; }
 
-    .grid-line { stroke: #EDE8DF; stroke-width: 1; stroke-dasharray: 4 3; }
+    .grid-line { stroke: #E5E7EB; stroke-width: 1; stroke-dasharray: 4 3; }
     .chart-area-fill { fill: url(#dashAreaGrad); }
     .chart-line {
       fill: none; stroke-width: 2.5;
@@ -660,18 +690,18 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
 
     .x-axis-row {
       display: flex; margin-top: 6px; padding-left: 40px;
-      border-top: 1px solid #F0EBE2; padding-top: 6px;
+      border-top: 1px solid #E5E7EB; padding-top: 6px;
     }
-    .x-label { flex: 1; text-align: center; font-size: 11px; color: #B0AAA0; }
+    .x-label { flex: 1; text-align: center; font-size: 11px; color: #9CA3AF; }
 
     .chart-stats-row {
       display: flex; align-items: center; margin-top: 14px;
-      padding-top: 14px; border-top: 1px solid #F0EBE2;
+      padding-top: 14px; border-top: 1px solid #E5E7EB;
     }
     .chart-stat { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
     .chart-stat:first-child { padding-left: 0; }
-    .cs-sep { width: 1px; height: 28px; background: #EDE8DF; flex-shrink: 0; }
-    .cs-label { font-size: 10px; color: #B0AAA0; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+    .cs-sep { width: 1px; height: 28px; background: #E5E7EB; flex-shrink: 0; }
+    .cs-label { font-size: 10px; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
     .cs-value { font-size: 13px; font-weight: 700; color: var(--color-primary-dark); }
     .cs-value.primary { color: var(--color-primary); }
     .cs-value.accent  { color: var(--color-accent); }
@@ -708,7 +738,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     .alerte-desc  { font-size: 11.5px; color: #7A8899; margin-top: 2px; }
     .no-alertes {
       display: flex; flex-direction: column; align-items: center; gap: 8px;
-      padding: 24px 0; color: #B0AAA0;
+      padding: 24px 0; color: #9CA3AF;
     }
     .no-alertes svg { width: 28px; height: 28px; stroke: #10B981; }
     .no-alertes p   { font-size: 13px; }
@@ -720,7 +750,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
       display: flex; align-items: center; gap: 12px;
       padding: 10px 8px; border-radius: 10px; transition: background 0.1s;
     }
-    .table-row:hover { background: #F5F2ED; }
+    .table-row:hover { background: #F0F4FA; }
     .row-avatar {
       width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
       background: var(--color-primary); color: white;
@@ -794,6 +824,43 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
       .kpi-taux-card, .kpi-impayes-card {
         grid-column: 1; grid-row: auto;
       }
+    }
+
+    /* ── Empty state graphique ── */
+    .chart-no-data {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 10px;
+      padding: 40px 24px; text-align: center;
+    }
+    .chart-no-data svg {
+      width: 52px; height: 52px;
+      stroke: #CBD5E1; margin-bottom: 4px;
+    }
+    .chart-no-data-title {
+      font-size: 14px; font-weight: 600;
+      color: #7A8899; margin: 0;
+    }
+    .chart-no-data-sub {
+      font-size: 12px; color: #9CA3AF;
+      margin: 0; max-width: 280px; line-height: 1.5;
+    }
+
+    /* ── Empty state tableaux (paiements / biens) ── */
+    .table-empty {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 8px;
+      padding: 32px 16px; text-align: center;
+    }
+    .table-empty svg {
+      width: 36px; height: 36px;
+      stroke: #CBD5E1; margin-bottom: 4px;
+    }
+    .table-empty-title {
+      font-size: 13px; font-weight: 600;
+      color: #7A8899; margin: 0;
+    }
+    .table-empty-sub {
+      font-size: 12px; color: #9CA3AF; margin: 0;
     }
   `]
 })
@@ -874,7 +941,25 @@ export class DashboardComponent implements OnInit {
 
   get meilleurMois(): string {
     if (!this.revenus.length) return '—';
-    return this.revenus.reduce((best, r) => r.montant > best.montant ? r : best).mois;
+    const mois = this.revenus.reduce((best, r) => r.montant > best.montant ? r : best).mois;
+    return this.formatMoisLong(mois);
+  }
+
+  get hasRevenusData(): boolean {
+    return this.totalRevenus > 0;
+  }
+
+  formatMoisCourt(mois: string): string {
+    const [year, month] = mois.split('-').map(Number);
+    return new Intl.DateTimeFormat('fr-FR', { month: 'short', timeZone: 'UTC' })
+      .format(new Date(Date.UTC(year, month - 1, 1)))
+      .replace('.', '');
+  }
+
+  formatMoisLong(mois: string): string {
+    const [year, month] = mois.split('-').map(Number);
+    return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(Date.UTC(year, month - 1, 1)));
   }
 
   get chartPoints(): { x: number; y: number; xPct: number; yPct: number; r: RevenuMensuel }[] {

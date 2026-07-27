@@ -4,6 +4,7 @@ import { Router, RouterModule } from '@angular/router';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { CommonModule } from '@angular/common';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 export type PlanAbonnement = 'starter' | 'pro' | 'premium';
 
@@ -24,7 +25,8 @@ export interface Plan {
     ReactiveFormsModule,
     RouterModule,
     LokAlerteComponent,
-    LokMontantFcfaComponent
+    LokMontantFcfaComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -63,7 +65,7 @@ export interface Plan {
               <div>
                 <p class="text-white/80 text-sm">Votre abonnement actuel</p>
                 <h2 class="text-2xl font-bold mb-1">{{ abonnementActuel.plan }}</h2>
-                <p class="text-white/80">Expire le {{ abonnementActuel.dateFin | date:'dd/MM/yyyy' }}</p>
+                <p class="text-white/80">Expire le {{ abonnementActuel.dateFin | lokDate:'date' }}</p>
               </div>
               <div class="text-right">
                 <p class="text-3xl font-bold">

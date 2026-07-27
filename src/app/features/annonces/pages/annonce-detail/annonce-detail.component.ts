@@ -6,11 +6,12 @@ import { Annonce, StatutAnnonce, TypeAnnonce } from '@core/models/annonce.model'
 import { LokBadgeStatutAnnonceComponent } from '../../../../shared/components/lok-badge-statut-annonce/lok-badge-statut-annonce.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-annonce-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, LokBadgeStatutAnnonceComponent, LokSkeletonComponent, LokConfirmModalComponent],
+  imports: [CommonModule, RouterModule, LokBadgeStatutAnnonceComponent, LokSkeletonComponent, LokConfirmModalComponent, LokDatePipe],
   template: `
     <div class="detail-page">
 
@@ -147,11 +148,11 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
                 <div class="dates-rows">
                   <div class="date-row">
                     <span class="date-lbl">Création</span>
-                    <span class="date-val">{{ annonce.dateCreation | date:'dd MMM yyyy' }}</span>
+                    <span class="date-val">{{ annonce.dateCreation | lokDate }}</span>
                   </div>
                   <div class="date-row">
                     <span class="date-lbl">Expiration</span>
-                    <span class="date-val">{{ annonce.dateExpiration | date:'dd MMM yyyy' }}</span>
+                    <span class="date-val">{{ annonce.dateExpiration | lokDate:'date' }}</span>
                   </div>
                 </div>
               </div>

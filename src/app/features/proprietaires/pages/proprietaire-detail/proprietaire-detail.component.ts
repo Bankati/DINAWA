@@ -6,6 +6,7 @@ import { Proprietaire, StatutProprietaire } from '@core/models/proprietaire.mode
 import { LokBadgeStatutProprietaireComponent } from '../../../../shared/components/lok-badge-statut-proprietaire/lok-badge-statut-proprietaire.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-proprietaire-detail',
@@ -15,7 +16,8 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
     RouterModule,
     LokBadgeStatutProprietaireComponent,
     LokSkeletonComponent,
-    LokConfirmModalComponent
+    LokConfirmModalComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -133,7 +135,7 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
                   @if (proprietaire.pieceIdentite.dateExpiration) {
                     <div class="flex items-center justify-between">
                       <span class="text-sm text-gray-600">Date d'expiration</span>
-                      <span class="font-medium text-gray-900">{{ proprietaire.pieceIdentite.dateExpiration | date:'dd/MM/yyyy' }}</span>
+                      <span class="font-medium text-gray-900">{{ proprietaire.pieceIdentite.dateExpiration | lokDate:'date' }}</span>
                     </div>
                   }
                 </div>
@@ -165,7 +167,7 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
                   <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                   </svg>
-                  <span class="text-gray-900 font-medium">{{ proprietaire.dateCreation | date:'dd MMMM yyyy' }}</span>
+                  <span class="text-gray-900 font-medium">{{ proprietaire.dateCreation | lokDate }}</span>
                 </div>
               </div>
 

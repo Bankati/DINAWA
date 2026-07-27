@@ -77,9 +77,9 @@ export class PropertiesService {
       },
     });
 
-    // Referme la dépendance laissée en suspens à l'étape 11 : un compte
-    // SUSPENDED_INACTIVITY redevient ACTIVE dès qu'un bien est enregistré.
-    await this.accountActivation.reactivateIfEligible(user.id);
+    // Fire-and-forget — la réactivation d'un compte SUSPENDED_INACTIVITY
+    // n'affecte pas la réponse HTTP ; pas besoin de faire attendre l'appelant.
+    this.accountActivation.reactivateIfEligible(user.id).catch(() => {});
 
     return property;
   }
@@ -235,23 +235,34 @@ export class PropertiesService {
       }
     }
 
-    const created: PropertyPhotoResponse[] = [];
-    for (const [index, buffer] of compressed.entries()) {
-      const storagePath = `${propertyId}/${randomUUID()}.webp`;
-      await this.storage.upload('property-photos', storagePath, buffer, 'image/webp');
+    // Prépare les chemins à l'avance (positions déterministes, pas de race)
+    const items = compressed.map((buffer, i) => ({
+      buffer,
+      storagePath: `${propertyId}/${randomUUID()}.webp`,
+      position: existingCount + i,
+    }));
 
-      const photo = await this.prisma.propertyPhoto.create({
-        data: { propertyId, storagePath, position: existingCount + index },
-      });
+    // Tous les uploads Storage + creates Prisma en parallèle
+    const records = await Promise.all(
+      items.map(async (item) => {
+        await this.storage.upload('property-photos', item.storagePath, item.buffer, 'image/webp');
+        return this.prisma.propertyPhoto.create({
+          data: { propertyId, storagePath: item.storagePath, position: item.position },
+        });
+      }),
+    );
 
-      created.push({
-        id: photo.id,
-        position: photo.position,
-        url: await this.storage.getSignedUrl('property-photos', photo.storagePath),
-      });
-    }
+    // Une seule requête Storage pour toutes les URLs signées
+    const urlMap = await this.storage.getSignedUrls(
+      'property-photos',
+      records.map((r) => r.storagePath),
+    );
 
-    return created;
+    return records.map((r) => ({
+      id: r.id,
+      position: r.position,
+      url: urlMap.get(r.storagePath) ?? '',
+    }));
   }
 
   // Suppression Storage puis Prisma, jamais l'inverse — une ligne ne doit
@@ -292,25 +303,36 @@ export class PropertiesService {
       );
     }
 
-    const created: PropertyDocumentResponse[] = [];
-    for (const file of files) {
-      const extension = file.mimetype.split('/')[1];
-      const storagePath = `${propertyId}/${randomUUID()}.${extension}`;
-      await this.storage.upload('property-documents', storagePath, file.buffer, file.mimetype);
+    const items = files.map((file) => ({
+      file,
+      storagePath: `${propertyId}/${randomUUID()}.${file.mimetype.split('/')[1]}`,
+    }));
 
-      const document = await this.prisma.propertyDocument.create({
-        data: { propertyId, type, storagePath },
-      });
+    const records = await Promise.all(
+      items.map(async (item) => {
+        await this.storage.upload(
+          'property-documents',
+          item.storagePath,
+          item.file.buffer,
+          item.file.mimetype,
+        );
+        return this.prisma.propertyDocument.create({
+          data: { propertyId, type, storagePath: item.storagePath },
+        });
+      }),
+    );
 
-      created.push({
-        id: document.id,
-        type: document.type,
-        createdAt: document.createdAt,
-        url: await this.storage.getSignedUrl('property-documents', document.storagePath),
-      });
-    }
+    const urlMap = await this.storage.getSignedUrls(
+      'property-documents',
+      records.map((r) => r.storagePath),
+    );
 
-    return created;
+    return records.map((r) => ({
+      id: r.id,
+      type: r.type,
+      createdAt: r.createdAt,
+      url: urlMap.get(r.storagePath) ?? '',
+    }));
   }
 
   // Toutes les URLs servies au client sont signées, jamais un chemin

@@ -5,6 +5,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
 import { LokUploadComponent, UploadedFile } from '../../../../shared/components/lok-upload/lok-upload.component';
 import { CommonModule } from '@angular/common';
 import { NotificationsBackendService, Message, Conversation } from '../../services/notifications-backend.service';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-messagerie',
@@ -14,7 +15,8 @@ import { NotificationsBackendService, Message, Conversation } from '../../servic
     ReactiveFormsModule,
     RouterModule,
     LokAlerteComponent,
-    LokUploadComponent
+    LokUploadComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -79,7 +81,7 @@ import { NotificationsBackendService, Message, Conversation } from '../../servic
                         <div class="flex items-center justify-between mb-1">
                           <h3 class="font-semibold text-gray-900">{{ conversation.locataireNom }}</h3>
                           <span class="text-sm text-gray-500">
-                            {{ conversation.dateDernierMessage | date:'dd/MM/yyyy HH:mm' }}
+                            {{ conversation.dateDernierMessage | lokDate }}
                           </span>
                         </div>
                         
@@ -152,7 +154,7 @@ import { NotificationsBackendService, Message, Conversation } from '../../servic
                   >
                     <div class="flex items-center gap-2 mb-2">
                       <span class="text-xs font-medium">{{ message.expediteurNom }}</span>
-                      <span class="text-xs opacity-75">{{ message.date | date:'HH:mm' }}</span>
+                      <span class="text-xs opacity-75">{{ message.date | lokDate:'time' }}</span>
                     </div>
                     <p class="text-sm">{{ message.contenu }}</p>
                     @if (message.pieceJointe) {

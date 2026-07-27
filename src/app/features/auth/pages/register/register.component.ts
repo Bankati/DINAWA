@@ -136,7 +136,15 @@ type Step = 'role' | 'info' | 'cni' | 'success';
                       class="phone-input" (input)="onPhoneInput()">
                   </div>
                   @if (infoForm.get('phone')?.touched && infoForm.get('phone')?.invalid) {
-                    <span class="error">Téléphone requis</span>
+                    <span class="error">Numéro de téléphone invalide (ex : +22890123456)</span>
+                  }
+                </div>
+
+                <div class="field">
+                  <label>Ville de résidence *</label>
+                  <input formControlName="city" type="text" placeholder="Lomé">
+                  @if (infoForm.get('city')?.touched && infoForm.get('city')?.invalid) {
+                    <span class="error">Ville requise</span>
                   }
                 </div>
 
@@ -634,7 +642,8 @@ export class RegisterComponent {
       lastName:         ['', Validators.required],
       email:            ['', [Validators.required, Validators.email]],
       password:         ['', [Validators.required, Validators.minLength(6)]],
-      phone:            ['', Validators.required],
+      phone:            ['', [Validators.required, Validators.pattern(/^\+?\d{8,15}$/)]],
+      city:             ['', Validators.required],
       residenceCountry: [''],
     });
   }
@@ -699,13 +708,18 @@ export class RegisterComponent {
     const v = this.infoForm.value;
     const role = this.selectedRole()!;
 
+    // Supprimer les espaces du numéro pour correspondre au pattern backend ^\+?\d{8,15}$
+    const phone = (v.phone as string).replace(/\s+/g, '');
+
     const obs$ = role === 'OWNER'
       ? this.authService.signupOwner({
           email: v.email,
           password: v.password,
           firstName: v.firstName,
           lastName: v.lastName,
-          residenceCountry: v.residenceCountry,
+          phone,
+          city: v.city,
+          residenceCountry: v.residenceCountry || 'TG',
           cniRecto: this.cniRecto,
           cniVerso: this.cniVerso,
         })
@@ -714,6 +728,8 @@ export class RegisterComponent {
           password: v.password,
           firstName: v.firstName,
           lastName: v.lastName,
+          phone,
+          city: v.city,
           cniRecto: this.cniRecto,
           cniVerso: this.cniVerso,
           referenceDocuments: this.refDocs.length ? this.refDocs : undefined,

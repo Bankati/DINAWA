@@ -71,6 +71,8 @@ export class AuthService {
     password: string;
     firstName: string;
     lastName: string;
+    phone: string;
+    city: string;
     residenceCountry: string;
     cniRecto: File;
     cniVerso: File;
@@ -80,6 +82,8 @@ export class AuthService {
     fd.append('password', data.password);
     fd.append('firstName', data.firstName);
     fd.append('lastName', data.lastName);
+    fd.append('phone', data.phone);
+    fd.append('city', data.city);
     fd.append('residenceCountry', data.residenceCountry);
     fd.append('image', data.cniRecto);
     fd.append('imageBack', data.cniVerso);
@@ -93,6 +97,8 @@ export class AuthService {
     password: string;
     firstName: string;
     lastName: string;
+    phone: string;
+    city: string;
     cniRecto: File;
     cniVerso: File;
     referenceDocuments?: File[];
@@ -102,6 +108,8 @@ export class AuthService {
     fd.append('password', data.password);
     fd.append('firstName', data.firstName);
     fd.append('lastName', data.lastName);
+    fd.append('phone', data.phone);
+    fd.append('city', data.city);
     fd.append('image', data.cniRecto);
     fd.append('imageBack', data.cniVerso);
     data.referenceDocuments?.forEach(f => fd.append('referenceDocuments', f));

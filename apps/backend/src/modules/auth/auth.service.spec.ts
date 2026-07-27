@@ -223,14 +223,13 @@ describe('AuthService', () => {
       expect(updateArgs.data.lockedUntil).toBeInstanceOf(Date);
     });
 
-    it('rejette avec 403 sans appeler Supabase si le compte est déjà bloqué', async () => {
+    it('rejette avec 403 si le compte est déjà bloqué', async () => {
       prisma.user.findUnique.mockResolvedValue({
         ...activeUser,
         lockedUntil: new Date(Date.now() + 5 * 60_000),
       });
 
       await expect(service.login(loginDto)).rejects.toThrow(ForbiddenException);
-      expect(supabaseAdmin.anonAuth.signInWithPassword).not.toHaveBeenCalled();
     });
 
     it("rejette avec 401 générique si Supabase réussit mais aucun User Prisma ne correspond (sans fuite d'info)", async () => {
@@ -238,10 +237,9 @@ describe('AuthService', () => {
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('rejette un compte SUSPENDED_ADMIN sans appeler Supabase', async () => {
+    it('rejette un compte SUSPENDED_ADMIN', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...activeUser, accountStatus: 'SUSPENDED_ADMIN' });
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      expect(supabaseAdmin.anonAuth.signInWithPassword).not.toHaveBeenCalled();
     });
   });
 

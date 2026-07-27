@@ -8,11 +8,12 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-comptes',
   standalone: true,
-  imports: [CommonModule, FormsModule, LokBadgeStatutCompteComponent, LokSkeletonComponent, LokEmptyStateComponent, LokConfirmModalComponent, LokAlerteComponent],
+  imports: [CommonModule, FormsModule, LokBadgeStatutCompteComponent, LokSkeletonComponent, LokEmptyStateComponent, LokConfirmModalComponent, LokAlerteComponent, LokDatePipe],
   template: `
     <div class="admin-page">
       <div class="admin-header">
@@ -69,7 +70,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
                     </div>
                   </td>
                   <td>{{ labelRole(compte.role) }}</td>
-                  <td>{{ compte.dateInscription }}</td>
+                  <td>{{ compte.dateInscription | lokDate }}</td>
                   <td>{{ compte.nombreBiens ?? '—' }}</td>
                   <td><lok-badge-statut-compte [statut]="compte.statut"></lok-badge-statut-compte></td>
                   <td>
@@ -458,11 +459,18 @@ export class ComptesComponent implements OnInit {
 
   confirmerChangementStatut(): void {
     if (!this.compteCible) return;
+    const id = this.compteCible.id;
     const nouveauStatut = this.compteCible.statut === StatutCompte.ACTIF ? StatutCompte.SUSPENDU : StatutCompte.ACTIF;
-    this.adminService.changerStatutCompte(this.compteCible.id, nouveauStatut).subscribe(compteMaj => {
-      const index = this.comptes.findIndex(c => c.id === compteMaj.id);
-      if (index !== -1) this.comptes[index] = compteMaj;
-      this.compteCible = null;
+    this.adminService.changerStatutCompte(id, nouveauStatut).subscribe({
+      next: () => {
+        this.comptes = this.comptes.map(c =>
+          c.id === id ? { ...c, statut: nouveauStatut } : c
+        );
+        this.compteCible = null;
+      },
+      error: () => {
+        this.compteCible = null;
+      },
     });
   }
 

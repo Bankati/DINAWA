@@ -1,8 +1,20 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { CommonModule } from '@angular/common';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
+import { environment } from '@env/environment';
+
+interface Logement {
+  titre: string;
+  adresse: string;
+  loyer: number;
+  charges: number;
+  dateEntree: Date;
+  finBail: Date | null;
+}
 
 @Component({
   selector: 'app-locataire-dashboard',
@@ -12,6 +24,7 @@ import { CommonModule } from '@angular/common';
     RouterModule,
     LokAlerteComponent,
     LokMontantFcfaComponent,
+    LokDatePipe,
   ],
   styles: [`
     .loc-page { min-height: 100vh; background: #F4F1ED; }
@@ -143,6 +156,15 @@ import { CommonModule } from '@angular/common';
     .badge-resolu  { background: #D1FAE5; color: #065F46; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
     .badge-nouveau { background: #EAF1F8; color: #0F4C81; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 
+    /* ── Chargement ── */
+    .loc-spinner-wrap { padding: 32px; text-align: center; }
+    .loc-spinner {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 3px solid #E5E7EB; border-top-color: #0F4C81;
+      display: inline-block; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* ── Bouton primaire ── */
     .loc-btn-primary {
       background: linear-gradient(135deg, #0F4C81, #0A2650);
@@ -213,38 +235,44 @@ import { CommonModule } from '@angular/common';
               Mon logement
             </span>
           </div>
-          <div class="loc-card-body">
-            <div class="loc-logement">
-              <div class="loc-logement-icon">
-                <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                </svg>
-              </div>
-              <div style="flex:1">
-                <div class="loc-logement-title">{{ logement.titre }}</div>
-                <div class="loc-logement-addr">{{ logement.adresse }}</div>
-                <div class="loc-grid2">
-                  <div>
-                    <div class="loc-stat-label">Loyer mensuel</div>
-                    <div class="loc-stat-val"><lok-montant-fcfa [montant]="logement.loyer"></lok-montant-fcfa></div>
-                  </div>
-                  <div>
-                    <div class="loc-stat-label">Charges</div>
-                    <div class="loc-stat-val"><lok-montant-fcfa [montant]="logement.charges"></lok-montant-fcfa></div>
-                  </div>
-                  <div>
-                    <div class="loc-stat-label">Date d'entrée</div>
-                    <div class="loc-stat-val">{{ logement.dateEntree | date:'dd/MM/yyyy' }}</div>
-                  </div>
-                  <div>
-                    <div class="loc-stat-label">Fin de bail</div>
-                    <div class="loc-stat-val">{{ logement.finBail | date:'dd/MM/yyyy' }}</div>
+          @if (chargementLogement) {
+            <div class="loc-spinner-wrap"><span class="loc-spinner"></span></div>
+          } @else if (!logement) {
+            <div class="loc-empty">Aucun bail actif trouvé</div>
+          } @else {
+            <div class="loc-card-body">
+              <div class="loc-logement">
+                <div class="loc-logement-icon">
+                  <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                  </svg>
+                </div>
+                <div style="flex:1">
+                  <div class="loc-logement-title">{{ logement.titre }}</div>
+                  <div class="loc-logement-addr">{{ logement.adresse }}</div>
+                  <div class="loc-grid2">
+                    <div>
+                      <div class="loc-stat-label">Loyer mensuel</div>
+                      <div class="loc-stat-val"><lok-montant-fcfa [montant]="logement.loyer"></lok-montant-fcfa></div>
+                    </div>
+                    <div>
+                      <div class="loc-stat-label">Charges</div>
+                      <div class="loc-stat-val"><lok-montant-fcfa [montant]="logement.charges"></lok-montant-fcfa></div>
+                    </div>
+                    <div>
+                      <div class="loc-stat-label">Date d'entrée</div>
+                      <div class="loc-stat-val">{{ logement.dateEntree | lokDate:'date' }}</div>
+                    </div>
+                    <div>
+                      <div class="loc-stat-label">Fin de bail</div>
+                      <div class="loc-stat-val">{{ logement.finBail ? (logement.finBail | lokDate:'date') : 'Indéterminée' }}</div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          }
         </div>
 
         <!-- Actions rapides -->
@@ -298,20 +326,7 @@ import { CommonModule } from '@angular/common';
             </span>
             <button class="loc-btn-primary" routerLink="/paiements/nouveau">Effectuer un paiement</button>
           </div>
-          @for (paiement of paiements; track paiement.id) {
-            <div class="loc-paiement-row">
-              <div>
-                <div class="loc-paiement-periode">{{ paiement.periode }}</div>
-                <div class="loc-paiement-date">Échéance : {{ paiement.dateEcheance | date:'dd/MM/yyyy' }}</div>
-              </div>
-              <div style="text-align:right">
-                <div class="loc-paiement-montant"><lok-montant-fcfa [montant]="paiement.montant"></lok-montant-fcfa></div>
-                <span [class]="paiement.statut === 'paye' ? 'badge-paye' : paiement.statut === 'en_retard' ? 'badge-retard' : 'badge-attente'">
-                  {{ paiement.statut === 'paye' ? 'Payé' : paiement.statut === 'en_retard' ? 'En retard' : 'En attente' }}
-                </span>
-              </div>
-            </div>
-          }
+          <div class="loc-empty">L'historique des paiements sera disponible prochainement</div>
         </div>
 
         <!-- Demandes -->
@@ -329,7 +344,7 @@ import { CommonModule } from '@angular/common';
               <div class="loc-demande-row">
                 <div>
                   <div style="font-size:14px;font-weight:600;color:#0A2650">{{ demande.titre }}</div>
-                  <div style="font-size:12px;color:#9CA3AF;margin-top:2px">{{ demande.date | date:'dd/MM/yyyy' }}</div>
+                  <div style="font-size:12px;color:#9CA3AF;margin-top:2px">{{ demande.date | lokDate }}</div>
                 </div>
                 <span [class]="demande.statut === 'en_cours' ? 'badge-encours' : demande.statut === 'resolu' ? 'badge-resolu' : 'badge-nouveau'">
                   {{ demande.statut === 'en_cours' ? 'En cours' : demande.statut === 'resolu' ? 'Résolu' : 'Nouveau' }}
@@ -374,85 +389,68 @@ import { CommonModule } from '@angular/common';
   `,
 })
 export class LocataireDashboardComponent implements OnInit {
-  locataire = {
-    prenom: '',
-    nom: '',
-    email: '',
-    telephone: ''
-  };
+  locataire = { prenom: '', nom: '', email: '', telephone: '' };
 
-  logement = {
-    titre: 'Appartement Lomé Centre',
-    adresse: '123 Rue de la Paix, Lomé',
-    loyer: 100000,
-    charges: 15000,
-    dateEntree: new Date('2024-01-01'),
-    finBail: new Date('2025-01-01')
-  };
+  logement: Logement | null = null;
+  chargementLogement = true;
 
-  paiements = [
-    {
-      id: '1',
-      periode: 'Juin 2024',
-      dateEcheance: new Date('2024-06-01'),
-      montant: 115000,
-      statut: 'paye'
-    },
-    {
-      id: '2',
-      periode: 'Juillet 2024',
-      dateEcheance: new Date('2024-07-01'),
-      montant: 115000,
-      statut: 'en_attente'
-    },
-    {
-      id: '3',
-      periode: 'Août 2024',
-      dateEcheance: new Date('2024-08-01'),
-      montant: 115000,
-      statut: 'en_attente'
-    }
-  ];
+  demandes: { id: string; titre: string; date: Date; statut: string }[] = [];
 
-  demandes = [
-    {
-      id: '1',
-      titre: 'Réparation robinet cuisine',
-      date: new Date('2024-06-15'),
-      statut: 'en_cours'
-    }
-  ];
+  showNewDemande = false;
+  errorMessage = '';
+  successMessage = '';
 
-  showNewDemande: boolean = false;
-  errorMessage: string = '';
-  successMessage: string = '';
+  private readonly apiUrl = `${environment.apiUrl}/tenants`;
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private http: HttpClient) {}
 
   ngOnInit(): void {
-    // Lit l'utilisateur connecté depuis le localStorage (clé warah_user ou WARAH_user)
+    let userId = '';
     try {
       const raw = localStorage.getItem('warah_user') || localStorage.getItem('WARAH_user');
       if (raw) {
         const u = JSON.parse(raw);
-        // Le backend retourne firstName/lastName, le localStorage peut aussi avoir prenom/nom
-        this.locataire.prenom = u.firstName || u.prenom || '';
-        this.locataire.nom    = u.lastName  || u.nom    || '';
-        this.locataire.email  = u.email     || '';
-        this.locataire.telephone = u.phone  || u.telephone || '';
+        this.locataire.prenom    = u.firstName || u.prenom || '';
+        this.locataire.nom       = u.lastName  || u.nom    || '';
+        this.locataire.email     = u.email     || '';
+        this.locataire.telephone = u.phone     || u.telephone || '';
+        userId = u.id || '';
       }
-    } catch { /* si localStorage indisponible, les valeurs restent vides */ }
+    } catch { /* localStorage indisponible */ }
+
+    if (userId) {
+      this.chargerBail(userId);
+    } else {
+      this.chargementLogement = false;
+    }
   }
 
-  /**
-   * Envoie une nouvelle demande
-   */
+  private chargerBail(userId: string): void {
+    this.http.get<{ data: any[] }>(`${this.apiUrl}/${userId}/leases/history?limit=5`).subscribe({
+      next: (res) => {
+        const bail = res.data.find((l: any) => l.status === 'ACTIVE') ?? res.data[0] ?? null;
+        if (bail) {
+          this.logement = {
+            titre: `${bail.property.neighborhood}, ${bail.property.city}`,
+            adresse: bail.property.address,
+            loyer: bail.monthlyRent,
+            charges: bail.monthlyCharges,
+            dateEntree: new Date(bail.startDate),
+            finBail: bail.endDate ? new Date(bail.endDate) : null,
+          };
+        }
+        this.chargementLogement = false;
+      },
+      error: () => {
+        this.errorMessage = 'Impossible de charger les informations du logement.';
+        this.chargementLogement = false;
+      },
+    });
+  }
+
   envoyerDemande(): void {
     this.showNewDemande = false;
     this.successMessage = 'Demande envoyée avec succès !';
-    
-    setTimeout(() => {
-      this.successMessage = '';
-    }, 3000);
+    setTimeout(() => { this.successMessage = ''; }, 3000);
   }
 }

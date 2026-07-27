@@ -9,6 +9,7 @@ import { LokBadgePaiementComponent } from '../../../../shared/components/lok-bad
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-paiements-list',
@@ -21,7 +22,8 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
     LokBadgePaiementComponent,
     LokSkeletonComponent,
     LokEmptyStateComponent,
-    LokAlerteComponent
+    LokAlerteComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -195,7 +197,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
                 @for (paiement of filteredPaiements; track paiement.id) {
                   <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {{ paiement.datePaiement | date:'dd/MM/yyyy' }}
+                      {{ paiement.datePaiement | lokDate }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       Locataire #{{ paiement.locataireId }}

@@ -4,6 +4,7 @@ import { ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { RealtimeNotificationsService, AppNotification } from '../../../../core/services/realtime-notifications.service';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 interface DisplayNotif extends AppNotification {
   type: string;
@@ -12,7 +13,7 @@ interface DisplayNotif extends AppNotification {
 @Component({
   selector: 'app-historique',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule],
+  imports: [CommonModule, ReactiveFormsModule, RouterModule, LokDatePipe],
   template: `
     <div class="min-h-screen" style="background:#F0F4FA">
 
@@ -111,7 +112,7 @@ interface DisplayNotif extends AppNotification {
                       <span class="px-2 py-0.5 rounded-full text-xs font-bold" [class]="channelBadge(notif.channel)">
                         {{ channelLabel(notif.channel) }}
                       </span>
-                      <span class="text-xs text-gray-400 ml-auto">{{ notif.createdAt | date:'dd MMM, HH:mm' }}</span>
+                      <span class="text-xs text-gray-400 ml-auto">{{ notif.createdAt | lokDate }}</span>
                     </div>
                     <p class="text-sm font-bold text-gray-900 mb-0.5">{{ notif.titre }}</p>
                     <p class="text-xs text-gray-400">{{ notif.event }}</p>

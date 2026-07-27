@@ -85,23 +85,29 @@ export class TenantsService {
     const access = await canActOnProperty(this.prisma, user, property);
     if (!access.canMutate) throw new ForbiddenException('Accès refusé à ce bien');
 
-    const tenant = await this.prisma.user.findUnique({ where: { id: tenantUserId } });
+    const [tenant, unterminatedLease, alreadyBlocked] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: tenantUserId },
+        select: { id: true, role: true },
+      }),
+      this.prisma.lease.findFirst({
+        where: { propertyId, tenantUserId, status: { in: ['ACTIVE', 'EXPIRED'] } },
+        select: { id: true },
+      }),
+      this.prisma.tenantPropertyBlock.findUnique({
+        where: { propertyId_tenantUserId: { propertyId, tenantUserId } },
+        select: { id: true },
+      }),
+    ]);
+
     if (!tenant || tenant.role !== 'TENANT') {
       throw new NotFoundException('Locataire introuvable');
     }
-
-    const unterminatedLease = await this.prisma.lease.findFirst({
-      where: { propertyId, tenantUserId, status: { in: ['ACTIVE', 'EXPIRED'] } },
-    });
     if (unterminatedLease) {
       throw new ConflictException(
         "Impossible de bloquer ce locataire — un bail non résilié existe encore sur ce bien, résiliez-le d'abord",
       );
     }
-
-    const alreadyBlocked = await this.prisma.tenantPropertyBlock.findUnique({
-      where: { propertyId_tenantUserId: { propertyId, tenantUserId } },
-    });
     if (alreadyBlocked) {
       throw new ConflictException('Ce locataire est déjà bloqué pour ce bien');
     }

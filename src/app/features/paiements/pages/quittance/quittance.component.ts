@@ -5,6 +5,7 @@ import { Paiement } from '@core/models/paiement.model';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { CommonModule } from '@angular/common';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-quittance',
@@ -13,7 +14,8 @@ import { CommonModule } from '@angular/common';
     CommonModule,
     RouterModule,
     LokAlerteComponent,
-    LokMontantFcfaComponent
+    LokMontantFcfaComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -64,7 +66,7 @@ import { CommonModule } from '@angular/common';
                 </div>
                 <div class="text-right">
                   <p class="font-semibold">Quittance N° {{ paiement.id }}</p>
-                  <p class="text-sm text-white/80">Date: {{ paiement.datePaiement | date:'dd/MM/yyyy' }}</p>
+                  <p class="text-sm text-white/80">Date: {{ paiement.datePaiement | lokDate }}</p>
                 </div>
               </div>
             </div>
@@ -122,7 +124,7 @@ import { CommonModule } from '@angular/common';
                 <div class="space-y-3">
                   <div class="flex justify-between">
                     <span class="text-gray-600">Période concernée</span>
-                    <span class="font-medium">{{ paiement.dateEcheance | date:'MMMM yyyy' }}</span>
+                    <span class="font-medium">{{ paiement.dateEcheance | lokDate:'month' }}</span>
                   </div>
                   <div class="flex justify-between">
                     <span class="text-gray-600">Montant dû</span>

@@ -2,7 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { BiensService } from '../../services/biens.service';
-import { Bien, PropertyType, CreateBienRequest } from '@core/models/bien.model';
+import { DashboardService } from '../../../dashboard/services/dashboard.service';
+import { invalidateCache } from '../../../../core/interceptors/http-cache.interceptor';
+import { Bien, PropertyType, CreateBienRequest, PropertyPhoto } from '@core/models/bien.model';
 import { LokUploadComponent, UploadedFile } from '../../../../shared/components/lok-upload/lok-upload.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
@@ -63,6 +65,7 @@ import { CommonModule } from '@angular/common';
             }
           </div>
         </div>
+
 
         <!-- Alerte d'erreur -->
         @if (errorMessage) {
@@ -212,9 +215,43 @@ import { CommonModule } from '@angular/common';
             @if (currentStep === 4) {
               <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Photos</h2>
-                @if (isEditMode && !bienId) {
+
+                <!-- Photos existantes (mode édition) -->
+                @if (isEditMode && existingPhotos.length > 0) {
+                  <div class="mb-5">
+                    <p class="text-sm font-medium text-gray-700 mb-3">Photos actuelles</p>
+                    <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+                      @for (photo of existingPhotos; track photo.id) {
+                        <div class="relative aspect-square rounded-lg overflow-hidden border border-gray-200">
+                          <img [src]="photo.url" alt="Photo du bien" class="w-full h-full object-cover">
+                          <button
+                            type="button"
+                            (click)="supprimerPhoto(photo.id)"
+                            [disabled]="deletingPhotoId === photo.id"
+                            class="absolute top-1 right-1 w-7 h-7 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-full flex items-center justify-center shadow transition-colors"
+                            title="Supprimer cette photo"
+                          >
+                            @if (deletingPhotoId === photo.id) {
+                              <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                              </svg>
+                            } @else {
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                              </svg>
+                            }
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+
+                @if (isEditMode && existingPhotos.length === 0 && !bienId) {
                   <p class="text-sm text-gray-500 mb-3">Vous pourrez ajouter des photos après la création.</p>
                 } @else {
+                  <p class="text-sm font-medium text-gray-700 mb-2">{{ isEditMode ? 'Ajouter de nouvelles photos' : 'Photos du bien' }}</p>
                   <lok-upload
                     accept="image/*"
                     [maxSize]="5"
@@ -328,6 +365,8 @@ export class BienFormComponent implements OnInit {
   etatLieuxFiles: File[] = [];
   titreFiles: File[] = [];
   autresDocumentsFiles: File[] = [];
+  existingPhotos: PropertyPhoto[] = [];
+  deletingPhotoId: string | null = null;
 
   steps = [
     { number: 1, title: 'Type' },
@@ -342,6 +381,7 @@ export class BienFormComponent implements OnInit {
     private biensService: BiensService,
     private router: Router,
     private route: ActivatedRoute,
+    private dashboardService: DashboardService,
   ) {
     this.bienForm = this.fb.group({
       type:           ['', Validators.required],
@@ -379,6 +419,7 @@ export class BienFormComponent implements OnInit {
           monthlyRent:    bien.monthlyRent,
           monthlyCharges: bien.monthlyCharges,
         });
+        this.existingPhotos = bien.photos ?? [];
         this.loading = false;
       },
       error: () => {
@@ -407,6 +448,18 @@ export class BienFormComponent implements OnInit {
 
   onPhotosChange(files: UploadedFile[]): void {
     this.photoFiles = files.map((f) => f.file);
+  }
+
+  supprimerPhoto(photoId: string): void {
+    if (!this.bienId || this.deletingPhotoId) return;
+    this.deletingPhotoId = photoId;
+    this.biensService.removePhoto(this.bienId, photoId).subscribe({
+      next: () => {
+        this.existingPhotos = this.existingPhotos.filter(p => p.id !== photoId);
+        this.deletingPhotoId = null;
+      },
+      error: () => { this.deletingPhotoId = null; },
+    });
   }
 
   onEtatLieuxChange(files: UploadedFile[]): void {
@@ -485,6 +538,11 @@ export class BienFormComponent implements OnInit {
 
   private afterSave(): void {
     this.isSubmitting = false;
+    // Invalide le cache HTTP et le cache service pour que le dashboard
+    // et la liste biens reflètent immédiatement le nouveau bien.
+    invalidateCache('/dashboard');
+    invalidateCache('/properties');
+    this.dashboardService.invalidateCache();
     this.router.navigate(['/dashboard/biens']);
   }
 

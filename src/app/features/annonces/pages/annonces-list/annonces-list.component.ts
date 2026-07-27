@@ -8,6 +8,7 @@ import { LokBadgeStatutAnnonceComponent } from '../../../../shared/components/lo
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-annonces-list',
@@ -15,7 +16,7 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
   imports: [
     CommonModule, FormsModule, RouterModule,
     LokBadgeStatutAnnonceComponent,
-    LokSkeletonComponent, LokEmptyStateComponent, LokConfirmModalComponent
+    LokSkeletonComponent, LokEmptyStateComponent, LokConfirmModalComponent, LokDatePipe
   ],
   template: `
     <div class="min-h-screen" style="background:#F0F4FA">
@@ -194,7 +195,7 @@ import { LokConfirmModalComponent } from '../../../../shared/components/lok-conf
                       <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
                     {{ annonce.adresse.quartier }}, {{ annonce.adresse.ville }}
-                    · {{ annonce.dateCreation | date:'dd/MM/yy' }}
+                    · {{ annonce.dateCreation | lokDate }}
                   </p>
                   <div class="flex gap-2" (click)="$event.stopPropagation()">
                     <button (click)="viewPublicAnnonce(annonce.id)"

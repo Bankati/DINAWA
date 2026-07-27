@@ -4,6 +4,7 @@ import { NotificationChannel, NotificationDispatchStatus, Prisma } from '@prisma
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CacheService } from '../../common/cache/cache.service';
 
 export type NotificationSummary = {
   id: string;
@@ -32,7 +33,10 @@ const EVENT_LABELS: Record<string, string> = {
 @ApiBearerAuth()
 @Controller('notifications')
 export class NotifyController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "Historique des notifications de l'utilisateur connecté" })
@@ -40,29 +44,33 @@ export class NotifyController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('limit') limit?: string,
   ): Promise<NotificationSummary[]> {
-    const notifications = await this.prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: limit ? Math.min(Number(limit), 100) : 50,
-      select: {
-        id: true,
-        event: true,
-        channel: true,
-        status: true,
-        payload: true,
-        createdAt: true,
-      },
-    });
+    const take = limit ? Math.min(Number(limit), 100) : 50;
+    const cacheKey = `notifs:${user.id}:${take}`;
+    return this.cache.wrap(cacheKey, 15_000, async () => {
+      const notifications = await this.prisma.notification.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: {
+          id: true,
+          event: true,
+          channel: true,
+          status: true,
+          payload: true,
+          createdAt: true,
+        },
+      });
 
-    return notifications.map((n) => ({
-      id: n.id,
-      event: n.event,
-      titre: EVENT_LABELS[n.event] ?? n.event,
-      channel: n.channel,
-      status: n.status,
-      payload: n.payload,
-      createdAt: n.createdAt,
-    }));
+      return notifications.map((n) => ({
+        id: n.id,
+        event: n.event,
+        titre: EVENT_LABELS[n.event] ?? n.event,
+        channel: n.channel,
+        status: n.status,
+        payload: n.payload,
+        createdAt: n.createdAt,
+      }));
+    });
   }
 
   @Get('unread-count')

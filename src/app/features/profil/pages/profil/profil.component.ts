@@ -8,11 +8,12 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
 import { DelegationService, PowerDelegation, DelegationManager } from '../../../delegation/delegation.service';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-profil',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule, LokAlerteComponent, LokSkeletonComponent, LokConfirmModalComponent],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, LokAlerteComponent, LokSkeletonComponent, LokConfirmModalComponent, LokDatePipe],
   template: `
     <div class="min-h-screen bg-gray-50">
       <!-- ── HEADER ── -->
@@ -137,7 +138,7 @@ import { DelegationService, PowerDelegation, DelegationManager } from '../../../
                     <div>
                       <p class="delegation-manager-name">{{ delegation()!.manager.firstName }} {{ delegation()!.manager.lastName }}</p>
                       <p class="delegation-manager-email">{{ delegation()!.manager.email }}</p>
-                      <p class="delegation-since">Délégué depuis le {{ delegation()!.grantedAt | date:'dd/MM/yyyy' }}</p>
+                      <p class="delegation-since">Délégué depuis le {{ delegation()!.grantedAt | lokDate }}</p>
                     </div>
                   </div>
                   <button class="delegation-revoke-btn" (click)="showRevokeModal = true" [disabled]="delegLoading()">

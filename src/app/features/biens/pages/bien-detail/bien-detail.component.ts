@@ -11,6 +11,7 @@ import { LokMontantFcfaComponent } from '../../../../shared/components/lok-monta
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-bien-detail',
@@ -24,6 +25,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
     LokSkeletonComponent,
     LokConfirmModalComponent,
     LokAlerteComponent,
+    LokDatePipe,
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -138,7 +140,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
                     </div>
                     <div>
                       <p class="text-sm text-gray-600">Date d'ajout</p>
-                      <p class="font-semibold text-gray-900">{{ bien.createdAt | date:'dd/MM/yyyy' }}</p>
+                      <p class="font-semibold text-gray-900">{{ bien.createdAt | lokDate }}</p>
                     </div>
                   </div>
                 </div>

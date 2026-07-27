@@ -4,6 +4,7 @@ import { Router, RouterModule } from '@angular/router';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { CommonModule } from '@angular/common';
 import { GestionnaireService, Mandat, MandatRequest } from '../../services/gestionnaire.service';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-portefeuille',
@@ -12,7 +13,8 @@ import { GestionnaireService, Mandat, MandatRequest } from '../../services/gesti
     CommonModule,
     ReactiveFormsModule,
     RouterModule,
-    LokAlerteComponent
+    LokAlerteComponent,
+    LokDatePipe
   ],
   styles: `
     /* Global SVG Icon Sizing Fix */
@@ -236,7 +238,7 @@ import { GestionnaireService, Mandat, MandatRequest } from '../../services/gesti
                         </div>
                         <div>
                           <p class="text-gray-500">Expiration</p>
-                          <p class="font-medium">{{ mandat.dateFin | date:'dd/MM/yyyy' }}</p>
+                          <p class="font-medium">{{ mandat.dateFin | lokDate:'date' }}</p>
                         </div>
                       </div>
                     </div>

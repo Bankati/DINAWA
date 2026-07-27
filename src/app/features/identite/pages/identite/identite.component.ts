@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '@env/environment';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 type CniStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
@@ -18,7 +19,7 @@ interface IdentityVerification {
 @Component({
   selector: 'app-identite',
   standalone: true,
-  imports: [CommonModule, LokAlerteComponent, LokSkeletonComponent],
+  imports: [CommonModule, LokAlerteComponent, LokSkeletonComponent, LokDatePipe],
   template: `
     <div class="min-h-screen" style="background:#F0F4FA">
 
@@ -74,7 +75,7 @@ interface IdentityVerification {
         <div class="kpi-card">
           <p class="kpi-label">Soumis le</p>
           @if (verification?.createdAt) {
-            <p class="kpi-date">{{ verification!.createdAt | date:'dd MMM yyyy' }}</p>
+            <p class="kpi-date">{{ verification!.createdAt | lokDate }}</p>
           } @else {
             <p class="kpi-val" style="color:#9CA3AF">—</p>
           }

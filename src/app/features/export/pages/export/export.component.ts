@@ -5,6 +5,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { CommonModule } from '@angular/common';
 import { GestionnaireService, ExportRequest, ExportRecord } from '../../../gestionnaire/services/gestionnaire.service';
+import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
 
 @Component({
   selector: 'app-export',
@@ -14,7 +15,8 @@ import { GestionnaireService, ExportRequest, ExportRecord } from '../../../gesti
     ReactiveFormsModule,
     RouterModule,
     LokAlerteComponent,
-    LokSkeletonComponent
+    LokSkeletonComponent,
+    LokDatePipe
   ],
   template: `
     <div class="min-h-screen" style="background:#F0F4FA">
@@ -175,7 +177,7 @@ import { GestionnaireService, ExportRequest, ExportRecord } from '../../../gesti
                   </div>
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-bold text-gray-900 truncate">{{ exp.titre }}</p>
-                    <p class="text-xs text-gray-400 mt-0.5">{{ exp.date | date:'dd/MM/yyyy à HH:mm' }} · <span class="font-semibold uppercase">{{ exp.format }}</span></p>
+                    <p class="text-xs text-gray-400 mt-0.5">{{ exp.date | lokDate }} · <span class="font-semibold uppercase">{{ exp.format }}</span></p>
                   </div>
                   <div class="flex gap-2 flex-shrink-0">
                     <button (click)="telechargerExport(exp.id)" [disabled]="downloadingId === exp.id"

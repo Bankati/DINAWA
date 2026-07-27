@@ -3,6 +3,8 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../../../core/services/auth.service';
+import { DashboardService } from '../../../dashboard/services/dashboard.service';
+import { environment } from '@env/environment';
 
 @Component({
   selector: 'app-login',
@@ -488,6 +490,7 @@ export class LoginComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private authService: AuthService,
+    private dashboardService: DashboardService,
   ) {
     this.loginForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
@@ -498,7 +501,11 @@ export class LoginComponent implements OnInit {
   ngOnInit(): void {
     if (this.authService.isLoggedIn()) {
       this.router.navigate([this.authService.getDefaultRoute()]);
+      return;
     }
+    // /health/ready = @Public(), exécute SELECT 1 → chauffe la connexion
+    // TCP ET le pool Prisma pendant que l'utilisateur saisit ses identifiants.
+    fetch(`${environment.apiUrl}/health/ready`).catch(() => {});
   }
 
   get email() { return this.loginForm.get('email'); }
@@ -515,7 +522,14 @@ export class LoginComponent implements OnInit {
       next: () => {
         this.isLoading = false;
         const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-        this.router.navigate([returnUrl ?? this.authService.getDefaultRoute()]);
+        const dest = returnUrl ?? this.authService.getDefaultRoute();
+        // Pre-fetch dashboard pendant la navigation Angular (~20 ms) : quand
+        // le composant monte et subscribe, la réponse est déjà en vol.
+        if (!returnUrl && dest === '/dashboard') {
+          this.dashboardService.invalidateCache();
+          this.dashboardService.getKPIs().subscribe({ error: () => {} });
+        }
+        this.router.navigate([dest]);
       },
       error: (err: any) => {
         this.isLoading = false;

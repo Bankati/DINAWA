@@ -29,7 +29,12 @@ export class NotifyService {
   async notifyUser(params: NotifyUserParams): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: params.userId },
-      include: { _count: { select: { pushSubscriptions: true } } },
+      select: {
+        id: true,
+        email: true,
+        notificationConsent: true,
+        _count: { select: { pushSubscriptions: true } },
+      },
     });
     if (!user) {
       this.logger.warn(`[notify/${params.event}] utilisateur introuvable: ${params.userId}`);
