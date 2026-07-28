@@ -1,58 +1,33 @@
-import {
-  Component, OnInit, OnDestroy,
-  inject, signal, PLATFORM_ID
-} from '@angular/core';
+import { AfterViewInit, Component, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import AOS from 'aos';
 import { PublicFooterComponent } from '../../../../shared/components/public-footer/public-footer.component';
+import { PublicNavbarComponent } from '../../../../shared/components/public-navbar/public-navbar.component';
 
 @Component({
   selector: 'app-a-propos',
   standalone: true,
-  imports: [RouterLink, PublicFooterComponent],
+  imports: [RouterLink, PublicFooterComponent, PublicNavbarComponent],
   template: `
 <div class="page">
 
-  <!-- ── NAVBAR ── -->
-  <nav class="nav" [class.nav-solid]="navScrolled()">
-    <div class="nav-inner">
-      <a routerLink="/" class="nav-logo"><img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img"></a>
-      <ul class="nav-links">
-        <li><a routerLink="/" class="nl" data-text="Accueil">Accueil</a></li>
-        <li><a routerLink="/annonces" class="nl" data-text="Annonces">Annonces</a></li>
-        <li><a routerLink="/a-propos" class="nl nl-active" data-text="À propos">À propos</a></li>
-        <li><a href="/#tarifs" class="nl" data-text="Tarifs">Tarifs</a></li>
-      </ul>
-      <div class="nav-cta">
-        <a routerLink="/auth/login" class="btn-ghost">Connexion</a>
-        <a routerLink="/auth/register" class="btn-nav-primary">S'inscrire</a>
-      </div>
-      <button class="hamburger" (click)="menuOpen.set(!menuOpen())" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-    @if (menuOpen()) {
-      <div class="m-menu" (click)="menuOpen.set(false)">
-        <a routerLink="/" class="mm-link">Accueil</a>
-        <a routerLink="/annonces" class="mm-link">Annonces</a>
-        <a routerLink="/a-propos" class="mm-link">À propos</a>
-        <a href="/#tarifs" class="mm-link">Tarifs</a>
-        <a routerLink="/auth/login" class="mm-link">Connexion</a>
-        <a routerLink="/auth/register" class="mm-cta">S'inscrire gratuitement</a>
-      </div>
-    }
-  </nav>
+  <app-public-navbar></app-public-navbar>
 
   <!-- ── HERO ── -->
   <section class="hero">
     <img src="/assets/handsome-young-african-man-holding-mobile-phone-gesturing-while-standing-against-grey-wall.jpg.jpeg"
          alt="WARAH — gestion immobilière digitale"
-         class="hero-img">
-    <div class="hero-bg"></div>
-    <div class="hero-inner">
+         class="hero-bg" loading="lazy">
+    <div class="hero-ov"></div>
+    <div class="hero-content">
       <span class="hero-eyebrow">Qui sommes-nous</span>
-      <h1 class="hero-title">La gestion immobilière<br>réinventée pour l'Afrique</h1>
+      <h1 class="hero-title">La gestion immobilière<br>réinventée pour l'<span class="hero-title-accent">Afrique</span></h1>
       <p class="hero-sub">WARAH simplifie la relation entre propriétaires, gestionnaires immobiliers et locataires grâce à une plateforme digitale pensée pour le contexte togolais et africain.</p>
+      <a routerLink="/auth/register" class="hero-cta">
+        Rejoindre WARAH
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h12M11 5l5 5-5 5"/></svg>
+      </a>
       <div class="hero-stats">
         <div class="h-stat"><span class="h-stat-n">2 024</span><span class="h-stat-l">Année de création</span></div>
         <div class="h-stat-sep"></div>
@@ -63,27 +38,62 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
     </div>
   </section>
 
+  <!-- ── CE QUI NOUS DÉFINIT ── -->
+  <section class="definit-section">
+    <div class="sec-wrap">
+      <div class="val-head" data-aos="fade-down">
+        <h2 class="sec-title">Ce qui nous définit</h2>
+      </div>
+      <div class="definit-grid">
+        <div class="definit-card definit-card-navy" data-aos="fade-up">
+          <div class="definit-top">
+            <div class="definit-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg></div>
+            <span class="definit-num">01</span>
+          </div>
+          <h3 class="definit-title">Notre raison d'être</h3>
+          <p class="definit-p">Le marché locatif togolais manque cruellement d'outils numériques fiables. Nous apportons une réponse concrète, humaine et pensée pour les réalités locales.</p>
+        </div>
+        <div class="definit-card definit-card-gold" data-aos="fade-up" data-aos-delay="120">
+          <div class="definit-top">
+            <div class="definit-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></div>
+            <span class="definit-num">02</span>
+          </div>
+          <h3 class="definit-title">Notre mission</h3>
+          <p class="definit-p">Digitaliser l'intégralité du cycle de vie locatif — recherche, bail, paiement, quittance — pour les propriétaires, gestionnaires et locataires du Togo.</p>
+        </div>
+        <div class="definit-card definit-card-emerald" data-aos="fade-up" data-aos-delay="240">
+          <div class="definit-top">
+            <div class="definit-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-9 4 18 3-9h6"/></svg></div>
+            <span class="definit-num">03</span>
+          </div>
+          <h3 class="definit-title">Notre vision</h3>
+          <p class="definit-p">Devenir la plateforme de référence de la gestion immobilière en Afrique de l'Ouest, en partant du Togo pour rayonner sur tout le continent.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ── PROFILS ── -->
   <section class="profils-section">
     <div class="sec-wrap">
-      <div class="profils-eyebrow">
+      <div class="profils-eyebrow" data-aos="fade-down">
         <span class="sec-chip">› en un clic</span>
         <h2 class="sec-title-sm">JE SUIS…</h2>
       </div>
       <div class="profils-grid">
-        <a routerLink="/auth/register" class="profil-card">
+        <a routerLink="/auth/register" class="profil-card" data-aos="fade-up">
           <div class="pc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
           <h3 class="pc-title">Propriétaire</h3>
           <ul class="pc-list"><li>Gérer mes biens</li><li>Suivre mes loyers</li><li>Publier des annonces</li><li>Télécharger mes quittances</li></ul>
           <span class="pc-cta">J'accède →</span>
         </a>
-        <a routerLink="/auth/register" class="profil-card profil-card-accent">
+        <a routerLink="/auth/register" class="profil-card profil-card-accent" data-aos="fade-up" data-aos-delay="120">
           <div class="pc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
           <h3 class="pc-title">Gestionnaire</h3>
           <ul class="pc-list"><li>Portefeuille de mandats</li><li>Rapports automatisés</li><li>Profil vérifié WARAH</li><li>Visibilité dans l'annuaire</li></ul>
           <span class="pc-cta">J'accède →</span>
         </a>
-        <a routerLink="/auth/register" class="profil-card">
+        <a routerLink="/auth/register" class="profil-card" data-aos="fade-up" data-aos-delay="240">
           <div class="pc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
           <h3 class="pc-title">Locataire</h3>
           <ul class="pc-list"><li>Payer via T-Money / Flooz</li><li>Suivre mes quittances</li><li>Contacter mon propriétaire</li><li>Historique des paiements</li></ul>
@@ -97,27 +107,33 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
   <section class="histoire-section">
     <div class="sec-wrap">
       <div class="hist-grid">
-        <div class="hist-text">
+        <div class="hist-text" data-aos="fade-right">
           <span class="sec-chip">› notre histoire</span>
           <h2 class="hist-title">WARAH EST NÉ<br>D'UN CONSTAT SIMPLE</h2>
           <p class="hist-p">Le marché locatif immobilier au Togo souffre d'un déficit structurel d'outils numériques adaptés. Aujourd'hui, pour un propriétaire qui réside au Togo, en France, au Canada, aux USA ou en Chine, la gestion quotidienne de ses biens repose encore très largement sur des carnets, des appels téléphoniques et des quittances manuscrites. Les propriétaires et les gestionnaires immobiliers perdent du temps, les locataires manquent de visibilité et les impayés restent difficiles à suivre.</p>
           <p class="hist-p">Pour le propriétaire de la diaspora, l'absence d'outil de suivi à distance crée une anxiété permanente sur un patrimoine qu'il ne peut pas surveiller physiquement. Pour le propriétaire résidant au Togo, la multiplication des biens rend rapidement la gestion manuelle ingérable.</p>
-          <p class="hist-p">C'est pourquoi nous avons conçu WARAH pour digitaliser ce quotidien. Sa promesse&nbsp;: transformer une activité locative artisanale et anxiogène en une gestion professionnelle, transparente et sereine, en couvrant l'intégralité du cycle de vie d'un bien immobilier&nbsp;— trouver un locataire, formaliser le bail, collecter les loyers via mobile money, générer automatiquement les quittances, alerter les cas d'impayés et disposer d'un tableau de bord centralisé&nbsp;— le tout pensé pour le contexte africain.</p>
           <a routerLink="/auth/register" class="hist-btn">Rejoindre WARAH</a>
         </div>
         <div class="hist-stats">
           <!-- Carte monde — diaspora internationale -->
-          <div class="hs-world-wrap">
+          <div class="hs-world-wrap" data-aos="fade-left">
             <img src="/assets/c6b2b9b4149494be6317341b2e668d13.jpg.jpeg" alt="Présence mondiale WARAH" class="hs-world-img">
-            <div class="hs-world-legend">
-              <span class="hs-world-dot hs-wd-active"></span>Lomé — siège
-              <span class="hs-world-dot hs-wd-diaspora" style="margin-left:10px"></span>Diaspora connectée
+            <div class="hs-world-overlay"></div>
+            <div class="hs-world-body">
+              <span class="hs-world-caption">Propriétaires connectés depuis</span>
+              <div class="hs-world-chips">
+                <span class="hs-chip hs-chip-lome">★ Lomé</span>
+                <span class="hs-chip">Paris</span>
+                <span class="hs-chip">Montréal</span>
+                <span class="hs-chip">New York</span>
+                <span class="hs-chip">Guangzhou</span>
+              </div>
             </div>
           </div>
-          <div class="hs-card"><span class="hs-n">100%</span><span class="hs-l">Paiements mobile money</span><p class="hs-p">T-Money & Flooz intégrés nativement</p></div>
-          <div class="hs-card hs-card-dark"><span class="hs-n">3 rôles</span><span class="hs-l">Une plateforme unifiée</span><p class="hs-p">Propriétaire, gestionnaire immobilier et locataire</p></div>
-          <div class="hs-card"><span class="hs-n">0 papier</span><span class="hs-l">Tout digitalisé</span><p class="hs-p">Quittances, baux et rapports en PDF auto</p></div>
-          <div class="hs-card hs-card-gold"><span class="hs-n">Togo → Afrique</span><span class="hs-l">Vision continentale</span><p class="hs-p">Lancé à Lomé, vocation africaine</p></div>
+          <div class="hs-card" data-aos="fade-left" data-aos-delay="80"><span class="hs-n">100%</span><span class="hs-l">Paiements mobile money</span><p class="hs-p">T-Money & Flooz intégrés nativement</p></div>
+          <div class="hs-card hs-card-dark" data-aos="fade-left" data-aos-delay="160"><span class="hs-n">3 rôles</span><span class="hs-l">Une plateforme unifiée</span><p class="hs-p">Propriétaire, gestionnaire immobilier et locataire</p></div>
+          <div class="hs-card" data-aos="fade-left" data-aos-delay="240"><span class="hs-n">0 papier</span><span class="hs-l">Tout digitalisé</span><p class="hs-p">Quittances, baux et rapports en PDF auto</p></div>
+          <div class="hs-card hs-card-gold" data-aos="fade-left" data-aos-delay="320"><span class="hs-n">Togo → Afrique</span><span class="hs-l">Vision continentale</span><p class="hs-p">Lancé à Lomé, vocation africaine</p></div>
         </div>
       </div>
     </div>
@@ -126,7 +142,7 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
   <!-- ── CARTE AFRIQUE (ECharts) ── -->
   <section class="carte-section">
     <div class="carte-inner">
-      <div class="carte-text">
+      <div class="carte-text" data-aos="fade-right">
         <span class="sec-chip sec-chip-light">› zoom sur</span>
         <h2 class="carte-title">NOTRE PRÉSENCE<br>EN AFRIQUE</h2>
         <p class="carte-sub">Lancée depuis Lomé, WARAH ambitionne de connecter les marchés immobiliers du continent. Nos routes digitales relient déjà les grandes métropoles africaines.</p>
@@ -139,7 +155,7 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
         </div>
       </div>
       <div class="carte-map">
-        <div class="africa-map-wrap">
+        <div class="africa-map-wrap" data-aos="fade-left">
           <img src="/assets/280752-P61K2Q-532.jpg" alt="Carte de l'Afrique — présence WARAH" class="africa-img">
           <!-- Overlay SVG : routes animées entre les villes -->
           <svg class="africa-routes" viewBox="0 0 100 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
@@ -209,28 +225,28 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
   <!-- ── VALEURS ── -->
   <section class="valeurs-section">
     <div class="sec-wrap">
-      <div class="val-head">
+      <div class="val-head" data-aos="fade-down">
         <span class="sec-chip">› nos engagements</span>
         <h2 class="sec-title">Ce qui nous guide</h2>
       </div>
       <div class="val-grid">
-        <div class="val-card">
-          <div class="val-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#0F4C81" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="val-card" data-aos="fade-up">
+          <div class="val-icon val-icon-navy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
           <h3 class="val-t">Confiance</h3>
           <p class="val-p">Chaque transaction est tracée, chaque quittance authentifiée. La transparence comme fondement.</p>
         </div>
-        <div class="val-card">
-          <div class="val-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#0F4C81" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div>
+        <div class="val-card" data-aos="fade-up" data-aos-delay="100">
+          <div class="val-icon val-icon-gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div>
           <h3 class="val-t">Accessibilité</h3>
           <p class="val-p">Conçu pour fonctionner sur réseau 3G, pour tous les niveaux de maîtrise numérique.</p>
         </div>
-        <div class="val-card">
-          <div class="val-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#0F4C81" stroke-width="2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <div class="val-card" data-aos="fade-up" data-aos-delay="200">
+          <div class="val-icon val-icon-emerald"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
           <h3 class="val-t">Efficacité</h3>
           <p class="val-p">Ce qui prenait des heures — relances, quittances, rapports — se fait en quelques secondes.</p>
         </div>
-        <div class="val-card">
-          <div class="val-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#0F4C81" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+        <div class="val-card" data-aos="fade-up" data-aos-delay="300">
+          <div class="val-icon val-icon-terracotta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
           <h3 class="val-t">Communauté</h3>
           <p class="val-p">Un écosystème qui connecte propriétaires, gestionnaires immobiliers et locataires dans une relation plus équilibrée.</p>
         </div>
@@ -241,7 +257,7 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
   <!-- ── CTA ── -->
   <section class="cta-section">
     <div class="sec-wrap">
-      <div class="cta-inner">
+      <div class="cta-inner" data-aos="fade-down">
         <h2 class="cta-title">Prêt à simplifier votre gestion immobilière ?</h2>
         <p class="cta-sub">Rejoignez les propriétaires et gestionnaires immobiliers qui font confiance à WARAH.</p>
         <div class="cta-btns">
@@ -261,40 +277,30 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     .page { font-family: 'Inter', system-ui, sans-serif; color: #1a2940; overflow-x: hidden; }
 
-    /* ── NAVBAR ── */
-    .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: white; box-shadow: 0 2px 16px rgba(0,0,0,0.08); transition: box-shadow .3s; }
-    .nav-solid { box-shadow: 0 4px 28px rgba(0,0,0,0.13); }
-    .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 80px; display: flex; align-items: center; gap: 32px; }
-    .nav-logo { display: flex; align-items: center; text-decoration: none; }
-    .logo-img { height: 54px; }
-    .nav-links { display: flex; gap: 28px; list-style: none; padding: 0; margin: 0; flex: 1; }
-    .nl { color: #0A2650; text-decoration: none; font-size: .9rem; font-weight: 500; transition: color .2s; padding-bottom: 2px; position: relative; }
-    .nl::after { content: attr(data-text); display: block; height: 0; overflow: hidden; font-weight: 700; visibility: hidden; pointer-events: none; }
-    .nl:hover { color: #C9982E; }
-    .nl-active { color: #0F4C81; font-weight: 700; border-bottom: 2px solid #C9982E; }
-    .nav-cta { display: flex; gap: 10px; align-items: center; }
-    .btn-ghost { color: #0A2650; padding: 7px 18px; border-radius: 6px; text-decoration: none; font-size: .85rem; font-weight: 500; transition: background .2s; }
-    .btn-ghost:hover { background: rgba(10,38,80,0.07); }
-    .btn-nav-primary { background: #0F4C81; color: white; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-size: .85rem; font-weight: 600; transition: background .2s; }
-    .btn-nav-primary:hover { background: #0A2650; }
-    .hamburger { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
-    .hamburger span { display: block; width: 22px; height: 2px; background: #0A2650; border-radius: 2px; }
-    .m-menu { position: absolute; top: 80px; left: 0; right: 0; background: white; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #E5E7EB; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
-    .mm-link { color: #374151; text-decoration: none; font-size: 1rem; padding: 10px 0; border-bottom: 1px solid #F3F4F6; display: block; }
-    .mm-cta { margin-top: 10px; background: #C9982E; color: white; text-align: center; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: 600; }
 
     /* ── HERO ── */
-    .hero { min-height: 520px; position: relative; display: flex; align-items: center; overflow: hidden; }
-    .hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
-    .hero-bg { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(8,30,65,0.88) 0%, rgba(10,38,80,0.80) 50%, rgba(15,76,129,0.72) 100%); }
-    .hero-inner { position: relative; max-width: 800px; margin: 0 auto; padding: 120px 24px 80px; text-align: center; }
-    .hero-eyebrow { display: inline-block; background: rgba(201,152,46,.15); border: 1px solid rgba(201,152,46,.4); color: #C9982E; font-size: .8rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 6px 16px; border-radius: 20px; margin-bottom: 24px; }
-    .hero-title { color: white; font-size: clamp(2rem,5vw,3.2rem); font-weight: 800; line-height: 1.15; margin-bottom: 20px; text-wrap: balance; }
-    .hero-sub { color: rgba(255,255,255,.75); font-size: 1.05rem; line-height: 1.7; max-width: 600px; margin: 0 auto 40px; }
-    .hero-stats { display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap; }
+    .hero { position: relative; min-height: 560px; display: flex; flex-direction: column; overflow: hidden; }
+    .hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+    .hero-ov { position: absolute; inset: 0; background: rgba(6,12,24,0.42); }
+    .hero-content {
+      position: relative; z-index: 2; flex: 1;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+      max-width: 900px; width: 100%; margin: 0 auto; padding: 60px 32px; text-align: center;
+    }
+    .hero-eyebrow { display: inline-block; background: rgba(201,152,46,.18); border: 1px solid rgba(201,152,46,.45); color: #E0B655; font-size: .8rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 6px 16px; border-radius: 20px; }
+    .hero-title {
+      font-size: clamp(32px, 4.6vw, 54px); font-weight: 800; color: white; line-height: 1.18; margin: 0;
+      letter-spacing: -.01em; text-shadow: 0 2px 24px rgba(0,0,0,0.35);
+    }
+    .hero-title-accent { color: #E0B655; }
+    .hero-sub { color: rgba(255,255,255,.82); font-size: 1.02rem; line-height: 1.7; max-width: 620px; margin: 0; }
+    .hero-cta { display: inline-flex; align-items: center; gap: 8px; background: #C9982E; color: white; font-size: 14.5px; font-weight: 700; padding: 14px 26px; border-radius: 999px; text-decoration: none; transition: background .2s, transform .15s; margin-top: 6px; }
+    .hero-cta:hover { background: #B8861F; transform: translateY(-1px); }
+    .hero-cta svg { width: 16px; height: 16px; }
+    .hero-stats { display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap; margin-top: 20px; }
     .h-stat { text-align: center; }
-    .h-stat-n { display: block; color: #C9982E; font-size: 1.4rem; font-weight: 700; }
-    .h-stat-l { display: block; color: rgba(255,255,255,.6); font-size: .8rem; margin-top: 2px; }
+    .h-stat-n { display: block; color: #E0B655; font-size: 1.4rem; font-weight: 700; }
+    .h-stat-l { display: block; color: rgba(255,255,255,.65); font-size: .8rem; margin-top: 2px; }
     .h-stat-sep { width: 1px; height: 36px; background: rgba(255,255,255,.2); }
 
     /* ── UTILS ── */
@@ -302,6 +308,23 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
     .sec-chip { font-size: .75rem; font-weight: 600; color: #C9982E; text-transform: uppercase; letter-spacing: .08em; }
     .sec-title { font-size: clamp(1.6rem,3vw,2.2rem); font-weight: 800; color: #0A2650; text-wrap: balance; }
     .sec-title-sm { font-size: 1.5rem; font-weight: 800; color: #0A2650; letter-spacing: .04em; }
+
+    /* ── CE QUI NOUS DÉFINIT ── */
+    .definit-section { padding: 88px 0 96px; background: #fff; }
+    .definit-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 22px; }
+    .definit-card { border-radius: 18px; padding: 28px 26px; border: 1.5px solid transparent; }
+    .definit-card-navy { background: #EAF1F8; border-color: rgba(15,76,129,.15); }
+    .definit-card-gold { background: #FBF3E3; border-color: rgba(201,152,46,.22); }
+    .definit-card-emerald { background: #E9F5F0; border-color: rgba(31,122,92,.2); }
+    .definit-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+    .definit-icon { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; }
+    .definit-icon svg { width: 22px; height: 22px; }
+    .definit-card-navy .definit-icon { background: #0F4C81; }
+    .definit-card-gold .definit-icon { background: #C9982E; }
+    .definit-card-emerald .definit-icon { background: #1F7A5C; }
+    .definit-num { font-size: 2.2rem; font-weight: 800; opacity: .18; color: #0A2650; line-height: 1; }
+    .definit-title { font-size: 1.05rem; font-weight: 800; color: #0A2650; margin-bottom: 10px; }
+    .definit-p { font-size: .88rem; color: #5a6a7e; line-height: 1.7; }
 
     /* ── PROFILS ── */
     .profils-section { padding: 80px 0; background: #f8f9fc; }
@@ -331,10 +354,14 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
     .hist-btn { display: inline-block; margin-top: 8px; background: #0F4C81; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: .9rem; transition: background .2s; width: fit-content; }
     .hist-btn:hover { background: #0A2650; }
     .hist-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .hs-world-wrap { grid-column: 1 / -1; background: #f0f4f9; border-radius: 14px; overflow: hidden; }
-    .hs-world-img { width: 100%; height: 140px; object-fit: cover; object-position: center; display: block; filter: opacity(0.7); }
-    .hs-world-legend { display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 11px; font-weight: 600; color: #6B7280; }
-    .hs-world-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .hs-world-wrap { grid-column: 1 / -1; position: relative; background: #0A2650; border-radius: 14px; overflow: hidden; }
+    .hs-world-img { width: 100%; height: 150px; object-fit: cover; object-position: center; display: block; filter: invert(1) opacity(0.22); }
+    .hs-world-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 0%, rgba(10,38,80,0.85) 75%); }
+    .hs-world-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 18px 16px; }
+    .hs-world-caption { display: block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 8px; }
+    .hs-world-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .hs-chip { font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); padding: 4px 10px; border-radius: 20px; }
+    .hs-chip-lome { background: rgba(201,152,46,0.22); border-color: rgba(201,152,46,0.5); color: #E0B655; font-weight: 800; }
     .hs-wd-active { background: #C9982E; }
     .hs-wd-diaspora { background: #0F4C81; }
     .hs-card { background: #f0f4f9; border-radius: 14px; padding: 22px 20px; }
@@ -407,8 +434,12 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
     .val-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; }
     .val-card { background: white; border: 1.5px solid #e8ecf2; border-radius: 16px; padding: 28px 22px; transition: transform .2s,box-shadow .2s; }
     .val-card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(15,76,129,.1); }
-    .val-icon { width: 48px; height: 48px; background: rgba(15,76,129,.08); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+    .val-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
     .val-icon svg { width: 24px; height: 24px; }
+    .val-icon-navy { background: rgba(15,76,129,.1); color: #0F4C81; }
+    .val-icon-gold { background: rgba(201,152,46,.14); color: #A87D22; }
+    .val-icon-emerald { background: rgba(31,122,92,.12); color: #1F7A5C; }
+    .val-icon-terracotta { background: rgba(181,86,58,.12); color: #B5563A; }
     .val-t { font-size: 1rem; font-weight: 700; color: #0A2650; margin-bottom: 8px; }
     .val-p { font-size: .85rem; color: #5a6a7e; line-height: 1.65; }
 
@@ -425,36 +456,24 @@ import { PublicFooterComponent } from '../../../../shared/components/public-foot
 
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
-      .nav-links, .nav-cta { display: none; }
-      .hamburger { display: flex; margin-left: auto; }
       .profils-grid, .hist-grid, .carte-inner { grid-template-columns: 1fr; }
-      .val-grid { grid-template-columns: 1fr 1fr; }
+      .val-grid, .definit-grid { grid-template-columns: 1fr 1fr; }
       .h-stat-sep { display: none; }
+      .hero { min-height: 460px; }
+      .hero-content { padding: 40px 20px; gap: 16px; }
       .africa-map-wrap { max-width: 420px; margin: 0 auto; }
       .c-lbl { font-size: 7.5px; }
     }
     @media (max-width: 600px) {
-      .val-grid, .hist-stats { grid-template-columns: 1fr; }
+      .val-grid, .hist-stats, .definit-grid { grid-template-columns: 1fr; }
     }
   `]
 })
-export class AProposComponent implements OnInit, OnDestroy {
+export class AProposComponent implements AfterViewInit {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
-  private scrollFn?: () => void;
 
-  navScrolled = signal(false);
-  menuOpen   = signal(false);
-
-  ngOnInit(): void {
-    if (this.isBrowser) {
-      this.scrollFn = () => this.navScrolled.set(window.scrollY > 40);
-      window.addEventListener('scroll', this.scrollFn, { passive: true });
-    }
-  }
-
-  ngOnDestroy(): void {
-    if (this.isBrowser && this.scrollFn) {
-      window.removeEventListener('scroll', this.scrollFn);
-    }
+  ngAfterViewInit(): void {
+    if (!this.isBrowser) return;
+    AOS.init({ duration: 700, easing: 'ease-out-cubic', once: true, offset: 60 });
   }
 }

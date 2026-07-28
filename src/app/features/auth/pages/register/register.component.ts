@@ -1,11 +1,51 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, signal } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, computed, signal } from '@angular/core';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../../../core/services/auth.service';
 
 type Role = 'OWNER' | 'MANAGER';
 type Step = 'role' | 'info' | 'cni' | 'success';
+
+// Longueur attendue du numéro national (sans l'indicatif) par code pays ISO.
+// Référence : plans de numérotation nationaux (UIT-T). Ajustée en priorité pour
+// le Togo et ses voisins ouest-africains, cœur du marché WARAH.
+const PHONE_DIGIT_LENGTHS: Record<string, number> = {
+  // Afrique subsaharienne
+  TG: 8, BJ: 8, CI: 10, GH: 9, SN: 9, BF: 8, ML: 8, GN: 9, GW: 7, GQ: 9,
+  NE: 8, NG: 10, CM: 9, TD: 8, CF: 8, GA: 8, CG: 9, CD: 9, AO: 9, ST: 7,
+  CV: 7, GM: 7, MR: 8, SL: 8, LR: 8, MU: 8, SC: 7, KM: 7, MG: 9, RW: 9,
+  BI: 8, TZ: 9, KE: 9, UG: 9, ET: 9, SO: 8, DJ: 8, ER: 7, MZ: 9, ZM: 9,
+  ZW: 9, MW: 9, BW: 8, NA: 9, SZ: 8, LS: 8, ZA: 9,
+  // Afrique du Nord
+  EG: 10, MA: 9, DZ: 9, TN: 8, LY: 9, SD: 9, SS: 9,
+  // Europe
+  FR: 9, BE: 9, CH: 9, DE: 10, ES: 9, GB: 10, IT: 10, PT: 9, NL: 9,
+  LU: 9, IE: 9, IS: 7, FI: 9, SE: 9, NO: 8, DK: 8, PL: 9, AT: 10,
+  CZ: 9, SK: 9, HU: 9, RO: 9, BG: 9, GR: 10, CY: 8, MT: 8, HR: 9,
+  SI: 8, BA: 8, RS: 9, ME: 8, XK: 8, MK: 8, AL: 9, UA: 9, BY: 9,
+  LT: 8, LV: 8, EE: 8, MD: 8, AM: 8, AD: 6, MC: 8, SM: 10, LI: 7, GI: 8, RU: 10,
+  // Moyen-Orient
+  AE: 9, SA: 9, QA: 8, KW: 8, BH: 8, OM: 8, YE: 9, IQ: 10, SY: 9,
+  LB: 8, JO: 9, IL: 9, PS: 9, TR: 10, IR: 10,
+  // Asie centrale
+  AZ: 9, GE: 9, TJ: 9, TM: 8, KG: 9, UZ: 9, KZ: 10, AF: 9,
+  // Asie du Sud
+  IN: 10, PK: 10, BD: 10, LK: 9, NP: 10, BT: 8, MV: 7,
+  // Asie de l'Est
+  CN: 11, JP: 10, KR: 10, KP: 10, TW: 9, HK: 8, MO: 8, MN: 8,
+  // Asie du Sud-Est
+  TH: 9, VN: 9, KH: 9, LA: 10, MM: 9, MY: 9, SG: 8, ID: 10, PH: 10, TL: 8, BN: 7,
+  // Océanie
+  AU: 9, NZ: 9, PG: 8, FJ: 7, SB: 7, VU: 7, TO: 7, WS: 7, KI: 5, NR: 7,
+  FM: 7, MH: 7, PW: 7, TV: 6,
+  // Amériques du Nord & Caraïbes (indicatifs +1XXX incluent déjà le code régional)
+  BS: 7, BB: 7, AI: 7, AG: 7, VI: 7, KY: 7, BM: 7, GD: 7, TC: 7, MS: 7,
+  LC: 7, DM: 7, VC: 7, DO: 7, TT: 7, KN: 7, JM: 7, US: 10,
+  MX: 10, CU: 8, HT: 8, BZ: 7, GT: 8, SV: 8, HN: 8, NI: 8, CR: 8, PA: 8,
+  // Amériques du Sud
+  BR: 11, AR: 10, CL: 9, CO: 10, VE: 10, PE: 9, EC: 9, BO: 8, PY: 9, UY: 8, GY: 7, SR: 7,
+};
 
 @Component({
   selector: 'app-register',
@@ -17,14 +57,17 @@ type Step = 'role' | 'info' | 'cni' | 'success';
       <!-- Panneau gauche -->
       <div class="left-panel">
         <div class="left-content">
-          <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo">
+          <a routerLink="/" class="lp-logo">
+            <img src="/assets/warah-icon.png" alt="" class="lp-logo-icon">
+            WARAH
+          </a>
           <h1>L'immobilier togolais<br>dans votre poche</h1>
-          <div class="features">
-            <div class="feature"><span class="dot"></span>Gérez vos biens à distance</div>
-            <div class="feature"><span class="dot"></span>Encaissez via T-Money & Flooz</div>
-            <div class="feature"><span class="dot"></span>Statistiques en temps réel</div>
-            <div class="feature"><span class="dot"></span>Vérification CNI sécurisée</div>
-          </div>
+          <ul class="features">
+            <li>Gérez vos biens à distance</li>
+            <li>Encaissez via T-Money &amp; Flooz</li>
+            <li>Statistiques en temps réel</li>
+            <li>Vérification CNI sécurisée</li>
+          </ul>
           <!-- Indicateur d'étapes -->
           <div class="steps-indicator">
             <div class="step-item" [class.active]="step() === 'role'" [class.done]="stepIndex() > 0">
@@ -116,26 +159,50 @@ type Step = 'role' | 'info' | 'cni' | 'success';
                   }
                 </div>
 
-                <!-- Téléphone avec drapeau auto-détecté -->
+                <!-- Téléphone avec sélecteur de pays -->
                 <div class="field">
                   <label>Téléphone *</label>
-                  <div class="phone-wrap">
-                    <span class="phone-prefix">
+                  <div class="phone-wrap" [class.open]="showCountryPicker()">
+                    <button type="button" class="phone-prefix" aria-haspopup="listbox" [attr.aria-expanded]="showCountryPicker()"
+                      (click)="toggleCountryPicker($event)">
                       @if (detectedCountry()) {
                         <img [src]="'https://flagcdn.com/w40/' + detectedCountry()!.country.toLowerCase() + '.png'"
-                             [alt]="detectedCountry()!.name" class="flag-img">
+                             [alt]="detectedCountry()!.name" class="flag-img" [title]="detectedCountry()!.name + ' ' + detectedCountry()!.code">
                       } @else {
-                        <svg width="20" height="20" fill="none" stroke="#9ca3af" stroke-width="1.8" viewBox="0 0 24 24">
+                        <svg width="18" height="18" fill="none" stroke="#9ca3af" stroke-width="1.8" viewBox="0 0 24 24">
                           <circle cx="12" cy="12" r="10"/>
                           <line x1="2" y1="12" x2="22" y2="12"/>
                           <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/>
                         </svg>
                       }
-                    </span>
+                      <svg class="chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4.5l3 3 3-3"/></svg>
+                    </button>
                     <input formControlName="phone" type="tel" placeholder="+228 90 12 34 56"
-                      class="phone-input" (input)="onPhoneInput()">
+                      class="phone-input" (input)="onPhoneInput()" (focus)="showCountryPicker.set(false)">
+
+                    @if (showCountryPicker()) {
+                      <div class="country-dropdown" role="listbox">
+                        <input type="text" class="country-search" placeholder="Rechercher un pays…"
+                          [value]="countrySearch()" (input)="countrySearch.set($any($event.target).value)" autofocus>
+                        <div class="country-list">
+                          @for (p of filteredPrefixes(); track p.country) {
+                            <button type="button" class="country-item" [class.active]="detectedCountry()?.country === p.country" (click)="selectCountry(p)">
+                              <img [src]="'https://flagcdn.com/w40/' + p.country.toLowerCase() + '.png'" [alt]="p.name" class="flag-img">
+                              <span class="country-name">{{ p.name }}</span>
+                              <span class="country-code">{{ p.code }}</span>
+                            </button>
+                          } @empty {
+                            <div class="country-empty">Aucun pays trouvé</div>
+                          }
+                        </div>
+                      </div>
+                    }
                   </div>
-                  @if (infoForm.get('phone')?.touched && infoForm.get('phone')?.invalid) {
+                  @if (infoForm.get('phone')?.touched && infoForm.get('phone')?.errors?.['phoneLength']) {
+                    <span class="error">
+                      {{ infoForm.get('phone')?.errors?.['phoneLength']?.country }} : le numéro doit comporter {{ infoForm.get('phone')?.errors?.['phoneLength']?.expected }} chiffres après l'indicatif (actuellement {{ infoForm.get('phone')?.errors?.['phoneLength']?.actual }})
+                    </span>
+                  } @else if (infoForm.get('phone')?.touched && infoForm.get('phone')?.invalid) {
                     <span class="error">Numéro de téléphone invalide (ex : +22890123456)</span>
                   }
                 </div>
@@ -173,11 +240,11 @@ type Step = 'role' | 'info' | 'cni' | 'success';
                   <input #rectInput type="file" accept="image/jpeg,image/png,image/webp" (change)="onFile($event, 'recto')" style="display:none">
                   @if (cniRecto) {
                     <div class="file-preview">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                      <span class="file-preview-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
                       <span>{{ cniRecto.name }}</span>
                     </div>
                   } @else {
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    <span class="upload-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg></span>
                     <strong>CNI Recto</strong>
                     <span>Cliquer pour sélectionner</span>
                   }
@@ -187,11 +254,11 @@ type Step = 'role' | 'info' | 'cni' | 'success';
                   <input #versoInput type="file" accept="image/jpeg,image/png,image/webp" (change)="onFile($event, 'verso')" style="display:none">
                   @if (cniVerso) {
                     <div class="file-preview">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                      <span class="file-preview-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
                       <span>{{ cniVerso.name }}</span>
                     </div>
                   } @else {
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    <span class="upload-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg></span>
                     <strong>CNI Verso</strong>
                     <span>Cliquer pour sélectionner</span>
                   }
@@ -224,8 +291,7 @@ type Step = 'role' | 'info' | 'cni' | 'success';
           @if (step() === 'success') {
             <div class="step-content success-content">
               <div class="success-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <path d="M9 12l2 2 4-4"/>
                 </svg>
               </div>
@@ -244,40 +310,39 @@ type Step = 'role' | 'info' | 'cni' | 'success';
     .register-page {
       display: flex;
       min-height: 100vh;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
     }
 
     /* Panneau gauche */
     .left-panel {
       width: 42%;
-      background: linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
       position: sticky;
       top: 0;
       height: 100vh;
+      background: #081E41;
+      display: flex;
+      align-items: center;
+      padding: 56px;
     }
     @media (max-width: 768px) { .left-panel { display: none; } }
 
-    .left-content { color: white; max-width: 360px; }
-    .logo { height: 64px; object-fit: contain; mix-blend-mode: lighten; margin-bottom: 2rem; }
-    .left-content h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.3; margin-bottom: 2rem; }
+    .left-content { max-width: 360px; }
+    .lp-logo { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; letter-spacing: .16em; color: white; text-decoration: none; margin-bottom: 48px; }
+    .lp-logo-icon { width: 26px; height: 26px; object-fit: contain; display: block; }
+    .left-content h1 { font-size: 1.6rem; font-weight: 600; line-height: 1.4; color: white; margin-bottom: 40px; }
 
-    .features { margin-bottom: 2.5rem; display: flex; flex-direction: column; gap: .75rem; }
-    .feature { display: flex; align-items: center; gap: .75rem; font-size: .95rem; opacity: .9; }
-    .dot { width: 8px; height: 8px; background: #C9982E; border-radius: 50%; flex-shrink: 0; }
+    .features { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-bottom: 48px; padding-left: 18px; border-left: 2px solid rgba(201,152,46,0.5); }
+    .features li { font-size: 13.5px; color: rgba(255,255,255,0.62); line-height: 1.6; }
 
     .steps-indicator { display: flex; align-items: center; gap: .5rem; }
-    .step-item { display: flex; align-items: center; gap: .5rem; font-size: .8rem; opacity: .5; }
-    .step-item.active { opacity: 1; }
-    .step-item.done { opacity: .7; }
-    .step-num { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,.5); border-radius: 50%;
-      display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; }
-    .step-item.active .step-num { border-color: #C9982E; background: #C9982E; }
-    .step-item.done .step-num { border-color: white; background: rgba(255,255,255,.2); }
-    .step-line { flex: 1; height: 1px; background: rgba(255,255,255,.2); }
+    .step-item { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: rgba(255,255,255,0.4); }
+    .step-item.active { color: white; }
+    .step-item.done { color: rgba(255,255,255,0.65); }
+    .step-num { width: 22px; height: 22px; border: 1.5px solid rgba(255,255,255,.35); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; flex-shrink: 0; }
+    .step-item.active .step-num { border-color: #C9982E; background: #C9982E; color: #081E41; }
+    .step-item.done .step-num { border-color: rgba(255,255,255,.6); }
+    .step-line { flex: 1; height: 1px; background: rgba(255,255,255,.15); }
 
     /* Panneau droit */
     .right-panel {
@@ -286,118 +351,143 @@ type Step = 'role' | 'info' | 'cni' | 'success';
       align-items: center;
       justify-content: center;
       padding: 2rem;
-      background: #f9fafb;
+      background: #FFFFFF;
       overflow-y: auto;
     }
 
-    .form-card {
-      background: white;
-      border-radius: 1.25rem;
-      box-shadow: 0 4px 24px rgba(0,0,0,.08);
-      padding: 2.5rem;
-      width: 100%;
-      max-width: 480px;
-    }
+    .form-card { width: 100%; max-width: 460px; }
 
-    .step-content { display: flex; flex-direction: column; gap: 1.25rem; }
-    .step-content h2 { font-size: 1.5rem; font-weight: 700; color: #111827; margin: 0; }
+    .step-content { display: flex; flex-direction: column; gap: 1.1rem; }
+    .step-content h2 { font-size: 1.5rem; font-weight: 700; color: #0A2650; margin: 0; }
     .subtitle { color: #6b7280; font-size: .9rem; margin: 0; }
 
-    .back-btn { background: none; border: none; color: #6b7280; cursor: pointer; font-size: .9rem;
+    .back-btn { background: none; border: none; color: #9CA3AF; cursor: pointer; font-size: .85rem;
       padding: 0; text-align: left; width: fit-content; }
-    .back-btn:hover { color: #0F4C81; }
+    .back-btn:hover { color: #0A2650; }
 
     /* Choix de rôle */
-    .role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .875rem; }
     .role-card {
-      border: 2px solid #e5e7eb; border-radius: .875rem; padding: 1.25rem;
+      border: 1.5px solid #E2E5EA; border-radius: 8px; padding: 1.25rem 1rem;
       display: flex; flex-direction: column; align-items: center; gap: .5rem;
-      cursor: pointer; background: white; transition: all .2s; text-align: center;
+      cursor: pointer; background: white; transition: border-color .15s; text-align: center;
     }
-    .role-card svg { width: 36px; height: 36px; color: #9ca3af; }
-    .role-card strong { color: #111827; font-size: .95rem; }
-    .role-card span { color: #6b7280; font-size: .8rem; line-height: 1.4; }
-    .role-card:hover { border-color: #0F4C81; }
-    .role-card.selected { border-color: #0F4C81; background: #f0f7ff; }
-    .role-card.selected svg { color: #0F4C81; }
+    .role-card svg { width: 26px; height: 26px; color: #9CA3AF; }
+    .role-card strong { color: #111827; font-size: .92rem; }
+    .role-card span { color: #6b7280; font-size: .78rem; line-height: 1.4; }
+    .role-card:hover { border-color: #0A2650; }
+    .role-card.selected { border-color: #0A2650; }
+    .role-card.selected svg { color: #0A2650; }
 
     /* Formulaire */
-    .form-fields { display: flex; flex-direction: column; gap: 1rem; }
-    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .field { display: flex; flex-direction: column; gap: .375rem; }
-    .field label { font-size: .85rem; font-weight: 500; color: #374151; }
+    .form-fields { display: flex; flex-direction: column; gap: 18px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .field { display: flex; flex-direction: column; gap: 8px; }
+    .field label { font-size: .82rem; font-weight: 600; color: #374151; }
     .field label small { font-weight: 400; color: #9ca3af; }
     .field input, .field select {
-      border: 1.5px solid #d1d5db; border-radius: .5rem; padding: .625rem .875rem;
-      font-size: .95rem; outline: none; transition: border-color .2s; width: 100%; box-sizing: border-box;
+      border: none; border-bottom: 1.5px solid #E2E5EA; border-radius: 0; padding: 10px 2px;
+      font-size: .95rem; outline: none; transition: border-color .15s; width: 100%; box-sizing: border-box;
+      background: transparent; font-family: inherit; color: #0A2650;
     }
-    .field input:focus, .field select:focus { border-color: #0F4C81; }
-    .error { color: #ef4444; font-size: .78rem; }
+    .field input:focus, .field select:focus { border-bottom-color: #0A2650; }
+    .error { color: #D64545; font-size: .78rem; }
 
     /* Upload CNI */
-    .cni-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .cni-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .875rem; }
     .upload-zone {
-      border: 2px dashed #d1d5db; border-radius: .875rem; padding: 1.5rem 1rem;
+      border: 1.5px dashed #D1D5DB; border-radius: 8px; padding: 1.25rem 1rem;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: .5rem; cursor: pointer; transition: all .2s; text-align: center; min-height: 140px;
+      gap: .4rem; cursor: pointer; transition: border-color .15s; text-align: center; min-height: 130px;
     }
-    .upload-zone svg { width: 32px; height: 32px; color: #9ca3af; }
-    .upload-zone strong { font-size: .9rem; color: #374151; }
-    .upload-zone span { font-size: .78rem; color: #9ca3af; }
-    .upload-zone:hover { border-color: #0F4C81; background: #f0f7ff; }
-    .upload-zone.has-file { border-color: #10b981; background: #f0fdf4; border-style: solid; }
+    .upload-ic { display: flex; margin-bottom: 2px; }
+    .upload-zone svg { width: 22px; height: 22px; color: #9CA3AF; }
+    .upload-zone strong { font-size: .88rem; color: #374151; }
+    .upload-zone span { font-size: .76rem; color: #9ca3af; }
+    .upload-zone:hover { border-color: #0A2650; }
+    .upload-zone.has-file { border-color: #1F7A5C; border-style: solid; }
     .file-preview { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
-    .file-preview svg { width: 28px; height: 28px; color: #10b981; }
-    .file-preview span { font-size: .78rem; color: #374151; word-break: break-all; }
+    .file-preview-ic { display: flex; }
+    .file-preview svg { width: 22px; height: 22px; color: #1F7A5C; }
+    .file-preview span { font-size: .76rem; color: #374151; word-break: break-all; }
 
     /* Bouton principal */
     .btn-primary {
-      background: #0F4C81; color: white; border: none; border-radius: .625rem;
-      padding: .75rem 1.5rem; font-size: .95rem; font-weight: 600; cursor: pointer;
+      background: #0A2650; color: white; border: none; border-radius: 6px;
+      padding: .85rem 1.5rem; font-size: .92rem; font-weight: 600; cursor: pointer;
       display: flex; align-items: center; justify-content: center; gap: .5rem;
-      width: 100%; transition: background .2s;
+      width: 100%; transition: background .15s;
     }
-    .btn-primary:hover:not(:disabled) { background: #0A2650; }
-    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-primary svg { width: 18px; height: 18px; }
+    .btn-primary:hover:not(:disabled) { background: #081E41; }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary svg { width: 16px; height: 16px; }
 
     .spinner { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     .login-link { text-align: center; font-size: .85rem; color: #6b7280; }
-    .login-link a { color: #0F4C81; font-weight: 600; text-decoration: none; }
+    .login-link a { color: #0A2650; font-weight: 600; text-decoration: none; }
     .login-link a:hover { text-decoration: underline; }
 
     .error-banner {
-      background: #fef2f2; border: 1px solid #fecaca; border-radius: .5rem;
-      padding: .75rem 1rem; color: #dc2626; font-size: .875rem;
+      background: #FDF1F1; border-left: 3px solid #D64545;
+      padding: .65rem .875rem; color: #A02929; font-size: .85rem;
     }
 
-    /* Champ téléphone avec drapeau */
+    /* Champ téléphone avec sélecteur de pays */
     .phone-wrap {
+      position: relative;
       display: flex; align-items: stretch;
-      border: 1.5px solid #d1d5db; border-radius: .5rem; overflow: hidden;
-      transition: border-color .2s;
+      border: none; border-bottom: 1.5px solid #E2E5EA;
+      transition: border-color .15s;
     }
-    .phone-wrap:focus-within { border-color: #0F4C81; }
+    .phone-wrap:focus-within, .phone-wrap.open { border-bottom-color: #0A2650; }
     .phone-prefix {
-      padding: 0 .75rem;
-      background: #f9fafb; border-right: 1.5px solid #e5e7eb;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; min-width: 52px;
+      background: none; border: none; cursor: pointer; font-family: inherit;
+      padding: 0 .5rem 0 0; margin-right: .5rem;
+      display: flex; align-items: center; gap: 5px;
+      flex-shrink: 0; border-right: 1px solid #E2E5EA;
     }
-    .flag-img { width: 26px; height: 20px; border-radius: 3px; object-fit: cover; display: block; }
+    .phone-prefix .chevron { color: #9CA3AF; transition: transform .15s; margin-left: 1px; }
+    .phone-wrap.open .phone-prefix .chevron { transform: rotate(180deg); }
+    .flag-img { width: 20px; height: 15px; border-radius: 2px; object-fit: cover; display: block; flex-shrink: 0; }
     .phone-input {
-      flex: 1; border: none; outline: none; padding: .625rem .75rem;
-      font-size: .95rem; background: transparent; min-width: 0;
+      flex: 1; border: none; outline: none; padding: 10px 2px;
+      font-size: .95rem; background: transparent; min-width: 0; color: #0A2650; font-family: inherit;
     }
+
+    .country-dropdown {
+      position: absolute; top: calc(100% + 8px); left: 0; z-index: 20;
+      width: 300px; max-width: 90vw;
+      background: white; border: 1px solid #E2E5EA; border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(10,38,80,0.14);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .country-search {
+      border: none; border-bottom: 1px solid #E2E5EA; outline: none;
+      padding: .7rem .9rem; font-size: .85rem; color: #0A2650; font-family: inherit;
+    }
+    .country-search::placeholder { color: #ADB3BC; }
+    .country-list { max-height: 260px; overflow-y: auto; padding: .35rem; }
+    .country-item {
+      width: 100%; display: flex; align-items: center; gap: 9px;
+      background: none; border: none; cursor: pointer; text-align: left;
+      padding: .5rem .55rem; border-radius: 6px; font-family: inherit;
+    }
+    .country-item:hover { background: #F5F7FA; }
+    .country-item.active { background: #EEF4FC; }
+    .country-name { flex: 1; font-size: .84rem; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .country-code { font-size: .82rem; color: #9CA3AF; flex-shrink: 0; }
+    .country-empty { padding: 1rem; text-align: center; font-size: .84rem; color: #9CA3AF; }
 
     /* Succès */
     .success-content { text-align: center; align-items: center; padding: 1rem 0; }
-    .success-icon svg { width: 64px; height: 64px; color: #10b981; }
-    .success-content h2 { font-size: 1.75rem; }
+    .success-icon { display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+    .success-icon svg { width: 40px; height: 40px; color: #1F7A5C; }
+    .success-content h2 { font-size: 1.5rem; }
     .success-content p { color: #6b7280; max-width: 340px; }
-    .info-note { background: #eff6ff; border-radius: .5rem; padding: .75rem; color: #1d4ed8 !important; font-size: .85rem !important; }
+    .info-note { background: #F5F6F8; border-left: 3px solid #0A2650; border-radius: 4px; padding: .7rem .9rem; color: #374151 !important; font-size: .82rem !important; }
   `],
 })
 export class RegisterComponent {
@@ -406,6 +496,8 @@ export class RegisterComponent {
   isLoading = signal(false);
   errorMessage = signal('');
   detectedCountry = signal<{ code: string; country: string; name: string; flag: string } | null>(null);
+  showCountryPicker = signal(false);
+  countrySearch = signal('');
 
   cniRecto: File | null = null;
   cniVerso: File | null = null;
@@ -631,6 +723,14 @@ export class RegisterComponent {
     { code: '+597',  country: 'SR', name: 'Suriname',               flag: '🇸🇷' },
   ];
 
+  filteredPrefixes = computed(() => {
+    const q = this.countrySearch().trim().toLowerCase();
+    if (!q) return this.phonePrefixes;
+    return this.phonePrefixes.filter(p =>
+      p.name.toLowerCase().includes(q) || p.code.includes(q) || p.country.toLowerCase().includes(q)
+    );
+  });
+
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
@@ -642,10 +742,37 @@ export class RegisterComponent {
       lastName:         ['', Validators.required],
       email:            ['', [Validators.required, Validators.email]],
       password:         ['', [Validators.required, Validators.minLength(6)]],
-      phone:            ['', [Validators.required, Validators.pattern(/^\+?\d{8,15}$/)]],
+      phone:            ['', [Validators.required, this.phoneLengthValidator()]],
       city:             ['', Validators.required],
       residenceCountry: [''],
     });
+  }
+
+  /**
+   * Valide que le numéro comporte le bon nombre de chiffres nationaux pour
+   * l'indicatif détecté (ex : 8 chiffres après +228 pour le Togo). Si aucun
+   * indicatif reconnu, retombe sur une plage générique 7-15 chiffres.
+   */
+  private phoneLengthValidator(): ValidatorFn {
+    return (control: AbstractControl): ValidationErrors | null => {
+      const raw = ((control.value || '') as string).trim();
+      if (!raw) return null; // Validators.required s'en charge déjà
+
+      const match = [...this.phonePrefixes]
+        .sort((a, b) => b.code.length - a.code.length)
+        .find(p => raw.startsWith(p.code));
+
+      if (!match) {
+        return /^\+?\d{7,15}$/.test(raw) ? null : { phonePattern: true };
+      }
+
+      const localDigits = raw.slice(match.code.length).replace(/\D/g, '');
+      const expected = PHONE_DIGIT_LENGTHS[match.country] ?? 8;
+      if (localDigits.length !== expected) {
+        return { phoneLength: { expected, actual: localDigits.length, country: match.name } };
+      }
+      return null;
+    };
   }
 
   stepIndex(): number {
@@ -668,6 +795,42 @@ export class RegisterComponent {
       this.infoForm.patchValue({ residenceCountry: match.country }, { emitEvent: false });
     }
     this.cdr.markForCheck();
+  }
+
+  toggleCountryPicker(event: Event): void {
+    event.stopPropagation();
+    this.showCountryPicker.update(v => !v);
+    this.countrySearch.set('');
+  }
+
+  selectCountry(p: { code: string; country: string; name: string; flag: string }): void {
+    const raw = ((this.infoForm.get('phone')!.value || '') as string).trim();
+    const prevMatch = this.detectedCountry();
+    const localPart = prevMatch && raw.startsWith(prevMatch.code)
+      ? raw.slice(prevMatch.code.length).trim()
+      : raw.replace(/^\+/, '').replace(/\D/g, '');
+    this.infoForm.patchValue({
+      phone: localPart ? `${p.code} ${localPart}` : `${p.code} `,
+      residenceCountry: p.country,
+    });
+    this.detectedCountry.set(p);
+    this.showCountryPicker.set(false);
+    this.countrySearch.set('');
+    this.cdr.markForCheck();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.showCountryPicker()) return;
+    const target = event.target as HTMLElement;
+    if (!target.closest('.phone-wrap')) {
+      this.showCountryPicker.set(false);
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    this.showCountryPicker.set(false);
   }
 
   goToInfo(): void {

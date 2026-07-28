@@ -1,10 +1,10 @@
 import { Routes } from '@angular/router';
-import { ProprietaireLayoutComponent } from '../../layouts/proprietaire-layout/proprietaire-layout.component';
+import { AppShellLayoutComponent } from '../../layouts/app-shell-layout/app-shell-layout.component';
 
 export const dashboardRoutes: Routes = [
   {
     path: '',
-    component: ProprietaireLayoutComponent,
+    component: AppShellLayoutComponent,
     children: [
       {
         path: '',
@@ -45,12 +45,7 @@ export const dashboardRoutes: Routes = [
       },
       {
         path: 'annonces',
-        children: [
-          { path: '', loadComponent: () => import('../annonces/pages/annonces-list/annonces-list.component').then(m => m.AnnoncesListComponent) },
-          { path: 'new', loadComponent: () => import('../annonces/pages/annonce-form/annonce-form.component').then(m => m.AnnonceFormComponent) },
-          { path: ':id', loadComponent: () => import('../annonces/pages/annonce-detail/annonce-detail.component').then(m => m.AnnonceDetailComponent) },
-          { path: ':id/edit', loadComponent: () => import('../annonces/pages/annonce-form/annonce-form.component').then(m => m.AnnonceFormComponent) }
-        ]
+        loadComponent: () => import('../annonces/pages/annonces-list/annonces-list.component').then(m => m.AnnoncesListComponent)
       },
       {
         path: 'abonnements',

@@ -6,6 +6,7 @@ import { LocatairesService, LocatairesFilters } from '../../services/locataires.
 import { Locataire } from '@core/models/locataire.model';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-locataires-list',
@@ -24,7 +25,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
       <div class="page-header">
         <div class="page-header-left">
           <div class="page-logo">
-            <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
+            <img src="/assets/warah-icon.png" alt="" class="logo-img">
           </div>
           <div class="page-divider"></div>
           <div>
@@ -32,7 +33,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
             <p class="page-sub">{{ locataires.length }} locataire{{ locataires.length !== 1 ? 's' : '' }}</p>
           </div>
         </div>
-        <button routerLink="/dashboard/locataires/nouveau" class="btn-primary page-btn">
+        <button [routerLink]="basePath + '/locataires/nouveau'" class="btn-primary page-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
           </svg>
@@ -69,8 +70,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
             <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" fill="none" stroke="#9ca3af" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="text" [(ngModel)]="recherche" (ngModelChange)="applyFilters()"
               placeholder="Rechercher un locataire…"
-              class="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border-0 bg-gray-50 focus:outline-none focus:ring-2 transition-all"
-              style="focus:ring-color:#0F4C81"/>
+              class="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border-0 bg-gray-50 focus:outline-none focus:ring-2 transition-all"/>
           </div>
           <div class="flex gap-1.5">
             @for (f of statusFilters; track f.val) {
@@ -155,7 +155,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
                   <div class="hidden md:flex col-span-2 justify-end gap-2">
                     <button (click)="viewLocataire(loc.id); $event.stopPropagation()"
                       class="action-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                      style="background:#EEF4FC;color:#0F4C81">
+                      style="background:var(--color-primary-50);color:var(--color-primary)">
                       Voir
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </button>
@@ -174,7 +174,7 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
     </div>
   `,
   styles: [`
-    .logo-img { height: 88px; width: auto; object-fit: contain; background: transparent !important; mix-blend-mode: multiply; }
+    .logo-img { height: 34px; width: auto; display: block; }
     .page-header { background: white; border-bottom: 1px solid #E5E7EB; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .page-header-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
     .page-divider { width: 1px; height: 32px; background: #E5E7EB; flex-shrink: 0; }
@@ -182,22 +182,22 @@ import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-
     .page-sub { font-size: 13px; color: #6B7280; margin-top: 1px; }
     .page-btn { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     .page-btn-short { display: none; }
-    .btn-primary { background: #0F4C81; color: white; border: none; border-radius: .625rem; padding: .625rem 1.25rem; font-weight: 600; cursor: pointer; font-size: .9rem; transition: background .2s; }
-    .btn-primary:hover { background: #0A2650; }
+    .btn-primary { background: var(--color-primary); color: white; border: none; border-radius: .625rem; padding: .625rem 1.25rem; font-weight: 600; cursor: pointer; font-size: .9rem; transition: background .2s; }
+    .btn-primary:hover { background: var(--color-primary-dark); }
     .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; padding:32px 24px 24px; }
     .kpi-card { background:#fff; border-radius:14px; padding:20px 24px; box-shadow:0 2px 12px rgba(10,38,80,.08); border:1px solid #E8EDF5; }
     .kpi-label { font-size:13px; color:#6B7280; margin-bottom:8px; font-weight:500; }
     .kpi-val { font-size:2.25rem; font-weight:800; line-height:1; }
     @media(max-width:768px){ .kpi-grid { grid-template-columns:repeat(2,1fr); gap:12px; padding:20px 16px 16px; } }
-    .ftab-on  { padding:6px 14px; border-radius:10px; font-size:12px; font-weight:700; background:#0F4C81; color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
+    .ftab-on  { padding:6px 14px; border-radius:10px; font-size:12px; font-weight:700; background:var(--color-primary); color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
     .ftab-off { padding:6px 14px; border-radius:10px; font-size:12px; font-weight:500; background:#F3F4F6; color:#6b7280; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
     .ftab-off:hover { background:#E5E7EB; color:#374151; }
     .row-item { transition:background .15s, box-shadow .15s; }
-    .row-item:hover { background:#EEF4FC !important; box-shadow:inset 3px 0 0 #0F4C81; }
+    .row-item:hover { background:var(--color-primary-50) !important; box-shadow:inset 3px 0 0 var(--color-primary); }
     .status-badge { transition:all .15s; }
     .bg-green-500 { animation:pulse-green 2s infinite; }
     @keyframes pulse-green { 0%,100%{opacity:1} 50%{opacity:.6} }
-    .action-btn:hover { background:#0F4C81 !important; color:#fff !important; }
+    .action-btn:hover { background:var(--color-primary) !important; color:#fff !important; }
     @media (max-width: 640px) {
       .page-header { padding: 12px 16px 12px 64px; }
       .page-logo { display: none; }
@@ -244,10 +244,15 @@ export class LocatairesListComponent implements OnInit {
     return (this.filters.statut ?? '') === val;
   }
 
+  basePath: string;
+
   constructor(
     private locatairesService: LocatairesService,
     private router: Router,
-  ) {}
+    private authService: AuthService,
+  ) {
+    this.basePath = this.authService.getWorkspacePrefix();
+  }
 
   ngOnInit(): void {
     this.loadLocataires();
@@ -307,10 +312,10 @@ export class LocatairesListComponent implements OnInit {
   }
 
   viewLocataire(id: string): void {
-    this.router.navigate(['/dashboard/locataires', id]);
+    this.router.navigate([this.basePath, 'locataires', id]);
   }
 
   navigateToNew(): void {
-    this.router.navigate(['/dashboard/locataires/nouveau']);
+    this.router.navigate([this.basePath, 'locataires', 'nouveau']);
   }
 }

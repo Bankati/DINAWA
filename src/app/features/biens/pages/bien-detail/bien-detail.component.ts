@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { BiensService } from '../../services/biens.service';
 import { AuthService } from '../../../../core/services/auth.service';
-import { AnnoncesService } from '../../../annonces/services/annonces.service';
 import { Bien, PropertyStatus, PROPERTY_TYPE_LABELS, PROPERTY_STATUS_LABELS } from '@core/models/bien.model';
 import { LokBadgeStatutComponent } from '../../../../shared/components/lok-badge-statut/lok-badge-statut.component';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
@@ -33,7 +32,7 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
       <div class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
-            <button routerLink="/dashboard/biens" class="p-2 text-gray-600 hover:text-primary transition-colors">
+            <button [routerLink]="basePath + '/biens'" class="p-2 text-gray-600 hover:text-primary transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
               </svg>
@@ -196,39 +195,18 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Actions rapides</h2>
                 <div class="space-y-2">
                   @if (bien.status === 'VACANT') {
-                    <!-- Publier en annonce -->
-                    @if (publishSuccess() || annonceDejaActive()) {
-                      <!-- Annonce active : état désactivé -->
-                      <div class="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold"
-                           style="background:#FEF9EC;border:1.5px solid #E8C56A;color:#A07820;cursor:default">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        {{ publishSuccess() ? 'Annonce publiée !' : 'Annonce déjà active' }}
-                      </div>
-                      <p class="text-xs mt-1.5 pl-1" style="color:#A07820">
-                        <a routerLink="/dashboard/annonces" class="underline font-semibold" style="color:#0F4C81">Voir mes annonces →</a>
-                      </p>
-                    } @else {
-                      <button (click)="publierAnnonce()"
-                        [disabled]="publishLoading()"
-                        class="btn-annonce w-full flex items-center justify-center gap-2.5">
-                        @if (publishLoading()) {
-                          <svg class="w-4 h-4 animate-spin flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                          </svg>
-                          Publication…
-                        } @else {
-                          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
-                          </svg>
-                          Publier en annonce
-                        }
-                      </button>
-                      @if (publishError() && !annonceDejaActive()) {
-                        <p class="text-xs text-red-600 mt-1.5 pl-1">{{ publishError() }}</p>
-                      }
-                    }
+                    <!-- Un bien vacant est automatiquement en annonce (voir /architect
+                         module Annonces) — plus d'action manuelle de publication. -->
+                    <div class="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold"
+                         style="background:#FEF9EC;border:1.5px solid #E8C56A;color:#A07820">
+                      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                      </svg>
+                      Annonce active
+                    </div>
+                    <p class="text-xs mt-1.5 pl-1" style="color:#A07820">
+                      <a [routerLink]="basePath + '/annonces'" class="underline font-semibold" style="color:var(--color-primary)">Voir mes annonces →</a>
+                    </p>
                     <!-- Inviter un locataire -->
                     <button (click)="showInviteModal = true" class="w-full btn-primary text-left flex items-center gap-2">
                       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -379,6 +357,7 @@ export class BienDetailComponent implements OnInit {
   showInviteModal = false;
   errorMessage = '';
   bienId = '';
+  basePath: string;
 
   // Invitation locataire
   inviteLoading = signal(false);
@@ -386,21 +365,16 @@ export class BienDetailComponent implements OnInit {
   inviteSuccess = signal(false);
   invite = { firstName: '', lastName: '', email: '', phone: '' };
 
-  // Publication annonce
-  publishLoading = signal(false);
-  publishError = signal('');
-  publishSuccess = signal(false);
-  annonceDejaActive = signal(false);
-
   readonly LABELS = PROPERTY_STATUS_LABELS;
 
   constructor(
     private biensService: BiensService,
     private authService: AuthService,
-    private annoncesService: AnnoncesService,
     private router: Router,
     private route: ActivatedRoute,
-  ) {}
+  ) {
+    this.basePath = this.authService.getWorkspacePrefix();
+  }
 
   ngOnInit(): void {
     this.bienId = this.route.snapshot.paramMap.get('id') ?? '';
@@ -428,14 +402,14 @@ export class BienDetailComponent implements OnInit {
   }
 
   editBien(): void {
-    this.router.navigate(['/dashboard/biens', this.bienId, 'edit']);
+    this.router.navigate([this.basePath, 'biens', this.bienId, 'edit']);
   }
 
   deleteBien(): void {
     this.biensService.deleteBien(this.bienId).subscribe({
       next: () => {
         this.showDeleteModal = false;
-        this.router.navigate(['/dashboard/biens']);
+        this.router.navigate([this.basePath, 'biens']);
       },
       error: (error: any) => {
         this.errorMessage = error.error?.message || 'Erreur lors de l\'archivage du bien';
@@ -474,27 +448,6 @@ export class BienDetailComponent implements OnInit {
       error: (err: any) => {
         this.inviteLoading.set(false);
         this.inviteError.set(err.error?.message || 'Erreur lors de l\'invitation.');
-      },
-    });
-  }
-
-  publierAnnonce(): void {
-    this.publishLoading.set(true);
-    this.publishError.set('');
-    this.annoncesService.publierBien(this.bienId).subscribe({
-      next: () => {
-        this.publishLoading.set(false);
-        this.publishSuccess.set(true);
-      },
-      error: (err: any) => {
-        this.publishLoading.set(false);
-        const msg: string = err.error?.message || '';
-        // 409 = annonce déjà active sur ce bien
-        if (err.status === 409 || msg.toLowerCase().includes('annonce active')) {
-          this.annonceDejaActive.set(true);
-        } else {
-          this.publishError.set(msg || 'Erreur lors de la publication.');
-        }
       },
     });
   }

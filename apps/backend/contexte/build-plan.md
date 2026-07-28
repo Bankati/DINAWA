@@ -193,43 +193,34 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 **Logique :**
 
-> **Révisé (`/architect` révision paiements, 2026-07-25)** — la création du bail n'est plus un
-> appel séparé : elle est fusionnée dans `POST /api/auth/invite/tenant` (unité 09), qui accepte
-> désormais aussi les champs de bail. `POST /api/leases` (création) **n'existe plus** — voir
-> `AuthService.inviteTenant()`. Le reste de cette unité (résiliation, dépôt de garantie,
-> génération d'échéancier) est inchangé et vit toujours dans `LeasesModule`.
-
-- Module `LeasesModule` — gestion du cycle de vie d'un bail déjà créé (résiliation, lecture de l'échéancier) ; `canActOnProperty()` reste l'autorité pour qui peut agir
-- ~~Endpoint `POST /api/leases` — création d'un bail liant un bien et un locataire~~ → fusionné dans `POST /api/auth/invite/tenant`, voir unité 09
-- Champs de bail (portés par `InviteTenantDto`) : `monthlyRent`, `monthlyCharges`, `paymentFrequency`, `startDate`, `securityDeposit` obligatoires
+- Module `LeasesModule` — création et gestion des baux ; le propriétaire du bien ou le gestionnaire mandaté (déterminé via `canActOnProperty()`) peut créer un bail
+- Endpoint `POST /api/leases` — création d'un bail liant un bien et un locataire
+- Champs obligatoires : `propertyId`, `tenantId`, `monthlyRent`, `monthlyCharges`, `paymentFrequency`, `startDate`, `securityDeposit`
 - Champ optionnel : `endDate` — si absent, le bail est considéré ouvert et le calendrier d'échéances est généré sur 12 mois roulants, prolongé automatiquement à mesure que le temps passe
-- À l'invitation du locataire (nouveau ou déjà connu de la plateforme), génération automatique des `PaymentScheduleEntry` sur la durée connue (`endDate` si fournie, sinon 12 mois glissants) selon la fréquence — fonction pure `buildScheduleEntries()` dans `src/modules/leases/schedule-builder.ts`, partagée avec `AuthService`
+- À la création du bail, génération automatique des `PaymentScheduleEntry` sur la durée connue (`endDate` si fournie, sinon 12 mois glissants) selon la fréquence
 - Calcul automatique du montant par échéance : `montant = (monthlyRent + monthlyCharges) × nombreDeMoisDansLaPeriode`
 - Le bien passe automatiquement à `OCCUPIED` à la création du bail
 - Endpoint `POST /api/leases/:id/terminate` — résilie le bail, libère le bien (`VACANT`), passe le `Lease` en statut `TERMINATED` ; les paiements passés restent intacts et les quittances passées restent générables à la volée
-- Endpoint `GET /api/leases/:id/schedule` — calendrier complet des échéances (accessible au locataire lui-même en plus des rôles habituels)
 - Suivi du dépôt de garantie : montant perçu, date, conditions de restitution stockées sur le bail
 
 ---
 
 ## Phase 4 — Paiements
 
-### 16 Modèle de paiements et générateur d'échéances — ✅ implémenté (2026-07-25)
+### 16 Modèle de paiements et générateur d'échéances
 
 **Logique :**
 
-- Modules `PaymentsModule` (saisie manuelle, historique, confirm/reject, quittance) et `PaymentDeclarationsModule` (déclaration locataire) — pas un seul `PaymentsModule` monolithique, voir unités 19-20
+- Module `PaymentsModule` — cœur fonctionnel de la plateforme
 - À chaque `PaymentScheduleEntry` peut correspondre 0 ou plusieurs `Payment` (paiement partiel possible)
-- Fonction pure `buildScheduleEntries()` (`src/modules/leases/schedule-builder.ts`, partagée avec `AuthService.inviteTenant()`, voir unité 15 révisée) — calcul des dates d'échéance, du montant attendu, des périodes couvertes selon la `PaymentFrequency` du bail
+- Service `PaymentSchedulerService` — calcul des dates d'échéance, du montant attendu, des périodes couvertes selon la `PaymentFrequency` du bail
 - Pour un bail trimestriel à 50 000 FCFA/mois, le service produit des échéances tous les 3 mois pour 150 000 FCFA, avec `periodStart` et `periodEnd` couvrant exactement les 3 mois
-- Le statut d'une échéance (`ScheduleEntryStatus`) est **recalculé et persisté à chaque écriture d'un `Payment`** (`PaymentsService` : `computeEntryStatus()`, `PENDING`/`PARTIAL`/`PAID` selon `paidAmount` vs `expectedAmount`) plutôt que dérivé à la volée en lecture — `OVERDUE` reste hors périmètre, réservé au cron de l'unité 25 (non construite)
-- Endpoint `GET /api/leases/:id/schedule` — renvoie le calendrier complet, accessible au locataire lui-même en plus des rôles habituels
+- Le statut d'une échéance est dérivé en temps réel : somme des `paidAmount` vs `expectedAmount`, et comparaison de la date du jour avec `dueDate + overdueGraceDays`
+- Endpoint `GET /api/leases/:id/schedule` — renvoie le calendrier complet avec statut de chaque échéance
 
-### 17 Intégration Cashpay — initialisation de paiement — ⏸️ reportée (2026-07-25)
+### 17 Intégration Cashpay — initialisation de paiement
 
-**Décision explicite du développeur** : Cashpay est mis de côté pour continuer le développement sans dépendre de cette intégration externe. Seuls les flows manuel (19) et déclaration locataire (20) sont construits pour l'instant — `PaymentMethod.TMONEY`/`FLOOZ` restent définis au schéma mais ne sont utilisables par aucun endpoint actuellement (`CASH`/`BANK_TRANSFER` uniquement). À reprendre tel quel le jour où l'intégration Cashpay est relancée — rien de construit depuis n'en dépend.
-
-**Logique (inchangée, non construite) :**
+**Logique :**
 
 - Service `CashpayService` (`src/modules/payments/cashpay.service.ts`) — wrapper sur l'API Cashpay
 - Endpoint `POST /api/payments/initiate` — body : `scheduleEntryId`, `paymentMethod` (TMONEY ou FLOOZ), `phone` du payeur
@@ -238,72 +229,80 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 - Gestion explicite des erreurs API : timeout, refus, indisponibilité — chaque cas a un code d'erreur métier propre
 - Logging détaillé de chaque appel pour le debug en cas de désaccord avec Cashpay
 
-### 18 Webhook Cashpay — confirmation et idempotence — ⏸️ reportée (2026-07-25, même décision que l'unité 17)
+### 18 Webhook Cashpay — confirmation et idempotence
 
-**Logique (inchangée, non construite) :**
+**Logique :**
 
 - Endpoint `POST /api/webhooks/cashpay` — public, signé
 - Vérification de la signature Cashpay (HMAC) avant tout traitement — rejet immédiat en cas de signature invalide avec log de sécurité
 - **Idempotence stricte** : vérification que `transactionId` n'a jamais été traité avant de modifier quoi que ce soit. Si déjà traité, réponse 200 immédiate sans effet de bord
 - Mise à jour du `Payment` correspondant : statut `PAID`, `paidAmount`, `paidAt`
 - Déclenchement asynchrone (via `EventEmitter2`) de : génération de la quittance PDF, notifications via `notifyUser()` au propriétaire et au locataire, mise à jour du tableau de bord
-- Règle critique : un `Payment` avec `source = CASHPAY_API` ne peut **jamais** être re-confirmé manuellement ni rejeté par un propriétaire/gestionnaire — le webhook est la source de vérité unique. Les endpoints de confirmation manuelle rejettent toute action sur ces paiements. **Déjà implémenté par anticipation** dans `PaymentsService.assertConfirmable()` (unité 20) — la garde existe même si aucun `Payment` `source = CASHPAY_API` ne peut encore être créé.
+- Règle critique : un `Payment` avec `source = CASHPAY_API` ne peut **jamais** être re-confirmé manuellement ni rejeté par un propriétaire/gestionnaire — le webhook est la source de vérité unique. Les endpoints de confirmation manuelle rejettent toute action sur ces paiements.
 - Réponse 2xx au webhook dans tous les cas où la signature est valide, même si le traitement métier échoue (relance par cron de réconciliation séparé)
 - Audit log complet de chaque webhook reçu avec payload brut
 
-### 19 Saisie manuelle par le propriétaire ou le gestionnaire — ✅ implémenté (2026-07-25)
+### 19 Saisie manuelle par le propriétaire ou le gestionnaire
 
 **Logique :**
 
 - Endpoint `POST /api/payments/manual` — réservé à celui qui peut agir sur le bien selon `canActOnProperty()` : propriétaire si pas de mandat actif, gestionnaire mandaté sinon
 - Initiée par le propriétaire/gestionnaire (pas le locataire) — il atteste avoir reçu le paiement et l'enregistre directement
-- Body : `scheduleEntryId`, `paidAmount`, `paidAt`, `paymentMethod` (CASH ou BANK_TRANSFER — restriction explicite, voir unité 17), `note` libre
+- Body : `scheduleEntryId`, `paidAmount`, `paidAt`, `paymentMethod` (CASH ou BANK_TRANSFER), `note` libre
 - Création directe d'un `Payment` en statut `PAID` avec `source = MANUAL_OWNER`, sans passer par `PENDING_CONFIRMATION`
 - Upload optionnel d'un justificatif (photo, scan) via `StorageService`, stocké dans `payment-proofs`
-- Traçabilité : qui a saisi (`recordedByUserId`), quand (`createdAt`) — toujours auditable
-- Émet l'événement `payment.confirmed` (voir unité 22) — déclenche quittance + notifications
+- Traçabilité : qui a saisi (userId), quand (createdAt), depuis quel rôle — toujours auditable
+- Déclenche immédiatement la génération de quittance et les notifications via `notifyUser()`
 
-### 20 Déclaration de paiement par le locataire — ✅ implémenté (2026-07-25)
+### 20 Déclaration de paiement par le locataire
 
 **Logique :**
 
 - Module `PaymentDeclarationsModule` — flow distinct de la saisie manuelle (19), initié par le locataire
-- Endpoint `POST /api/payment-declarations` — réservé au locataire connecté, sur son propre bail uniquement, body : `scheduleEntryId`, `declaredAmount`, `declaredAt`, `declaredMethod` (CASH ou BANK_TRANSFER), `note` libre
+- Endpoint `POST /api/payment-declarations` — réservé au locataire connecté, body : `scheduleEntryId`, `paidAmount`, `paidAt`, `paymentMethod` (CASH ou BANK_TRANSFER), `note` libre
 - Upload optionnel d'une photo justificative (preuve de paiement, capture de transaction) via `StorageService` dans `payment-proofs`
-- Création d'un `Payment` avec statut `PENDING_CONFIRMATION` et `source = TENANT_DECLARATION`, plus une `PaymentDeclaration` liée (audit de la déclaration d'origine, `editedAt` posé à chaque modification)
-- Notification immédiate via `notifyUser()` à celui qui peut agir sur le bien (`resolveResponsibleUserId()`, nouveau helper co-localisé avec `canActOnProperty()` — gestionnaire mandaté actif sinon propriétaire) : « X a déclaré avoir payé Y FCFA pour [bien] »
-- Endpoint `PATCH /api/payment-declarations/:id` — le locataire peut modifier sa déclaration tant qu'elle est en `PENDING_CONFIRMATION` (montant, date, méthode, note, **et justificatif** — nouvel upload remplace le précédent)
-- Endpoint `DELETE /api/payment-declarations/:id` — le locataire peut annuler sa déclaration tant qu'elle est en `PENDING_CONFIRMATION` (suppression du `Payment`, cascade sur `PaymentDeclaration`)
-- Endpoint `POST /api/payments/:id/confirm` — réservé au propriétaire/gestionnaire mandaté ; à la confirmation, le `Payment` passe à `PAID`, l'échéance recalculée, et l'événement `payment.confirmed` est émis (quittance + notifications aux deux parties). **Non construit** : upload d'une photo de preuve par le confirmateur avant confirmation (hors périmètre, non demandé)
-- Endpoint `POST /api/payments/:id/reject` — rejet avec motif obligatoire (`RejectPaymentDto.rejectionReason`) ; le `Payment` passe à `REJECTED`, le locataire est notifié via `notifyUser()` (nouveau template/événement `payment-rejected`, ajouté car absent du set existant). L'échéance n'a jamais été modifiée par une déclaration encore `PENDING_CONFIRMATION` (seule `confirm()` touche `paidAmount`) — pas de retour explicite à `PENDING` nécessaire
-- **Règle critique** : les endpoints `confirm` et `reject` rejettent toute action sur un `Payment` dont `source = CASHPAY_API` (`assertConfirmable()`) — garde posée par anticipation de l'unité 18
-- Cron quotidien `PaymentDeclarationRemindersTask` (`src/modules/payment-declarations/payment-declaration-reminders.task.ts`, `@Cron(CRON_PAYMENT_DECLARATION_REMINDERS)` = `0 8 * * *`, verrou `pg_try_advisory_lock`) — pour chaque déclaration en `PENDING_CONFIRMATION` depuis ≥ 3 jours, rappel via `notifyUser()` (réutilise l'événement `payment-declaration-pending`) ; second rappel à ≥ 7 jours ; anti-doublon via `PaymentDeclaration.reminder3SentAt`/`reminder7SentAt` (migration `20260725123519_payment_declaration_reminders`) ; aucune confirmation automatique
+- Création d'un `Payment` avec statut `PENDING_CONFIRMATION` et `source = TENANT_DECLARATION`
+- Notification immédiate via `notifyUser()` à celui qui peut agir sur le bien (propriétaire ou gestionnaire mandaté) : « X a déclaré avoir payé Y FCFA pour [bien] »
+- Endpoint `PATCH /api/payment-declarations/:id` — le locataire peut modifier sa déclaration tant qu'elle est en `PENDING_CONFIRMATION` (montant, date, justificatif)
+- Endpoint `DELETE /api/payment-declarations/:id` — le locataire peut annuler sa déclaration tant qu'elle est en `PENDING_CONFIRMATION`
+- Endpoint `POST /api/payments/:id/confirm` — réservé au propriétaire/gestionnaire mandaté ; il peut optionnellement uploader sa propre photo de preuve avant de confirmer ; à la confirmation, le `Payment` passe à `PAID` et l'événement `payment.confirmed` est émis (quittance + notifications aux deux parties)
+- Endpoint `POST /api/payments/:id/reject` — rejet avec motif obligatoire ; le `Payment` passe à `REJECTED`, le locataire est notifié via `notifyUser()`, l'échéance retombe en `PENDING` et peut être déclarée à nouveau
+- **Règle critique** : les endpoints `confirm` et `reject` rejettent toute action sur un `Payment` dont `source = CASHPAY_API` — les paiements API sont auto-confirmés par le webhook et ne sont jamais re-validables manuellement
+- Cron quotidien `@Cron('0 8 * * *')` — pour chaque déclaration en `PENDING_CONFIRMATION` depuis ≥ 3 jours, rappel automatique au propriétaire/gestionnaire via `notifyUser()` ; second rappel à ≥ 7 jours ; aucune confirmation automatique, l'action humaine reste requise
 
-### 21 Génération de quittance PDF à la volée — ✅ implémenté (2026-07-25)
+### 21 Génération de quittance PDF à la volée
 
 **Logique :**
 
 - Service `ReceiptPdfService` (`src/modules/receipts/receipt-pdf.service.ts`) — utilise PDFKit
-- **Aucune maquette client fournie à ce jour** — gabarit sobre construit (en-tête WARAH, propriétaire, locataire, bien, période, montant, date, mode, référence, source), à faire évoluer sans changer la signature dès qu'une maquette officielle arrive
-- Données injectées dans le template, toutes lues en direct depuis Prisma : nom du propriétaire, nom du locataire, adresse du bien, période couverte (`periodStart` à `periodEnd`), montant perçu, date et heure du paiement, numéro de transaction (`transactionId` ou `id` interne pour les paiements manuels/déclarés), mode de paiement, source
+- Le template du PDF suit strictement la maquette qui sera fournie par le client ; toute la mise en forme (logo, en-tête, mentions légales, pied de page) est intégrée à ce template
+- Données injectées dans le template, toutes lues en direct depuis Prisma : nom du propriétaire, nom du locataire, adresse du bien, période couverte (`periodStart` à `periodEnd`), montant perçu, date et heure du paiement, numéro de transaction (Cashpay ou interne pour les paiements manuels), mode de paiement, source (API, saisie propriétaire, déclaration locataire confirmée)
 - Pour les baux non mensuels, mention explicite : « Quittance de loyer — Période du [start] au [end] — Montant perçu : [montant] FCFA »
 - Le PDF est **généré à la volée à chaque demande** et n'est jamais persisté (ni en base, ni dans Storage)
-- Endpoint `GET /api/payments/:id/receipt.pdf` — `StreamableFile` NestJS, accessible au propriétaire/gestionnaire mandaté/admin ainsi qu'au locataire concerné, refusé (`409`) si le `Payment` n'est pas `PAID`
+- Endpoint `GET /api/payments/:id/receipt.pdf` — génère le PDF en mémoire et le streame directement dans la réponse HTTP avec le bon `Content-Type` et `Content-Disposition`
+- Cible de performance : génération en moins de 5 secondes
 
-### 22 Envoi automatique de quittance — ✅ implémenté (2026-07-25)
+### 22 Envoi automatique de quittance
 
 **Logique :**
 
-- `PaymentConfirmedListener` (`src/modules/receipts/payment-confirmed.listener.ts`), écoute l'événement `payment.confirmed` (émis par les flows 19 et 20 — 18 pas encore construit)
-- Le PDF de quittance est généré une seule fois en mémoire par `ReceiptPdfService`, réutilisé pour les deux envois, puis jamais stocké
-- Envoi simultané au propriétaire et au locataire via `notifyUser()`, toujours avec le PDF en pièce jointe (`emailAttachments`) — **simplification assumée** : `NotifyService.notifyUser()` force déjà le canal email dès qu'une pièce jointe est fournie (contrat documenté dans son propre commentaire), donc pas de branche "push avec lien, sans PDF" séparée à construire ici
-- Toute la fonction est enveloppée dans un `try/catch` qui logue sans jamais relancer — un échec de notification ne doit jamais faire remonter d'erreur côté flow de confirmation du paiement
+- Écouteur de l'événement `payment.confirmed` (émis par les flows 18, 19 et 20 à la confirmation effective d'un paiement)
+- Le PDF de quittance est généré en mémoire par `ReceiptPdfService` au moment de la notification, joint comme pièce jointe à l'email si l'envoi se fait par email, puis libéré — jamais stocké
+- Envoi simultané au propriétaire et au locataire via `notifyUser()` :
+  - Si l'utilisateur a accepté les push web et a un abonnement actif, push avec un lien direct vers la quittance téléchargeable
+  - Sinon, email avec PDF en pièce jointe via le template fourni (catégorie « quittance »)
+- Cible de délai : notification envoyée dans les 30 secondes après la confirmation du paiement
+- En cas d'échec d'envoi (push ou email), retry exponentiel et log dans `AuditLog`
 
-### 23 Historique et export des paiements — 🟡 partiellement implémenté (historique le 2026-07-25, export reporté)
+### 23 Historique et export des paiements
 
-- ✅ Endpoint `GET /api/payments` — liste paginée des paiements (visibilité dérivée de `propertyVisibilityWhere()`), filtres `propertyId`, `tenantUserId`, `status`, `source`, `from`/`to` (`paidAt`)
-- ⏸️ Export PDF/XLSX (`GET /api/payments/export`) — **reporté**, non demandé pour cette passe (`exceljs` avait été retiré du projet lors du nettoyage du 2026-07-25 précédent, voir unité 09) ; à reprendre en réajoutant la dépendance le moment venu
-- Le reste (colonne source distincte, fenêtre 2 ans glissants) sera à traiter avec l'export
+**Logique :**
+
+- Endpoint `GET /api/payments` — liste paginée des paiements du propriétaire, filtres par bien, locataire, période, statut, source
+- Endpoint `GET /api/payments/export?format=pdf` — génération d'un PDF récapitulatif via PDFKit (tableau de tous les paiements de la période demandée), streamé sans stockage
+- Endpoint `GET /api/payments/export?format=xlsx` — génération XLSX via ExcelJS, prêt pour intégration en comptabilité, streamé sans stockage
+- Les chiffres exportés correspondent exactement à la somme des paiements en base, quelle que soit leur source (CASHPAY_API, MANUAL_OWNER ou TENANT_DECLARATION), avec une colonne dédiée pour distinguer
+- Exports limités à 2 ans glissants pour éviter les générations trop lourdes
 
 ---
 
@@ -477,7 +476,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Module `AdminModule` — protégé par `@Roles(UserRole.ADMIN)` sur tous les endpoints
-- Endpoint `GET /api/admin/users` — liste paginée des utilisateurs, filtres par rôle, statut de compte (`ACTIVE`, `SUSPENDED_INACTIVITY`, `SUSPENDED_ADMIN`, `SUSPENDED_PAYMENT`), date d'inscription, statut de vérification CNI, recherche par nom/email
+- Endpoint `GET /api/admin/users` — liste paginée des utilisateurs, filtres par rôle, statt de compte (`ACTIVE`, `SUSPENDED_INACTIVITY`, `SUSPENDED_ADMIN`, `SUSPENDED_PAYMENT`), date d'inscription, statut de vérification CNI, recherche par nom/email
 - Endpoint `POST /api/admin/users/:id/suspend` — suspension manuelle d'un compte avec motif, passage en `SUSPENDED_ADMIN`, l'utilisateur est notifié par email
 - Endpoint `POST /api/admin/users/:id/reactivate` — levée d'une suspension admin
 - Endpoint `GET /api/admin/transactions` — supervision de tous les paiements de la plateforme, filtres par source, période, statut, méthode

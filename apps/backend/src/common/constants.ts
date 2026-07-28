@@ -25,3 +25,10 @@ export const MAX_DOCUMENTS_PER_PROPERTY = 20;
 // rappels d'échéance (unité 24, pas encore construite) qui devront rester horaires.
 export const CRON_PAYMENT_DECLARATION_REMINDERS = '0 8 * * *';
 export const PAYMENT_DECLARATION_REMINDER_DAYS = [3, 7] as const;
+
+// Rappels d'échéance et alertes d'impayés (voir build-plan.md unités 24-25,
+// /architect 2026-07-28) — horaires pour rester réactifs aux baux non
+// mensuels, où la fenêtre de rappel/grâce peut tomber n'importe quelle heure
+// du jour selon la date d'échéance exacte.
+export const CRON_PAYMENT_REMINDERS = '0 * * * *';
+export const CRON_OVERDUE_ALERTS = '30 * * * *';

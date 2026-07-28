@@ -69,13 +69,25 @@ export interface BailAvecLocataire extends Bail {
   };
 }
 
-// DTO pour inviter un locataire — correspond à InviteTenantDto du backend
+// DTO pour inviter un locataire — correspond à InviteTenantDto du backend.
+// Depuis la fusion bail↔invitation (révision paiements, 2026-07-25), les
+// champs du bail sont obligatoires ici : il n'existe plus de POST /leases
+// séparé.
 export interface InviteLocataireRequest {
   email: string;
-  phone?: string;
+  phone: string;
   firstName: string;
   lastName: string;
   propertyId: string;
+  monthlyRent: number;
+  monthlyCharges: number;
+  paymentFrequency: PaymentFrequency;
+  startDate: string; // ISO 8601
+  endDate?: string;  // absent = bail ouvert, calendrier glissant sur 12 mois
+  securityDeposit: number;
+  depositReturnConditions?: string;
+  reminderDaysBefore?: number;
+  overdueAlertWindowDays?: number;
 }
 
 // Réponse de POST /api/auth/invite-tenant

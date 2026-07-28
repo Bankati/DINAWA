@@ -45,14 +45,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/public/pages/a-propos/a-propos.component').then(m => m.AProposComponent)
   },
   {
-    path: 'annonces',
-    loadChildren: () => import('./features/annonces/annonces.routes').then(m => m.annoncesRoutes)
+    path: 'contact',
+    loadComponent: () => import('./features/public/pages/contact/contact.component').then(m => m.ContactComponent)
   },
   {
-    path: 'proprietaires',
-    canActivate: [AuthGuard, RoleGuard],
-    data: { roles: ['OWNER'] },
-    loadChildren: () => import('./features/proprietaires/proprietaires.routes').then(m => m.proprietairesRoutes)
+    path: 'annonces',
+    loadChildren: () => import('./features/annonces/annonces.routes').then(m => m.annoncesRoutes)
   },
   {
     path: 'gestionnaire',

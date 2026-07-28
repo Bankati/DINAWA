@@ -5,6 +5,7 @@ import { LocatairesService } from '../../services/locataires.service';
 import { Locataire } from '@core/models/locataire.model';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-locataire-detail',
@@ -15,7 +16,7 @@ import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok
       <div class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
           <h1 class="text-2xl font-bold text-gray-900">Détail locataire</h1>
-          <button routerLink="/dashboard/locataires" class="btn-secondary">Retour</button>
+          <button [routerLink]="basePath + '/locataires'" class="btn-secondary">Retour</button>
         </div>
       </div>
       <div class="p-6 max-w-2xl mx-auto">
@@ -54,11 +55,15 @@ export class LocataireDetailComponent implements OnInit {
   locataire: Locataire | null = null;
   loading = true;
   errorMessage = '';
+  basePath: string;
 
   constructor(
     private locatairesService: LocatairesService,
     private route: ActivatedRoute,
-  ) {}
+    private authService: AuthService,
+  ) {
+    this.basePath = this.authService.getWorkspacePrefix();
+  }
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id') ?? '';

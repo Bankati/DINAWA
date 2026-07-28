@@ -141,7 +141,10 @@ import { DelegationService, DelegationReceived } from '../../../delegation/deleg
             @if (loadingAlertes) {
               <lok-skeleton type="list"></lok-skeleton>
             } @else if (alertes.length === 0) {
-              <lok-empty-state message="Aucune alerte active"></lok-empty-state>
+              <lok-empty-state
+                titre="Aucune alerte active"
+                description="Vous êtes à jour, rien à traiter pour le moment."
+              ></lok-empty-state>
             } @else {
               <div class="alerts-list">
                 @for (alert of alertes; track alert.id) {
@@ -166,7 +169,11 @@ import { DelegationService, DelegationReceived } from '../../../delegation/deleg
             </div>
 
             @if (biens.length === 0) {
-              <lok-empty-state message="Aucun bien dans le portefeuille"></lok-empty-state>
+              <lok-empty-state
+                titre="Aucun bien dans le portefeuille"
+                description="Les biens gérés pour vos propriétaires mandants apparaîtront ici."
+                icon="bien"
+              ></lok-empty-state>
             } @else {
               <div class="biens-list">
                 @for (bien of biens; track bien.id) {
@@ -294,16 +301,17 @@ import { DelegationService, DelegationReceived } from '../../../delegation/deleg
       transition: background 150ms;
     }
     .notif-btn:hover { background: #E5EDF7; }
+    .notif-btn.has-alertes { background: rgba(220,38,38,0.06); border-color: rgba(220,38,38,0.25); }
     .notif-btn svg { width: 18px; height: 18px; }
     .notif-badge {
       position: absolute; top: -4px; right: -4px;
       background: #EF4444; color: white;
       font-size: 10px; font-weight: 700;
-      width: 16px; height: 16px; border-radius: 50%;
+      width: 18px; height: 18px; border-radius: 50%; border: 2px solid white;
       display: flex; align-items: center; justify-content: center;
     }
     .header-avatar {
-      width: 40px; height: 40px; border-radius: 50%;
+      width: 40px; height: 40px; border-radius: 10px;
       background: var(--color-primary); color: white;
       font-size: 14px; font-weight: 700;
       display: flex; align-items: center; justify-content: center;
@@ -329,8 +337,9 @@ import { DelegationService, DelegationReceived } from '../../../delegation/deleg
     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 
     .kpi-card {
-      background: white; border-radius: 14px; padding: 20px;
+      background: white; border-radius: 16px; padding: 20px;
       border: 1px solid #E5E7EB; display: flex; flex-direction: column; gap: 4px;
+      box-shadow: 0 2px 10px rgba(15,76,129,0.05);
       transition: box-shadow 150ms, transform 150ms;
     }
     .kpi-card:hover { box-shadow: 0 4px 16px rgba(15,76,129,.08); transform: translateY(-2px); }
@@ -357,8 +366,9 @@ import { DelegationService, DelegationReceived } from '../../../delegation/deleg
 
     /* ── Section card ── */
     .section-card {
-      background: white; border-radius: 14px; padding: 24px;
+      background: white; border-radius: 16px; padding: 24px;
       border: 1px solid #E5E7EB;
+      box-shadow: 0 2px 10px rgba(15,76,129,0.05);
     }
     .section-header {
       display: flex; align-items: center; gap: 10px; margin-bottom: 20px;

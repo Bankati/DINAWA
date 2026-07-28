@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-admin-layout',
@@ -77,13 +78,6 @@ import { RouterModule } from '@angular/router';
         </nav>
 
         <div class="sidebar-footer">
-          <a routerLink="/" class="footer-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
-            <span>Accueil</span>
-          </a>
           <button class="logout-btn" type="button" (click)="deconnecter()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -173,21 +167,18 @@ export class AdminLayoutComponent implements OnInit {
   nom = '';
   initiales = 'AD';
 
+  constructor(private readonly authService: AuthService) {}
+
   ngOnInit(): void {
-    try {
-      const raw = localStorage.getItem('WARAH_user');
-      if (raw) {
-        const u = JSON.parse(raw);
-        this.prenom = u.prenom || 'Admin';
-        this.nom = u.nom || '';
-        this.initiales = ((u.prenom?.[0] || 'A') + (u.nom?.[0] || 'D')).toUpperCase();
-      }
-    } catch {}
+    const user = this.authService.getCurrentUser();
+    if (user) {
+      this.prenom = user.firstName || 'Admin';
+      this.nom = user.lastName || '';
+      this.initiales = ((user.firstName?.[0] ?? 'A') + (user.lastName?.[0] ?? 'D')).toUpperCase();
+    }
   }
 
   deconnecter(): void {
-    localStorage.removeItem('WARAH_token');
-    localStorage.removeItem('WARAH_user');
-    window.location.href = '/auth/login';
+    this.authService.logout();
   }
 }

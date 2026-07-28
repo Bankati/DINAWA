@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AdminService } from '../../services/admin.service';
-import { StatistiquesPlateforme } from '@core/models/admin.model';
+import { StatistiquesPlateforme, Litige, PrioriteLitige, TransactionSupervisee, StatutTransaction } from '@core/models/admin.model';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -51,7 +51,11 @@ import { AuthService } from '../../../../core/services/auth.service';
 
         <!-- Bannière -->
         <div class="greeting-banner">
-          <div>
+          <div class="gb-dots" aria-hidden="true">
+            <span class="gd gd-1"></span><span class="gd gd-2"></span><span class="gd gd-3"></span><span class="gd gd-4"></span><span class="gd gd-5"></span>
+          </div>
+          <div class="gb-content">
+            <p class="greeting-hello">Bonjour, {{ prenomAdmin }} 👋</p>
             <h2 class="greeting-title">Vue d'ensemble de la plateforme</h2>
             <p class="greeting-sub">Supervision en temps réel de l'activité WARAH.</p>
           </div>
@@ -77,12 +81,17 @@ import { AuthService } from '../../../../core/services/auth.service';
           <div class="kpi-grid">
 
             <div class="kpi-card kpi-blue">
-              <div class="kpi-icon kpi-icon-blue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-blue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                </div>
+                <svg class="kpi-sparkline" viewBox="0 0 80 28" preserveAspectRatio="none">
+                  <polyline [attr.points]="sparkline([4,7,5,9,8,12,14])" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
               <div class="kpi-body">
@@ -93,10 +102,15 @@ import { AuthService } from '../../../../core/services/auth.service';
             </div>
 
             <div class="kpi-card kpi-green">
-              <div class="kpi-icon kpi-icon-green">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-green">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                  </svg>
+                </div>
+                <svg class="kpi-sparkline" viewBox="0 0 80 28" preserveAspectRatio="none">
+                  <polyline [attr.points]="sparkline([9,10,9,11,12,11,13])" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
               <div class="kpi-body">
@@ -108,10 +122,15 @@ import { AuthService } from '../../../../core/services/auth.service';
             </div>
 
             <div class="kpi-card kpi-gold">
-              <div class="kpi-icon kpi-icon-gold">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="1" x2="12" y2="23"></line>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-gold">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  </svg>
+                </div>
+                <svg class="kpi-sparkline" viewBox="0 0 80 28" preserveAspectRatio="none">
+                  <polyline [attr.points]="sparkline([6,8,7,10,9,12,15])" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
               <div class="kpi-body">
@@ -122,12 +141,14 @@ import { AuthService } from '../../../../core/services/auth.service';
             </div>
 
             <div class="kpi-card kpi-red">
-              <div class="kpi-icon kpi-icon-red">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                  <line x1="12" y1="9" x2="12" y2="13"></line>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-red">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </div>
               </div>
               <div class="kpi-body">
                 <p class="kpi-label">Litiges ouverts</p>
@@ -136,6 +157,65 @@ import { AuthService } from '../../../../core/services/auth.service';
                   <a routerLink="/admin/litiges" class="pill pill-red-link">Voir les litiges</a>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Litiges + Transactions -->
+          <div class="activity-grid">
+
+            <!-- Litiges à traiter -->
+            <div class="section-card">
+              <div class="section-header">
+                <h2 class="section-title">Litiges à traiter</h2>
+                <a routerLink="/admin/litiges" class="voir-tout">Voir tout</a>
+              </div>
+              @if (loadingActivity) {
+                <lok-skeleton type="list" [count]="4"></lok-skeleton>
+              } @else if (litigesRecents.length === 0) {
+                <p class="empty-note">Aucun litige en cours.</p>
+              } @else {
+                <div class="risk-list">
+                  @for (l of litigesRecents; track l.id) {
+                    <div class="risk-row">
+                      <div class="risk-avatar" [class]="avatarClass(l.priorite)">{{ initialesOf(l.plaignant) }}</div>
+                      <div class="risk-body">
+                        <p class="risk-name">{{ l.sujet }}</p>
+                        <p class="risk-detail">{{ l.plaignant }} → {{ l.misEnCause }}</p>
+                      </div>
+                      <span class="risk-badge" [class]="badgeClass(l.priorite)">{{ prioriteLabel(l.priorite) }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Transactions récentes -->
+            <div class="section-card">
+              <div class="section-header">
+                <h2 class="section-title">Transactions récentes</h2>
+                <a routerLink="/admin/transactions" class="voir-tout">Voir tout</a>
+              </div>
+              @if (loadingActivity) {
+                <lok-skeleton type="list" [count]="4"></lok-skeleton>
+              } @else if (transactionsRecentes.length === 0) {
+                <p class="empty-note">Aucune transaction récente.</p>
+              } @else {
+                <div class="txn-list">
+                  @for (t of transactionsRecentes; track t.id) {
+                    <div class="txn-row">
+                      <span class="txn-dot" [class]="dotClass(t.statut)"></span>
+                      <div class="txn-body">
+                        <p class="txn-name">{{ t.bien }}</p>
+                        <p class="txn-detail">{{ t.locataire }} · {{ modeLabel(t.modePaiement) }}</p>
+                      </div>
+                      <div class="txn-right">
+                        <lok-montant-fcfa [montant]="t.montant" size="sm"></lok-montant-fcfa>
+                        <span class="txn-statut" [class]="statutClass(t.statut)">{{ statutLabel(t.statut) }}</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
             </div>
           </div>
 
@@ -295,17 +375,25 @@ import { AuthService } from '../../../../core/services/auth.service';
     .topbar-role { font-size: 11px; color: #6B7280; }
 
     /* ── Corps ── */
-    .admin-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; }
+    .admin-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 
     /* ── Bannière ── */
     .greeting-banner {
+      position: relative; overflow: hidden;
       background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
-      border-radius: 16px; padding: 24px 28px;
+      border-radius: 20px; padding: 28px 32px;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .greeting-title { font-size: 20px; font-weight: 700; color: white; }
+    .gb-dots { position: absolute; inset: 0; pointer-events: none; }
+    .gd { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: rgba(201,152,46,0.55); }
+    .gd-1 { top: 20%; right: 30%; } .gd-2 { top: 55%; right: 14%; } .gd-3 { top: 35%; right: 22%; }
+    .gd-4 { top: 75%; right: 34%; } .gd-5 { top: 15%; right: 42%; }
+    .gb-content { position: relative; z-index: 1; }
+    .greeting-hello { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 4px; }
+    .greeting-title { font-size: 21px; font-weight: 700; color: white; }
     .greeting-sub { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; }
     .btn-accent {
+      position: relative; z-index: 1;
       display: inline-flex; align-items: center; gap: 8px;
       background: var(--color-accent); color: var(--color-primary-dark);
       font-size: 13px; font-weight: 700; padding: 11px 20px;
@@ -318,22 +406,22 @@ import { AuthService } from '../../../../core/services/auth.service';
     /* ── KPI ── */
     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
     .kpi-card {
-      background: white; border-radius: 14px; padding: 20px;
-      display: flex; align-items: flex-start; gap: 16px;
+      background: white; border-radius: 18px; padding: 20px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #E5EAF2;
       border-top: 3px solid transparent;
       transition: box-shadow 0.15s, transform 0.15s;
     }
-    .kpi-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.09); transform: translateY(-2px); }
+    .kpi-card:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.1); transform: translateY(-2px); }
     .kpi-blue { border-top-color: var(--color-primary); }
     .kpi-green { border-top-color: #10B981; }
     .kpi-gold { border-top-color: var(--color-accent); }
     .kpi-red { border-top-color: #EF4444; }
+    .kpi-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .kpi-icon {
-      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
     }
-    .kpi-icon svg { width: 22px; height: 22px; }
+    .kpi-icon svg { width: 20px; height: 20px; }
     .kpi-icon-blue { background: rgba(15,76,129,0.1); }
     .kpi-icon-blue svg { stroke: var(--color-primary); }
     .kpi-icon-green { background: rgba(16,185,129,0.1); }
@@ -342,9 +430,10 @@ import { AuthService } from '../../../../core/services/auth.service';
     .kpi-icon-gold svg { stroke: var(--color-accent); }
     .kpi-icon-red { background: rgba(239,68,68,0.1); }
     .kpi-icon-red svg { stroke: #EF4444; }
+    .kpi-sparkline { width: 80px; height: 28px; flex-shrink: 0; opacity: 0.85; }
     .kpi-body { flex: 1; min-width: 0; }
     .kpi-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
-    .kpi-value { font-size: 28px; font-weight: 800; color: #111827; line-height: 1.1; }
+    .kpi-value { font-size: 27px; font-weight: 800; color: #111827; line-height: 1.1; }
     .kpi-red-val { color: #EF4444; }
     .kpi-sub { font-size: 11.5px; color: #6B7280; margin-top: 6px; }
     .kpi-sub strong { color: #111827; }
@@ -360,10 +449,9 @@ import { AuthService } from '../../../../core/services/auth.service';
     .occ-bar { width: 100%; height: 6px; background: #E5E7EB; border-radius: 99px; margin: 8px 0 4px; overflow: hidden; }
     .occ-fill { height: 100%; background: #10B981; border-radius: 99px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
 
-    /* ── Panneaux ── */
-    .panels-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    /* ── Section card commune ── */
     .section-card {
-      background: white; border-radius: 14px; padding: 20px 24px;
+      background: white; border-radius: 18px; padding: 20px 24px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #E5EAF2;
     }
     .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
@@ -371,6 +459,48 @@ import { AuthService } from '../../../../core/services/auth.service';
     .section-tag { font-size: 12px; font-weight: 600; color: var(--color-primary); background: rgba(15,76,129,0.08); padding: 3px 10px; border-radius: 20px; }
     .voir-tout { font-size: 12.5px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
     .voir-tout:hover { text-decoration: underline; }
+    .empty-note { font-size: 13px; color: #9CA3AF; padding: 12px 0; }
+
+    /* ── Litiges + Transactions ── */
+    .activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .risk-list { display: flex; flex-direction: column; gap: 4px; }
+    .risk-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #F3F4F6; }
+    .risk-row:last-child { border-bottom: none; }
+    .risk-avatar {
+      width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: white;
+    }
+    .risk-avatar-haute { background: #EF4444; }
+    .risk-avatar-moyenne { background: #F59E0B; }
+    .risk-avatar-basse { background: var(--color-primary); }
+    .risk-body { flex: 1; min-width: 0; }
+    .risk-name { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .risk-detail { font-size: 11.5px; color: #9CA3AF; margin-top: 1px; }
+    .risk-badge { font-size: 10.5px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+    .risk-badge-haute { background: rgba(239,68,68,0.1); color: #DC2626; }
+    .risk-badge-moyenne { background: rgba(245,158,11,0.12); color: #B45309; }
+    .risk-badge-basse { background: rgba(15,76,129,0.08); color: var(--color-primary); }
+
+    .txn-list { display: flex; flex-direction: column; gap: 4px; }
+    .txn-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #F3F4F6; }
+    .txn-row:last-child { border-bottom: none; }
+    .txn-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .txn-dot-reussie { background: #10B981; }
+    .txn-dot-attente { background: #F59E0B; }
+    .txn-dot-echouee { background: #EF4444; }
+    .txn-body { flex: 1; min-width: 0; }
+    .txn-name { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txn-detail { font-size: 11.5px; color: #9CA3AF; margin-top: 1px; }
+    .txn-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+    .txn-statut { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .txn-statut-reussie { background: rgba(16,185,129,0.1); color: #059669; }
+    .txn-statut-attente { background: rgba(245,158,11,0.12); color: #B45309; }
+    .txn-statut-echouee { background: rgba(239,68,68,0.1); color: #DC2626; }
+
+    /* ── Panneaux ── */
+    .panels-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
 
     /* ── Roles ── */
     .role-list { display: flex; flex-direction: column; gap: 16px; }
@@ -421,6 +551,9 @@ import { AuthService } from '../../../../core/services/auth.service';
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .panels-grid { grid-template-columns: 1fr 1fr; }
     }
+    @media (max-width: 900px) {
+      .activity-grid { grid-template-columns: 1fr; }
+    }
     @media (max-width: 768px) {
       .admin-body { padding: 16px; }
       .topbar { padding: 0 16px; }
@@ -435,9 +568,13 @@ import { AuthService } from '../../../../core/services/auth.service';
 })
 export class AdminDashboardComponent implements OnInit {
   stats: StatistiquesPlateforme | null = null;
+  litigesRecents: Litige[] = [];
+  transactionsRecentes: TransactionSupervisee[] = [];
   loading = true;
+  loadingActivity = true;
   dateCourante = '';
   nomAdmin = 'Administrateur';
+  prenomAdmin = 'Administrateur';
   initiales = 'AD';
 
   constructor(private adminService: AdminService, private auth: AuthService) {}
@@ -449,11 +586,72 @@ export class AdminDashboardComponent implements OnInit {
     const user = this.auth.getCurrentUser();
     if (user) {
       this.nomAdmin = `${user.firstName} ${user.lastName}`;
+      this.prenomAdmin = user.firstName;
       this.initiales = `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
     }
     this.adminService.getStatistiques().subscribe(s => {
       this.stats = s;
       this.loading = false;
     });
+    this.adminService.getLitiges().subscribe(litiges => {
+      this.litigesRecents = litiges.filter(l => l.statut === 'OUVERT' || l.statut === 'EN_COURS').slice(0, 4);
+      this.loadingActivity = false;
+    });
+    this.adminService.getTransactions().subscribe(transactions => {
+      this.transactionsRecentes = transactions.slice(0, 4);
+    });
+  }
+
+  // Convertit une petite série de valeurs en points SVG pour une mini-courbe
+  // de tendance — purement décoratif tant que l'admin tourne sur des
+  // données mock (aucun historique réel à tracer).
+  sparkline(values: number[]): string {
+    const w = 80, h = 28, max = Math.max(...values), min = Math.min(...values);
+    const range = max - min || 1;
+    return values
+      .map((v, i) => {
+        const x = (i / (values.length - 1)) * w;
+        const y = h - ((v - min) / range) * h;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }
+
+  initialesOf(nom: string): string {
+    return nom.split(' ').map(p => p[0] ?? '').join('').slice(0, 2).toUpperCase();
+  }
+
+  avatarClass(p: PrioriteLitige): string {
+    return 'risk-avatar-' + p.toLowerCase();
+  }
+
+  badgeClass(p: PrioriteLitige): string {
+    return 'risk-badge-' + p.toLowerCase();
+  }
+
+  prioriteLabel(p: PrioriteLitige): string {
+    return p === PrioriteLitige.HAUTE ? 'Haute' : p === PrioriteLitige.MOYENNE ? 'Moyenne' : 'Basse';
+  }
+
+  dotClass(s: StatutTransaction): string {
+    if (s === StatutTransaction.REUSSIE) return 'txn-dot-reussie';
+    if (s === StatutTransaction.EN_ATTENTE) return 'txn-dot-attente';
+    return 'txn-dot-echouee';
+  }
+
+  statutClass(s: StatutTransaction): string {
+    if (s === StatutTransaction.REUSSIE) return 'txn-statut-reussie';
+    if (s === StatutTransaction.EN_ATTENTE) return 'txn-statut-attente';
+    return 'txn-statut-echouee';
+  }
+
+  statutLabel(s: StatutTransaction): string {
+    if (s === StatutTransaction.REUSSIE) return 'Réussie';
+    if (s === StatutTransaction.EN_ATTENTE) return 'En attente';
+    return 'Échouée';
+  }
+
+  modeLabel(mode: 'T_MONEY' | 'FLOOZ' | 'ESPECES'): string {
+    return mode === 'T_MONEY' ? 'T-Money' : mode === 'FLOOZ' ? 'Flooz' : 'Espèces';
   }
 }

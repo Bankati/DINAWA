@@ -16,6 +16,7 @@ describe('LeasesService', () => {
     paymentScheduleEntry: { deleteMany: jest.Mock };
     property: { update: jest.Mock };
   };
+  let listings: { publishForProperty: jest.Mock };
 
   const owner = {
     id: 'owner-1',
@@ -73,8 +74,9 @@ describe('LeasesService', () => {
       lease: { findUnique: jest.fn() },
       paymentScheduleEntry: { findMany: jest.fn().mockResolvedValue([]) },
     };
+    listings = { publishForProperty: jest.fn().mockResolvedValue({ id: 'listing-1' }) };
 
-    service = new LeasesService(prisma as never);
+    service = new LeasesService(prisma as never, listings as never);
   });
 
   describe('terminate', () => {
@@ -119,6 +121,14 @@ describe('LeasesService', () => {
       ];
       expect(deleteManyArgs.where.leaseId).toBe('lease-1');
       expect(deleteManyArgs.where.payments).toEqual({ none: {} });
+
+      // Bien redevenu VACANT — republié automatiquement (voir /architect
+      // module Annonces, 2026-07-28).
+      expect(listings.publishForProperty).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({ id: 'prop-1' }),
+        'owner-1',
+      );
     });
 
     it('permet au gestionnaire mandaté de résilier', async () => {

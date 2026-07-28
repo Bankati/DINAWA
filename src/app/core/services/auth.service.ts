@@ -5,6 +5,7 @@ import { Observable, BehaviorSubject, of } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { environment } from '@env/environment';
+import { SupabaseService } from './supabase.service';
 
 export type UserRole = 'OWNER' | 'TENANT' | 'MANAGER' | 'ADMIN';
 
@@ -39,6 +40,7 @@ export class AuthService {
   constructor(
     private http: HttpClient,
     private router: Router,
+    private supabase: SupabaseService,
   ) {
     if (this.isBrowser) {
       this.warmUpBackend();
@@ -46,7 +48,28 @@ export class AuthService {
       if (token) {
         this.loadProfile().subscribe();
       }
+      this.watchSessionRefresh();
     }
+  }
+
+  // Supabase SDK a autoRefreshToken:true (supabase.service.ts) mais ne
+  // renouvelle jamais ce qu'il ne connaît pas : login() ne faisait que
+  // stocker le accessToken initial sans jamais établir de session côté
+  // client, donc rien n'était renouvelé avant expiration (~1h) — l'utilisateur
+  // était déconnecté au premier appel API suivant l'expiration. setSession()
+  // (appelé dans login()) hydrate le SDK avec le refreshToken ; ce listener
+  // répercute chaque renouvellement automatique sur le token stocké, lu par
+  // authInterceptor à chaque requête.
+  private watchSessionRefresh(): void {
+    this.supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED' && session) {
+        localStorage.setItem(TOKEN_KEY, session.access_token);
+      }
+      if (event === 'SIGNED_OUT') {
+        this.clearToken();
+        this.currentUserSubject.next(null);
+      }
+    });
   }
 
   // ── Connexion ─────────────────────────────────────────────────
@@ -59,6 +82,13 @@ export class AuthService {
         localStorage.setItem(TOKEN_KEY, res.accessToken);
         localStorage.setItem(USER_KEY, JSON.stringify(res.user));
         this.currentUserSubject.next(res.user);
+        // Hydrate le SDK Supabase avec le refreshToken — sans ça,
+        // autoRefreshToken:true (supabase.service.ts) n'a aucune session à
+        // renouveler et le token expire silencieusement après ~1h.
+        this.supabase.auth.setSession({
+          access_token: res.accessToken,
+          refresh_token: res.refreshToken,
+        });
       }),
       map((res) => res.user)
     );
@@ -199,9 +229,19 @@ export class AuthService {
     return role ? (ROLE_ROUTES[role] ?? '/dashboard') : '/auth/login';
   }
 
+  // Les pages sous features/biens, locataires, paiements, annonces,
+  // notifications, export, identite sont montées à l'identique sous
+  // /dashboard/* (OWNER) et /gestionnaire/* (MANAGER) — préfixe à utiliser
+  // pour toute navigation interne à ces pages plutôt qu'un chemin
+  // /dashboard/... codé en dur (casserait la navigation côté gestionnaire).
+  getWorkspacePrefix(): string {
+    return this.currentUserSubject.value?.role === 'MANAGER' ? '/gestionnaire' : '/dashboard';
+  }
+
   logout(): void {
     this.clearToken();
     this.currentUserSubject.next(null);
+    this.supabase.auth.signOut().catch(() => {});
     this.router.navigate(['/auth/login']);
   }
 

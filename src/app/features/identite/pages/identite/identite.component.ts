@@ -27,7 +27,7 @@ interface IdentityVerification {
       <div class="page-header">
         <div class="page-header-left">
           <div class="page-logo">
-            <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
+            <img src="/assets/warah-icon.png" alt="" class="logo-img">
           </div>
           <div class="page-divider"></div>
           <div>
@@ -251,7 +251,7 @@ interface IdentityVerification {
   `,
   styles: [`
     /* ── En-tête ── */
-    .logo-img { height: 88px; width: auto; object-fit: contain; mix-blend-mode: multiply; }
+    .logo-img { height: 34px; width: auto; display: block; }
     .page-header { background: white; border-bottom: 1px solid #E5E7EB; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .page-header-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
     .page-divider { width: 1px; height: 32px; background: #E5E7EB; flex-shrink: 0; }

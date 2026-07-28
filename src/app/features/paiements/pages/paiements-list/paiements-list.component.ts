@@ -2,14 +2,25 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { PaiementsService, PaiementsFilters } from '../../services/paiements.service';
-import { Paiement, StatutPaiement, ModePaiement } from '@core/models/paiement.model';
+import { PaiementsService } from '../../services/paiements.service';
+import { Payment, PaymentStatus, PAYMENT_METHOD_LABELS } from '@core/models/payment.model';
 import { LokMontantFcfaComponent } from '../../../../shared/components/lok-montant-fcfa/lok-montant-fcfa.component';
 import { LokBadgePaiementComponent } from '../../../../shared/components/lok-badge-paiement/lok-badge-paiement.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
+import { LokConfirmModalComponent } from '../../../../shared/components/lok-confirm-modal/lok-confirm-modal.component';
 import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
+import { AuthService } from '../../../../core/services/auth.service';
+
+const STATUS_TABS: { value: PaymentStatus | ''; label: string }[] = [
+  { value: '', label: 'Tous' },
+  { value: 'PENDING_CONFIRMATION', label: 'À confirmer' },
+  { value: 'PAID', label: 'Payés' },
+  { value: 'LATE', label: 'En retard' },
+  { value: 'OVERDUE', label: 'Impayés' },
+  { value: 'REJECTED', label: 'Rejetés' },
+];
 
 @Component({
   selector: 'app-paiements-list',
@@ -23,7 +34,8 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
     LokSkeletonComponent,
     LokEmptyStateComponent,
     LokAlerteComponent,
-    LokDatePipe
+    LokConfirmModalComponent,
+    LokDatePipe,
   ],
   template: `
     <div class="min-h-screen bg-gray-50">
@@ -31,16 +43,15 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
       <div class="pmt-header">
         <div class="pmt-header-left">
           <div class="logo pmt-logo-desktop">
-            <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
+            <img src="/assets/warah-icon.png" alt="WARAH" class="logo-img">
           </div>
           <div class="pmt-divider"></div>
           <div>
             <h1 class="pmt-title">Paiements</h1>
-            <p class="pmt-sub">Gestion des loyers et paiements</p>
+            <p class="pmt-sub">Loyers reçus, déclarations et quittances</p>
           </div>
         </div>
-        <!-- Bouton complet sur desktop, icône + texte court sur mobile -->
-        <button routerLink="/dashboard/paiements/nouveau" class="btn-primary pmt-btn">
+        <button [routerLink]="basePath + '/paiements/nouveau'" class="btn-primary pmt-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
           </svg>
@@ -49,7 +60,6 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
         </button>
       </div>
 
-      <!-- Contenu principal -->
       <div class="p-6">
         @if (successMessage) {
           <lok-alerte type="success" [message]="successMessage" class="mb-4 block"></lok-alerte>
@@ -58,122 +68,28 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
           <lok-alerte type="error" [message]="errorMessage" class="mb-4 block"></lok-alerte>
         }
 
-        <!-- Bandeau info module en déploiement -->
-        <div class="info-banner mb-5">
-          <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <span>Les échéances ci-dessous sont calculées depuis vos <strong>baux actifs</strong>. Le suivi des paiements réels (confirmations, reçus, quittances) sera disponible lors du déploiement du module paiements.</span>
-        </div>
-
-        <!-- Statistiques rapides -->
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <p class="kpi-label">Montant attendu</p>
-            <lok-montant-fcfa [montant]="statistiques.montantAttendu ?? 0" size="lg" color="primary"></lok-montant-fcfa>
-          </div>
-          <div class="kpi-card">
-            <p class="kpi-label">Échéances</p>
-            <p class="kpi-val" style="color:#0F4C81">{{ statistiques.attendus ?? filteredPaiements.length }}</p>
-          </div>
-          <div class="kpi-card">
-            <p class="kpi-label">Confirmés</p>
-            <p class="kpi-val text-green-600">{{ statistiques.payes }}</p>
-          </div>
-          <div class="kpi-card">
-            <p class="kpi-label">Impayés</p>
-            <p class="kpi-val text-red-600">{{ statistiques.impayes }}</p>
-          </div>
-        </div>
-
-        <!-- Filtres -->
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Filtre Statut -->
-            <div>
-              <select [(ngModel)]="filters.statut" (ngModelChange)="applyFilters()" class="input-field">
-                <option [value]="undefined">Tous les statuts</option>
-                <option [value]="StatutPaiement.ATTENDU">Attendu</option>
-                <option [value]="StatutPaiement.PAYE">Payé</option>
-                <option [value]="StatutPaiement.PARTIEL">Partiel</option>
-                <option [value]="StatutPaiement.EN_RETARD">En retard</option>
-                <option [value]="StatutPaiement.IMPAYE">Impayé</option>
-              </select>
-            </div>
-
-            <!-- Filtre Mode de paiement -->
-            <div>
-              <select [(ngModel)]="filters.modePaiement" (ngModelChange)="applyFilters()" class="input-field">
-                <option [value]="undefined">Tous les modes</option>
-                <option value="T_MONEY">T-Money</option>
-                <option value="FLOOZ">Flooz</option>
-                <option value="ESPECES">Espèces</option>
-              </select>
-            </div>
-
-            <!-- Filtre Montant min -->
-            <div>
-              <input
-                type="number"
-                [(ngModel)]="filters.montantMin"
-                (ngModelChange)="applyFilters()"
-                placeholder="Montant min (FCFA)"
-                class="input-field"
-              />
-            </div>
-
-            <!-- Filtre Montant max -->
-            <div>
-              <input
-                type="number"
-                [(ngModel)]="filters.montantMax"
-                (ngModelChange)="applyFilters()"
-                placeholder="Montant max (FCFA)"
-                class="input-field"
-              />
-            </div>
-          </div>
-
-          <!-- Tags de filtres actifs -->
-          @if (hasActiveFilters()) {
-            <div class="flex items-center gap-2 mt-4">
-              <span class="text-sm text-gray-600">Filtres actifs :</span>
-              @if (filters.statut) {
-                <span class="bg-primary-light text-primary text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                  {{ filters.statut }}
-                  <button (click)="clearFilter('statut')" class="hover:text-primary-dark">×</button>
-                </span>
-              }
-              @if (filters.modePaiement) {
-                <span class="bg-primary-light text-primary text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                  {{ filters.modePaiement }}
-                  <button (click)="clearFilter('modePaiement')" class="hover:text-primary-dark">×</button>
-                </span>
-              }
-              @if (filters.montantMin || filters.montantMax) {
-                <span class="bg-primary-light text-primary text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                  {{ filters.montantMin || 0 }} - {{ filters.montantMax || '∞' }} FCFA
-                  <button (click)="clearMontantFilters()" class="hover:text-primary-dark">×</button>
-                </span>
-              }
-              <button (click)="clearAllFilters()" class="text-sm text-red-600 hover:underline">
-                Effacer tout
-              </button>
-            </div>
+        <!-- Onglets de statut -->
+        <div class="status-tabs">
+          @for (tab of statusTabs; track tab.value) {
+            <button
+              class="status-tab"
+              [class.status-tab-on]="filters.status === tab.value"
+              (click)="setStatusFilter(tab.value)"
+            >{{ tab.label }}</button>
           }
         </div>
 
-        <!-- Liste des paiements -->
+        <!-- Liste -->
         @if (loading) {
           <div class="space-y-4">
             @for (i of [1, 2, 3, 4, 5]; track i) {
               <lok-skeleton type="card"></lok-skeleton>
             }
           </div>
-        } @else if (filteredPaiements.length === 0) {
+        } @else if (payments.length === 0) {
           <lok-empty-state
             titre="Aucun paiement trouvé"
-            description="Aucun paiement ne correspond à vos critères de recherche."
+            description="Aucun paiement ne correspond à ce filtre."
             ctaLabel="Enregistrer un paiement"
             icon="paiement"
             (ctaAction)="navigateToNew()"
@@ -194,48 +110,45 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200">
-                @for (paiement of filteredPaiements; track paiement.id) {
+                @for (p of payments; track p.id) {
                   <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {{ paiement.datePaiement | lokDate }}
+                      {{ (p.paidAt ?? p.createdAt) | lokDate }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      Locataire #{{ paiement.locataireId }}
+                      {{ p.lease?.tenant ? (p.lease!.tenant.firstName + ' ' + p.lease!.tenant.lastName) : '—' }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      Bien #{{ paiement.bienId }}
+                      {{ p.lease?.property ? (p.lease!.property.neighborhood + ', ' + p.lease!.property.city) : '—' }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                      <lok-montant-fcfa [montant]="paiement.montant" size="sm"></lok-montant-fcfa>
+                      <lok-montant-fcfa [montant]="p.paidAmount" size="sm"></lok-montant-fcfa>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {{ paiement.modePaiement }}
+                      {{ p.paymentMethod ? methodLabels[p.paymentMethod] : '—' }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                      <lok-badge-paiement [statut]="paiement.statut"></lok-badge-paiement>
+                      <lok-badge-paiement [statut]="p.status"></lok-badge-paiement>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div class="flex items-center gap-2">
-                        <button
-                          (click)="viewPaiement(paiement.id)"
-                          class="text-gray-600 hover:text-primary transition-colors"
-                          title="Voir détails"
-                        >
-                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                          </svg>
-                        </button>
-                        @if (paiement.statut === StatutPaiement.IMPAYE || paiement.statut === StatutPaiement.EN_RETARD) {
-                          <button
-                            (click)="envoyerRappel(paiement.id)"
-                            class="text-gray-600 hover:text-primary transition-colors"
-                            title="Envoyer rappel"
-                          >
+                      <div class="flex items-center gap-3">
+                        @if (p.status === 'PENDING_CONFIRMATION') {
+                          <button (click)="confirmPayment(p)" class="text-green-600 hover:text-green-800 font-medium text-xs" [disabled]="actioningId === p.id">
+                            Confirmer
+                          </button>
+                          <button (click)="rejectPayment(p)" class="text-red-600 hover:text-red-800 font-medium text-xs" [disabled]="actioningId === p.id">
+                            Rejeter
+                          </button>
+                        }
+                        @if (p.status === 'PAID') {
+                          <button (click)="downloadReceipt(p)" class="text-gray-600 hover:text-primary transition-colors" title="Télécharger la quittance" [disabled]="downloadingId === p.id">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
                           </button>
+                        }
+                        @if (p.status === 'REJECTED' && p.rejectionReason) {
+                          <span class="text-xs text-gray-400 italic" [title]="p.rejectionReason">Motif : {{ p.rejectionReason }}</span>
                         }
                       </div>
                     </td>
@@ -245,53 +158,43 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
             </table>
             </div>
           </div>
+
+          <!-- Pagination -->
+          @if (total > limit) {
+            <div class="pagination">
+              <button class="page-btn" [disabled]="page === 1" (click)="goToPage(page - 1)">← Précédent</button>
+              <span class="page-info">Page {{ page }} sur {{ totalPages }}</span>
+              <button class="page-btn" [disabled]="page >= totalPages" (click)="goToPage(page + 1)">Suivant →</button>
+            </div>
+          }
+        }
+
+        @if (rejectingPayment) {
+          <lok-confirm-modal
+            titre="Rejeter la déclaration"
+            message="Ce paiement sera marqué comme rejeté et le locataire en sera informé."
+            confirmLabel="Rejeter"
+            cancelLabel="Annuler"
+            reasonLabel="Motif du rejet (communiqué au locataire)"
+            reasonPlaceholder="Ex : montant ne correspond pas à l'échéance"
+            (onConfirm)="onRejectConfirmed($event)"
+            (onCancel)="rejectingPayment = null"
+          ></lok-confirm-modal>
         }
       </div>
     </div>
   `,
   styles: [`
-    .logo-img {
-      height: 88px;
-      width: auto;
-      object-fit: contain;
-      background: transparent !important;
-      mix-blend-mode: multiply;
-    }
+    .logo-img { height: 32px; width: auto; object-fit: contain; }
 
-    /* ── Header responsive ── */
     .pmt-header {
-      background: white;
-      border-bottom: 1px solid #E5E7EB;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      background: white; border-bottom: 1px solid #E5E7EB; padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
-    .pmt-header-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      min-width: 0;
-    }
-    .pmt-divider {
-      width: 1px;
-      height: 32px;
-      background: #E5E7EB;
-      flex-shrink: 0;
-    }
-    .pmt-title {
-      font-size: 22px;
-      font-weight: 700;
-      color: #111827;
-      line-height: 1.2;
-      white-space: nowrap;
-    }
-    .pmt-sub {
-      font-size: 13px;
-      color: #6B7280;
-      margin-top: 1px;
-    }
+    .pmt-header-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
+    .pmt-divider { width: 1px; height: 32px; background: #E5E7EB; flex-shrink: 0; }
+    .pmt-title { font-size: 22px; font-weight: 700; color: #111827; line-height: 1.2; white-space: nowrap; }
+    .pmt-sub { font-size: 13px; color: #6B7280; margin-top: 1px; }
     .pmt-btn { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     .pmt-btn-short { display: none; }
 
@@ -305,173 +208,146 @@ import { LokDatePipe } from '../../../../shared/pipes/lok-date.pipe';
       .pmt-btn-short { display: inline; }
       .pmt-btn { padding: 8px 14px; font-size: 13px; }
     }
-    .info-banner { display:flex; align-items:flex-start; gap:10px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:12px 16px; font-size:13px; color:#1E40AF; line-height:1.5; }
-    .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; padding:0 0 24px; }
-    .kpi-card { background:#fff; border-radius:14px; padding:20px 24px; box-shadow:0 2px 12px rgba(10,38,80,.08); border:1px solid #E8EDF5; }
-    .kpi-label { font-size:13px; color:#6B7280; margin-bottom:8px; font-weight:500; }
-    .kpi-val { font-size:2.25rem; font-weight:800; line-height:1; }
-    @media(max-width:768px){ .kpi-grid { grid-template-columns:repeat(2,1fr); gap:12px; } }
-  `]
+
+    .status-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .status-tab {
+      background: white; border: 1px solid #E5E7EB; border-radius: 999px; padding: 7px 16px;
+      font-size: 13px; font-weight: 600; color: #4B5563; cursor: pointer; transition: all .15s;
+    }
+    .status-tab:hover { border-color: var(--color-primary); color: var(--color-primary); }
+    .status-tab-on { background: var(--color-primary); border-color: var(--color-primary); color: white; }
+
+    .pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 20px; }
+    .page-btn { background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #374151; cursor: pointer; }
+    .page-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .page-info { font-size: 13px; color: #6B7280; }
+  `],
 })
 export class PaiementsListComponent implements OnInit {
-  paiements: Paiement[] = [];
-  filteredPaiements: Paiement[] = [];
+  payments: Payment[] = [];
   loading = true;
   successMessage = '';
   errorMessage = '';
+  actioningId: string | null = null;
+  downloadingId: string | null = null;
+  rejectingPayment: Payment | null = null;
 
-  StatutPaiement = StatutPaiement; // Pour l'accès dans le template
-  statistiques: any = {
-    totalMontant: 0,
-    payes: 0,
-    impayes: 0,
-    enRetard: 0,
-    attendus: 0,
-    montantAttendu: 0,
-  };
+  statusTabs = STATUS_TABS;
+  methodLabels = PAYMENT_METHOD_LABELS;
 
-  filters: any = {
-    statut: undefined,
-    modePaiement: undefined,
-    montantMin: undefined,
-    montantMax: undefined
-  };
+  page = 1;
+  limit = 20;
+  total = 0;
+
+  filters: { status: PaymentStatus | '' } = { status: '' };
+  basePath: string;
 
   constructor(
     private paiementsService: PaiementsService,
-    private router: Router
-  ) {}
+    private router: Router,
+    private authService: AuthService,
+  ) {
+    this.basePath = this.authService.getWorkspacePrefix();
+  }
 
   ngOnInit(): void {
-    this.loadPaiements();
+    this.load();
   }
 
-  /**
-   * Charge tous les paiements
-   */
-  loadPaiements(): void {
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.total / this.limit));
+  }
+
+  load(): void {
     this.loading = true;
-    this.paiementsService.getPaiements().subscribe({
-      next: (data: any) => {
-        this.paiements = data;
-        this.filteredPaiements = data;
-        this.loadStatistiques();
-        this.loading = false;
-      },
-      error: (error: any) => {
-        console.error('Erreur lors du chargement des paiements:', error);
-        this.loading = false;
-      }
-    });
+    this.paiementsService
+      .list({ page: this.page, limit: this.limit, status: this.filters.status || undefined })
+      .subscribe({
+        next: (res) => {
+          this.payments = res.data;
+          this.total = res.total;
+          this.loading = false;
+        },
+        error: () => {
+          this.errorMessage = 'Erreur lors du chargement des paiements';
+          this.loading = false;
+        },
+      });
   }
 
-  /**
-   * Charge les statistiques
-   */
-  loadStatistiques(): void {
-    this.paiementsService.getStatistiques().subscribe({
-      next: (data: any) => {
-        this.statistiques = data;
-      }
-    });
+  setStatusFilter(status: PaymentStatus | ''): void {
+    this.filters.status = status;
+    this.page = 1;
+    this.load();
   }
 
-  /**
-   * Applique les filtres
-   */
-  applyFilters(): void {
-    this.filteredPaiements = this.paiements.filter(paiement => {
-      // Filtre par statut
-      if (this.filters.statut && paiement.statut !== this.filters.statut) {
-        return false;
-      }
-
-      // Filtre par mode de paiement
-      if (this.filters.modePaiement && paiement.modePaiement !== this.filters.modePaiement) {
-        return false;
-      }
-
-      // Filtre par montant min
-      if (this.filters.montantMin && paiement.montant < this.filters.montantMin) {
-        return false;
-      }
-
-      // Filtre par montant max
-      if (this.filters.montantMax && paiement.montant > this.filters.montantMax) {
-        return false;
-      }
-
-      return true;
-    });
+  goToPage(page: number): void {
+    this.page = page;
+    this.load();
   }
 
-  /**
-   * Vérifie si des filtres sont actifs
-   */
-  hasActiveFilters(): boolean {
-    return !!this.filters.statut || 
-           !!this.filters.modePaiement || 
-           !!this.filters.montantMin || 
-           !!this.filters.montantMax;
-  }
-
-  /**
-   * Efface un filtre spécifique
-   */
-  clearFilter(filter: string): void {
-    this.filters[filter] = undefined;
-    this.applyFilters();
-  }
-
-  /**
-   * Efface les filtres de montant
-   */
-  clearMontantFilters(): void {
-    this.filters.montantMin = undefined;
-    this.filters.montantMax = undefined;
-    this.applyFilters();
-  }
-
-  /**
-   * Efface tous les filtres
-   */
-  clearAllFilters(): void {
-    this.filters = {
-      statut: undefined,
-      modePaiement: undefined,
-      montantMin: undefined,
-      montantMax: undefined
-    };
-    this.filteredPaiements = [...this.paiements];
-  }
-
-  /**
-   * Voir les détails d'un paiement
-   */
-  viewPaiement(id: string): void {
-    this.router.navigate(['/dashboard/paiements', id]);
-  }
-
-  /**
-   * Envoyer un rappel
-   */
-  envoyerRappel(id: string): void {
-    this.paiementsService.envoyerRappel(id).subscribe({
+  confirmPayment(p: Payment): void {
+    this.actioningId = p.id;
+    this.paiementsService.confirm(p.id).subscribe({
       next: () => {
-        this.successMessage = 'Rappel envoyé avec succès';
-        setTimeout(() => { this.successMessage = ''; }, 3000);
+        this.actioningId = null;
+        this.successMessage = 'Paiement confirmé.';
+        setTimeout(() => (this.successMessage = ''), 3000);
+        this.load();
+      },
+      error: (err) => {
+        this.actioningId = null;
+        this.errorMessage = err.error?.message || 'Erreur lors de la confirmation';
+        setTimeout(() => (this.errorMessage = ''), 4000);
+      },
+    });
+  }
+
+  rejectPayment(p: Payment): void {
+    this.rejectingPayment = p;
+  }
+
+  onRejectConfirmed(reason: string | undefined): void {
+    const p = this.rejectingPayment;
+    this.rejectingPayment = null;
+    if (!p || !reason) return;
+    this.actioningId = p.id;
+    this.paiementsService.reject(p.id, reason).subscribe({
+      next: () => {
+        this.actioningId = null;
+        this.successMessage = 'Déclaration rejetée.';
+        setTimeout(() => (this.successMessage = ''), 3000);
+        this.load();
+      },
+      error: (err) => {
+        this.actioningId = null;
+        this.errorMessage = err.error?.message || 'Erreur lors du rejet';
+        setTimeout(() => (this.errorMessage = ''), 4000);
+      },
+    });
+  }
+
+  downloadReceipt(p: Payment): void {
+    this.downloadingId = p.id;
+    this.paiementsService.downloadReceipt(p.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `quittance-${p.id}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.downloadingId = null;
       },
       error: () => {
-        this.errorMessage = 'Erreur lors de l\'envoi du rappel';
-        setTimeout(() => { this.errorMessage = ''; }, 4000);
-      }
+        this.downloadingId = null;
+        this.errorMessage = 'Erreur lors du téléchargement de la quittance';
+        setTimeout(() => (this.errorMessage = ''), 4000);
+      },
     });
   }
 
-  /**
-   * Navigue vers la page de création
-   */
   navigateToNew(): void {
-    this.router.navigate(['/paiements/nouveau']);
+    this.router.navigate([this.basePath, 'paiements', 'nouveau']);
   }
 }

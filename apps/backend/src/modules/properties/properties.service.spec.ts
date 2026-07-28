@@ -24,6 +24,7 @@ function makeFile(overrides: Record<string, unknown> = {}): Express.Multer.File 
 describe('PropertiesService', () => {
   let service: PropertiesService;
   let prisma: {
+    $transaction: jest.Mock;
     property: {
       create: jest.Mock;
       findMany: jest.Mock;
@@ -57,6 +58,7 @@ describe('PropertiesService', () => {
     invalidateCachedUrl: jest.Mock;
     remove: jest.Mock;
   };
+  let listings: { publishForProperty: jest.Mock; deactivateForProperty: jest.Mock };
 
   const owner = { id: 'owner-1', role: 'OWNER' } as AuthenticatedUser;
   const manager = { id: 'manager-1', role: 'MANAGER' } as AuthenticatedUser;
@@ -87,6 +89,11 @@ describe('PropertiesService', () => {
 
   beforeEach(() => {
     prisma = {
+      // create() est désormais transactionnel (voir /architect module
+      // Annonces, 2026-07-28) — le mock exécute simplement le callback avec
+      // le même objet prisma en guise de tx, les assertions existantes sur
+      // prisma.property.create restent valables telles quelles.
+      $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma)),
       property: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -131,8 +138,17 @@ describe('PropertiesService', () => {
       invalidateCachedUrl: jest.fn(),
       remove: jest.fn().mockResolvedValue(undefined),
     };
+    listings = {
+      publishForProperty: jest.fn().mockResolvedValue({ id: 'listing-1' }),
+      deactivateForProperty: jest.fn().mockResolvedValue(undefined),
+    };
 
-    service = new PropertiesService(prisma as never, accountActivation as never, storage as never);
+    service = new PropertiesService(
+      prisma as never,
+      accountActivation as never,
+      storage as never,
+      listings as never,
+    );
   });
 
   describe('create', () => {
@@ -169,6 +185,23 @@ describe('PropertiesService', () => {
       } as never);
 
       expect(accountActivation.reactivateIfEligible).toHaveBeenCalledWith('owner-1');
+    });
+
+    it('publie une annonce dans la même transaction que la création du bien', async () => {
+      const created = makeProperty();
+      prisma.property.create.mockResolvedValueOnce(created);
+
+      await service.create(owner, {
+        type: 'APARTMENT',
+        address: '1 Rue Test',
+        neighborhood: 'Bè',
+        city: 'Lomé',
+        surfaceArea: 40,
+        monthlyRent: 30000,
+      } as never);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(listings.publishForProperty).toHaveBeenCalledWith(prisma, created, 'owner-1');
     });
 
     // CNI facultative à l'inscription mais bloquante à la création de bien

@@ -21,6 +21,7 @@ import { EmailService } from '../email/email.service';
 import { IdentityService, IdentityVerificationFiles } from '../identity/identity.service';
 import { NotifyService } from '../notify/notify.service';
 import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
+import { ListingsService } from '../listings/listings.service';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
@@ -98,6 +99,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly identityService: IdentityService,
     private readonly notify: NotifyService,
+    private readonly listings: ListingsService,
   ) {}
 
   async getMe(user: AuthenticatedUser): Promise<AuthMeResponse> {
@@ -554,6 +556,11 @@ export class AuthService {
     // exclusivement piloté par la création d'un bail, PATCH /properties le
     // refuse explicitement (voir assertValidTransition()).
     await tx.property.update({ where: { id: property.id }, data: { status: 'OCCUPIED' } });
+
+    // Un bien OCCUPIED n'a plus lieu d'être annoncé publiquement (voir
+    // /architect module Annonces, 2026-07-28) — même transaction, jamais un
+    // bien loué visible sur la page publique même un court instant.
+    await this.listings.deactivateForProperty(tx, property.id);
 
     return lease;
   }

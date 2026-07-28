@@ -10,10 +10,6 @@ export const paiementsRoutes: Routes = [
     loadComponent: () => import('./pages/paiement-form/paiement-form.component').then(m => m.PaiementFormComponent)
   },
   {
-    path: ':id/quittance',
-    loadComponent: () => import('./pages/quittance/quittance.component').then(m => m.QuittanceComponent)
-  },
-  {
     path: 'mobile-money',
     loadComponent: () => import('./pages/mobile-money-payment/mobile-money-payment.component').then(m => m.MobileMoneyPaymentComponent)
   },

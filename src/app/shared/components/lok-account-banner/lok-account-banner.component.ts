@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AccountService, AccountStatusResponse } from '../../../core/services/account.service';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'lok-account-banner',
@@ -28,7 +29,7 @@ import { AccountService, AccountStatusResponse } from '../../../core/services/ac
             }
           </div>
           @if (status.accountStatus === 'SUSPENDED_INACTIVITY') {
-            <a routerLink="/dashboard/biens/nouveau"
+            <a [routerLink]="ajouterBienRoute"
                class="flex-shrink-0 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
               Ajouter un bien
             </a>
@@ -40,10 +41,17 @@ import { AccountService, AccountStatusResponse } from '../../../core/services/ac
 })
 export class LokAccountBannerComponent implements OnInit {
   status: AccountStatusResponse | null = null;
+  ajouterBienRoute = '/dashboard/biens/nouveau';
 
-  constructor(private accountService: AccountService) {}
+  constructor(
+    private accountService: AccountService,
+    private authService: AuthService,
+  ) {}
 
   ngOnInit(): void {
+    if (this.authService.getCurrentUser()?.role === 'MANAGER') {
+      this.ajouterBienRoute = '/gestionnaire/biens/nouveau';
+    }
     this.accountService.getStatus().subscribe({
       next: (s) => { this.status = s; },
       error: () => { /* silencieux si non connecté */ },

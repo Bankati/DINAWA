@@ -18,6 +18,7 @@ import { StorageService } from '../storage/storage.service';
 import { compressPhoto } from '../storage/image-processor';
 import { MAX_DOCUMENTS_PER_PROPERTY, MAX_PHOTOS_PER_PROPERTY } from '../../common/constants';
 import { AccountActivationService } from '../account/account-activation.service';
+import { ListingsService } from '../listings/listings.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { ListPropertiesQueryDto } from './dto/list-properties-query.dto';
@@ -50,31 +51,42 @@ export class PropertiesService {
     private readonly prisma: PrismaService,
     private readonly accountActivation: AccountActivationService,
     private readonly storage: StorageService,
+    private readonly listings: ListingsService,
   ) {}
 
   // `status` et `ownerId` ne viennent jamais du DTO — voir /architect unité
   // 12 : un bien démarre toujours VACANT, et n'appartient jamais qu'à
   // l'utilisateur authentifié.
+  //
+  // Transaction étendue (voir /architect module Annonces, 2026-07-28) : un
+  // bien VACANT doit toujours avoir une annonce publiée en conséquence —
+  // jamais l'un sans l'autre.
   async create(user: AuthenticatedUser, dto: CreatePropertyDto): Promise<Property> {
     // CNI facultative à l'inscription (voir /architect révision inscription
     // owner/manager) — c'est ici, à la création du premier bien, que la
     // vérification devient bloquante.
     await assertIdentityVerified(this.prisma, user);
 
-    const property = await this.prisma.property.create({
-      data: {
-        ownerId: user.id,
-        type: dto.type,
-        status: 'VACANT',
-        address: dto.address,
-        neighborhood: dto.neighborhood,
-        city: dto.city,
-        surfaceArea: dto.surfaceArea,
-        roomsCount: dto.roomsCount,
-        monthlyRent: dto.monthlyRent,
-        monthlyCharges: dto.monthlyCharges ?? 0,
-        description: dto.description,
-      },
+    const property = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.property.create({
+        data: {
+          ownerId: user.id,
+          type: dto.type,
+          status: 'VACANT',
+          address: dto.address,
+          neighborhood: dto.neighborhood,
+          city: dto.city,
+          surfaceArea: dto.surfaceArea,
+          roomsCount: dto.roomsCount,
+          monthlyRent: dto.monthlyRent,
+          monthlyCharges: dto.monthlyCharges ?? 0,
+          description: dto.description,
+        },
+      });
+
+      await this.listings.publishForProperty(tx, created, user.id);
+
+      return created;
     });
 
     // Fire-and-forget — la réactivation d'un compte SUSPENDED_INACTIVITY

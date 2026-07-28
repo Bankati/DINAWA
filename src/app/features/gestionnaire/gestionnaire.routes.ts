@@ -1,10 +1,10 @@
 import { Routes } from '@angular/router';
-import { GestionnaireLayoutComponent } from '../../layouts/gestionnaire-layout/gestionnaire-layout.component';
+import { AppShellLayoutComponent } from '../../layouts/app-shell-layout/app-shell-layout.component';
 
 export const gestionnaireRoutes: Routes = [
   {
     path: '',
-    component: GestionnaireLayoutComponent,
+    component: AppShellLayoutComponent,
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       {
@@ -37,12 +37,7 @@ export const gestionnaireRoutes: Routes = [
       },
       {
         path: 'annonces',
-        children: [
-          { path: '', loadComponent: () => import('../annonces/pages/annonces-list/annonces-list.component').then(m => m.AnnoncesListComponent) },
-          { path: 'new', loadComponent: () => import('../annonces/pages/annonce-form/annonce-form.component').then(m => m.AnnonceFormComponent) },
-          { path: ':id', loadComponent: () => import('../annonces/pages/annonce-detail/annonce-detail.component').then(m => m.AnnonceDetailComponent) },
-          { path: ':id/edit', loadComponent: () => import('../annonces/pages/annonce-form/annonce-form.component').then(m => m.AnnonceFormComponent) }
-        ]
+        loadComponent: () => import('../annonces/pages/annonces-list/annonces-list.component').then(m => m.AnnoncesListComponent)
       },
       {
         path: 'notifications',

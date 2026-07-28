@@ -9,6 +9,7 @@ import { LokUploadComponent, UploadedFile } from '../../../../shared/components/
 import { LokAlerteComponent } from '../../../../shared/components/lok-alerte/lok-alerte.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { CommonModule } from '@angular/common';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-bien-form',
@@ -30,7 +31,7 @@ import { CommonModule } from '@angular/common';
             <h1 class="text-2xl font-bold text-gray-900">{{ isEditMode ? 'Modifier le bien' : 'Ajouter un bien' }}</h1>
             <p class="text-sm text-gray-600">{{ isEditMode ? 'Modifiez les informations du bien' : 'Remplissez les informations pour ajouter un nouveau bien' }}</p>
           </div>
-          <button type="button" routerLink="/dashboard/biens" class="btn-secondary">Annuler</button>
+          <button type="button" [routerLink]="basePath + '/biens'" class="btn-secondary">Annuler</button>
         </div>
       </div>
 
@@ -360,6 +361,7 @@ export class BienFormComponent implements OnInit {
   isSubmitting = false;
   errorMessage = '';
   bienId: string | null = null;
+  basePath: string;
 
   photoFiles: File[] = [];
   etatLieuxFiles: File[] = [];
@@ -382,7 +384,9 @@ export class BienFormComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private dashboardService: DashboardService,
+    private authService: AuthService,
   ) {
+    this.basePath = this.authService.getWorkspacePrefix();
     this.bienForm = this.fb.group({
       type:           ['', Validators.required],
       description:    [''],
@@ -543,7 +547,7 @@ export class BienFormComponent implements OnInit {
     invalidateCache('/dashboard');
     invalidateCache('/properties');
     this.dashboardService.invalidateCache();
-    this.router.navigate(['/dashboard/biens']);
+    this.router.navigate([this.basePath, 'biens']);
   }
 
   private handleError(err: any): void {

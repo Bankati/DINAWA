@@ -6,7 +6,9 @@ import { LokMontantFcfaComponent } from '../../../../shared/components/lok-monta
 import { LokBadgePaiementComponent } from '../../../../shared/components/lok-badge-paiement/lok-badge-paiement.component';
 import { LokBadgeStatutComponent } from '../../../../shared/components/lok-badge-statut/lok-badge-statut.component';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
+import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -18,6 +20,7 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
     LokBadgePaiementComponent,
     LokBadgeStatutComponent,
     LokSkeletonComponent,
+    LokEmptyStateComponent,
     FcfaPipe
   ],
   template: `
@@ -168,15 +171,11 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
             @if (loadingRevenus) {
               <lok-skeleton type="card"></lok-skeleton>
             } @else if (!hasRevenusData) {
-              <div class="chart-no-data">
-                <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path d="M4 36 L14 24 L22 30 L32 16 L44 22" stroke-linecap="round" stroke-linejoin="round" opacity=".25"/>
-                  <circle cx="24" cy="24" r="20" stroke-dasharray="4 4" opacity=".18"/>
-                  <path d="M16 28 h16 M20 32 h8" stroke-linecap="round" opacity=".35"/>
-                </svg>
-                <p class="chart-no-data-title">Aucun revenu pour {{ anneeEnCours }}</p>
-                <p class="chart-no-data-sub">Les revenus s'afficheront dès qu'un bail actif générera des paiements</p>
-              </div>
+              <lok-empty-state
+                titre="Aucun revenu pour {{ anneeEnCours }}"
+                description="Les revenus s'afficheront dès qu'un bail actif générera des paiements."
+                icon="paiement"
+              ></lok-empty-state>
             } @else {
               <div class="chart-container">
                 <div class="y-axis-labels">
@@ -313,16 +312,11 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
             @if (loadingPaiements) {
               <lok-skeleton type="list" [count]="5"></lok-skeleton>
             } @else if (derniersPaiements.length === 0) {
-              <div class="table-empty">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <rect x="1" y="4" width="22" height="16" rx="2"/>
-                  <line x1="1" y1="10" x2="23" y2="10"/>
-                  <line x1="7" y1="15" x2="10" y2="15"/>
-                  <line x1="14" y1="15" x2="17" y2="15"/>
-                </svg>
-                <p class="table-empty-title">Aucun paiement enregistré</p>
-                <p class="table-empty-sub">Les paiements reçus apparaîtront ici</p>
-              </div>
+              <lok-empty-state
+                titre="Aucun paiement enregistré"
+                description="Les paiements reçus apparaîtront ici."
+                icon="paiement"
+              ></lok-empty-state>
             } @else {
               <div class="table-rows">
                 @for (p of derniersPaiements; track p.id) {
@@ -350,14 +344,11 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
             @if (loadingBiens) {
               <lok-skeleton type="list" [count]="5"></lok-skeleton>
             } @else if (derniersBiens.length === 0) {
-              <div class="table-empty">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                  <polyline points="9 22 9 12 15 12 15 22"/>
-                </svg>
-                <p class="table-empty-title">Aucun bien ajouté</p>
-                <p class="table-empty-sub">Ajoutez votre premier bien pour commencer</p>
-              </div>
+              <lok-empty-state
+                titre="Aucun bien ajouté"
+                description="Ajoutez votre premier bien pour commencer."
+                icon="bien"
+              ></lok-empty-state>
             } @else {
               <div class="table-rows">
                 @for (b of derniersBiens; track b.id) {
@@ -826,42 +817,6 @@ import { FcfaPipe } from '../../../../shared/pipes/fcfa.pipe';
       }
     }
 
-    /* ── Empty state graphique ── */
-    .chart-no-data {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 10px;
-      padding: 40px 24px; text-align: center;
-    }
-    .chart-no-data svg {
-      width: 52px; height: 52px;
-      stroke: #CBD5E1; margin-bottom: 4px;
-    }
-    .chart-no-data-title {
-      font-size: 14px; font-weight: 600;
-      color: #7A8899; margin: 0;
-    }
-    .chart-no-data-sub {
-      font-size: 12px; color: #9CA3AF;
-      margin: 0; max-width: 280px; line-height: 1.5;
-    }
-
-    /* ── Empty state tableaux (paiements / biens) ── */
-    .table-empty {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 8px;
-      padding: 32px 16px; text-align: center;
-    }
-    .table-empty svg {
-      width: 36px; height: 36px;
-      stroke: #CBD5E1; margin-bottom: 4px;
-    }
-    .table-empty-title {
-      font-size: 13px; font-weight: 600;
-      color: #7A8899; margin: 0;
-    }
-    .table-empty-sub {
-      font-size: 12px; color: #9CA3AF; margin: 0;
-    }
   `]
 })
 export class DashboardComponent implements OnInit {
@@ -892,7 +847,10 @@ export class DashboardComponent implements OnInit {
   readonly PAD_B   = 8;
   activePointIndex: number | null = null;
 
-  constructor(private dashboardService: DashboardService) {}
+  constructor(
+    private dashboardService: DashboardService,
+    private authService: AuthService,
+  ) {}
 
   ngOnInit(): void {
     this.setDateCourante();
@@ -916,14 +874,11 @@ export class DashboardComponent implements OnInit {
   }
 
   loadUtilisateur(): void {
-    try {
-      const raw = localStorage.getItem('WARAH_user');
-      if (raw) {
-        const u = JSON.parse(raw);
-        this.utilisateurPrenom = u.prenom || 'Propriétaire';
-        this.initiales = ((u.prenom?.[0] || '') + (u.nom?.[0] || '')).toUpperCase() || 'P';
-      }
-    } catch {}
+    const user = this.authService.getCurrentUser();
+    if (user) {
+      this.utilisateurPrenom = user.firstName || 'Propriétaire';
+      this.initiales = ((user.firstName?.[0] ?? '') + (user.lastName?.[0] ?? '')).toUpperCase() || 'P';
+    }
   }
 
   get maxRevenu(): number {

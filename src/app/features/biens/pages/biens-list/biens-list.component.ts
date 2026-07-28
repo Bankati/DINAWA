@@ -8,6 +8,7 @@ import { LokBadgeStatutComponent } from '../../../../shared/components/lok-badge
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
 import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 import { environment } from '@env/environment';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-biens-list',
@@ -27,7 +28,7 @@ import { environment } from '@env/environment';
       <div class="page-header">
         <div class="page-header-left">
           <div class="page-logo">
-            <img src="/assets/WARAH-logo.png" alt="WARAH" class="logo-img">
+            <img src="/assets/warah-icon.png" alt="" class="logo-img">
           </div>
           <div class="page-divider"></div>
           <div>
@@ -35,7 +36,7 @@ import { environment } from '@env/environment';
             <p class="page-sub">{{ total }} bien{{ total!==1?'s':'' }} dans votre portefeuille</p>
           </div>
         </div>
-        <button routerLink="/dashboard/biens/nouveau" class="btn-primary page-btn">
+        <button [routerLink]="basePath + '/biens/nouveau'" class="btn-primary page-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
           </svg>
@@ -151,18 +152,18 @@ import { environment } from '@env/environment';
                          style="background:linear-gradient(135deg,#EEF4FF 0%,#dbeafe 100%)">
                       <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-1.5"
                            style="background:rgba(15,76,129,.1)">
-                        <svg class="w-5 h-5" fill="none" stroke="#0F4C81" stroke-width="1.5" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5" fill="none" stroke="var(--color-primary)" stroke-width="1.5" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
                         </svg>
                       </div>
-                      <p class="text-xs font-medium" style="color:#0F4C81;opacity:.4">Aucune photo</p>
+                      <p class="text-xs font-medium" style="color:var(--color-primary);opacity:.4">Aucune photo</p>
                     </div>
                   }
                   <!-- Badges toujours visibles -->
                   <div class="absolute top-3 left-3">
                     <span class="px-2 py-0.5 rounded-md text-xs font-bold"
-                          style="background:rgba(255,255,255,.9);color:#0A2650">{{ typeLabel(bien.type) }}</span>
+                          style="background:rgba(255,255,255,.9);color:var(--color-primary-dark)">{{ typeLabel(bien.type) }}</span>
                   </div>
                   <div class="absolute top-3 right-3">
                     <lok-badge-statut [statut]="bien.status"></lok-badge-statut>
@@ -190,7 +191,7 @@ import { environment } from '@env/environment';
                   <!-- Prix (uniquement si pas de vraie photo) -->
                   @if (!getPhotoUrl(bien)) {
                     <div class="px-3 py-2 rounded-xl" style="background:#F0F4FA">
-                      <span class="text-sm font-extrabold" style="color:#0F4C81">
+                      <span class="text-sm font-extrabold" style="color:var(--color-primary)">
                         {{ bien.monthlyRent | number }} FCFA
                         <span class="text-xs font-normal text-gray-400">/mois</span>
                       </span>
@@ -204,7 +205,7 @@ import { environment } from '@env/environment';
                       style="background:#F0F4FA;color:#6b7280">Modifier</button>
                     <button type="button" (click)="navigateToDetail(bien.id)"
                       class="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
-                      style="background:#0F4C81;color:#fff">Voir le détail</button>
+                      style="background:var(--color-primary);color:#fff">Voir le détail</button>
                   </div>
                 </div>
               </div>
@@ -216,7 +217,7 @@ import { environment } from '@env/environment';
     </div>
   `,
   styles: [`
-    .logo-img { height: 88px; width: auto; object-fit: contain; background: transparent !important; mix-blend-mode: multiply; }
+    .logo-img { height: 34px; width: auto; display: block; }
     .page-header { background: white; border-bottom: 1px solid #E5E7EB; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .page-header-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
     .page-divider { width: 1px; height: 32px; background: #E5E7EB; flex-shrink: 0; }
@@ -224,14 +225,14 @@ import { environment } from '@env/environment';
     .page-sub { font-size: 13px; color: #6B7280; margin-top: 1px; }
     .page-btn { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     .page-btn-short { display: none; }
-    .btn-primary { background: #0F4C81; color: white; border: none; border-radius: .625rem; padding: .625rem 1.25rem; font-weight: 600; cursor: pointer; font-size: .9rem; transition: background .2s; }
-    .btn-primary:hover { background: #0A2650; }
+    .btn-primary { background: var(--color-primary); color: white; border: none; border-radius: .625rem; padding: .625rem 1.25rem; font-weight: 600; cursor: pointer; font-size: .9rem; transition: background .2s; }
+    .btn-primary:hover { background: var(--color-primary-dark); }
     .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; padding:32px 24px 24px; }
     .kpi-card { background:#fff; border-radius:14px; padding:20px 24px; box-shadow:0 2px 12px rgba(10,38,80,.08); border:1px solid #E8EDF5; }
     .kpi-label { font-size:13px; color:#6B7280; margin-bottom:8px; font-weight:500; }
     .kpi-val { font-size:2.25rem; font-weight:800; line-height:1; }
     @media(max-width:768px){ .kpi-grid { grid-template-columns:repeat(2,1fr); gap:12px; padding:20px 16px 16px; } }
-    .ftab-on  { padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; background:#0F4C81; color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
+    .ftab-on  { padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; background:var(--color-primary); color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
     .ftab-off { padding:7px 14px; border-radius:10px; font-size:12px; font-weight:500; background:#F3F4F6; color:#6b7280; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s; }
     .ftab-off:hover { background:#E5E7EB; color:#374151; }
     .cni-banner {
@@ -285,10 +286,15 @@ export class BiensListComponent implements OnInit {
     return trimmed.length >= 10 ? trimmed : 'Aucune description';
   }
 
+  basePath: string;
+
   constructor(
     private biensService: BiensService,
     private router: Router,
-  ) {}
+    private authService: AuthService,
+  ) {
+    this.basePath = this.authService.getWorkspacePrefix();
+  }
 
   ngOnInit(): void {
     this.loadBiens();
@@ -343,14 +349,14 @@ export class BiensListComponent implements OnInit {
   }
 
   navigateToDetail(id: string): void {
-    this.router.navigate(['/dashboard/biens', id]);
+    this.router.navigate([this.basePath, 'biens', id]);
   }
 
   navigateToEdit(id: string): void {
-    this.router.navigate(['/dashboard/biens', id, 'edit']);
+    this.router.navigate([this.basePath, 'biens', id, 'edit']);
   }
 
   navigateToNew(): void {
-    this.router.navigate(['/dashboard/biens/nouveau']);
+    this.router.navigate([this.basePath, 'biens', 'nouveau']);
   }
 }

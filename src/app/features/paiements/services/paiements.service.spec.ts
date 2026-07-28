@@ -1,24 +1,25 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
-import { PaiementsService, PaiementRequest } from './paiements.service';
-import { Paiement, StatutPaiement, FrequencePaiement, ModePaiement } from '@core/models/paiement.model';
+import { PaiementsService } from './paiements.service';
+import { Payment } from '@core/models/payment.model';
 import { environment } from '@env/environment';
 
-const API = `${environment.apiUrl}/paiements`;
+const PAYMENTS_API = `${environment.apiUrl}/payments`;
+const PROPERTIES_API = `${environment.apiUrl}/properties`;
+const LEASES_API = `${environment.apiUrl}/leases`;
 
-const paiementMock: Paiement = {
+const paymentMock: Payment = {
   id: 'pay1',
-  bienId: 'b1',
-  locataireId: 'l1',
-  montant: 150000,
-  montantEcheance: 150000,
-  frequence: FrequencePaiement.MENSUEL,
-  datePaiement: new Date('2025-06-01'),
-  dateEcheance: new Date('2025-06-05'),
-  statut: StatutPaiement.PAYE,
-  modePaiement: ModePaiement.T_MONEY,
-  numeroTransaction: 'TM20250601',
+  scheduleEntryId: 'sched1',
+  leaseId: 'lease1',
+  source: 'MANUAL_OWNER',
+  status: 'PAID',
+  paymentMethod: 'CASH',
+  paidAmount: 150000,
+  paidAt: '2026-06-01T00:00:00.000Z',
+  createdAt: '2026-06-01T00:00:00.000Z',
+  updatedAt: '2026-06-01T00:00:00.000Z',
 };
 
 describe('PaiementsService', () => {
@@ -27,11 +28,7 @@ describe('PaiementsService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        PaiementsService,
-        provideHttpClient(),
-        provideHttpClientTesting(),
-      ],
+      providers: [PaiementsService, provideHttpClient(), provideHttpClientTesting()],
     });
     service = TestBed.inject(PaiementsService);
     http = TestBed.inject(HttpTestingController);
@@ -39,94 +36,82 @@ describe('PaiementsService', () => {
 
   afterEach(() => http.verify());
 
-  describe('getPaiements()', () => {
-    it('fait un GET /paiements', () => {
-      service.getPaiements().subscribe();
-      const req = http.expectOne(API);
+  describe('list()', () => {
+    it('fait un GET /payments', () => {
+      service.list().subscribe();
+      const req = http.expectOne((r) => r.url === PAYMENTS_API);
       expect(req.request.method).toBe('GET');
-      req.flush([paiementMock]);
+      req.flush({ data: [paymentMock], page: 1, limit: 20, total: 1 });
     });
 
-    it('filtre par statut si fourni', () => {
-      service.getPaiements({ statut: StatutPaiement.IMPAYE }).subscribe();
-      const req = http.expectOne((r) => r.url === API);
-      expect(req.request.params.get('statut')).toBe('IMPAYE');
-      req.flush([]);
-    });
-  });
-
-  describe('getPaiementById()', () => {
-    it('fait un GET /paiements/:id', (done) => {
-      service.getPaiementById('pay1').subscribe((p) => {
-        expect(p.id).toBe('pay1');
-        done();
-      });
-      http.expectOne(`${API}/pay1`).flush(paiementMock);
+    it('transmet les filtres en query params', () => {
+      service.list({ status: 'PENDING_CONFIRMATION', page: 2 }).subscribe();
+      const req = http.expectOne((r) => r.url === PAYMENTS_API);
+      expect(req.request.params.get('status')).toBe('PENDING_CONFIRMATION');
+      expect(req.request.params.get('page')).toBe('2');
+      req.flush({ data: [], page: 2, limit: 20, total: 0 });
     });
   });
 
-  describe('createPaiement()', () => {
-    it('fait un POST /paiements', () => {
-      const payload: PaiementRequest = {
-        locataireId: 'l1',
-        bienId: 'b1',
-        montant: 150000,
-        montantEcheance: 150000,
-        frequence: FrequencePaiement.MENSUEL,
-        datePaiement: new Date(),
-        dateEcheance: new Date(),
-        modePaiement: ModePaiement.T_MONEY,
-      };
-      service.createPaiement(payload).subscribe();
-      const req = http.expectOne(API);
+  describe('createManual()', () => {
+    it('fait un POST multipart /payments/manual', () => {
+      service.createManual({
+        scheduleEntryId: 'sched1',
+        paidAmount: 150000,
+        paidAt: '2026-06-01T00:00:00.000Z',
+        paymentMethod: 'CASH',
+      }).subscribe();
+      const req = http.expectOne(`${PAYMENTS_API}/manual`);
       expect(req.request.method).toBe('POST');
-      req.flush(paiementMock);
+      expect(req.request.body instanceof FormData).toBe(true);
+      req.flush(paymentMock);
     });
   });
 
-  describe('deletePaiement()', () => {
-    it('fait un DELETE /paiements/:id', () => {
-      service.deletePaiement('pay1').subscribe();
-      const req = http.expectOne(`${API}/pay1`);
-      expect(req.request.method).toBe('DELETE');
-      req.flush(null);
-    });
-  });
-
-  describe('getImpayes()', () => {
-    it('fait un GET /paiements/impayes', () => {
-      service.getImpayes().subscribe();
-      const req = http.expectOne(`${API}/impayes`);
-      expect(req.request.method).toBe('GET');
-      req.flush([paiementMock]);
-    });
-  });
-
-  describe('envoyerRappel()', () => {
-    it('fait un POST /paiements/:id/rappel', () => {
-      service.envoyerRappel('pay1').subscribe();
-      const req = http.expectOne(`${API}/pay1/rappel`);
+  describe('confirm()', () => {
+    it('fait un POST /payments/:id/confirm', () => {
+      service.confirm('pay1').subscribe();
+      const req = http.expectOne(`${PAYMENTS_API}/pay1/confirm`);
       expect(req.request.method).toBe('POST');
-      req.flush(null);
+      req.flush(paymentMock);
     });
   });
 
-  describe('telechargerQuittance()', () => {
-    it('fait un GET /paiements/:id/quittance en mode blob', () => {
-      service.telechargerQuittance('pay1').subscribe();
-      const req = http.expectOne(`${API}/pay1/quittance`);
+  describe('reject()', () => {
+    it('fait un POST /payments/:id/reject avec le motif', () => {
+      service.reject('pay1', 'Montant incorrect').subscribe();
+      const req = http.expectOne(`${PAYMENTS_API}/pay1/reject`);
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ rejectionReason: 'Montant incorrect' });
+      req.flush({ ...paymentMock, status: 'REJECTED' });
+    });
+  });
+
+  describe('downloadReceipt()', () => {
+    it('fait un GET /payments/:id/receipt.pdf en mode blob', () => {
+      service.downloadReceipt('pay1').subscribe();
+      const req = http.expectOne(`${PAYMENTS_API}/pay1/receipt.pdf`);
       expect(req.request.method).toBe('GET');
       expect(req.request.responseType).toBe('blob');
       req.flush(new Blob());
     });
   });
 
-  describe('envoyerQuittanceEmail()', () => {
-    it('fait un POST /paiements/:id/quittance/email', () => {
-      service.envoyerQuittanceEmail('pay1').subscribe();
-      const req = http.expectOne(`${API}/pay1/quittance/email`);
-      expect(req.request.method).toBe('POST');
-      req.flush(null);
+  describe('getPropertyLeaseHistory()', () => {
+    it('fait un GET /properties/:id/tenants/history', () => {
+      service.getPropertyLeaseHistory('prop1').subscribe();
+      const req = http.expectOne((r) => r.url === `${PROPERTIES_API}/prop1/tenants/history`);
+      expect(req.request.method).toBe('GET');
+      req.flush({ data: [], page: 1, limit: 100, total: 0 });
+    });
+  });
+
+  describe('getLeaseSchedule()', () => {
+    it('fait un GET /leases/:id/schedule', () => {
+      service.getLeaseSchedule('lease1').subscribe();
+      const req = http.expectOne(`${LEASES_API}/lease1/schedule`);
+      expect(req.request.method).toBe('GET');
+      req.flush([]);
     });
   });
 });

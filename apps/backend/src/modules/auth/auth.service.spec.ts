@@ -59,6 +59,7 @@ describe('AuthService', () => {
   let emailService: { sendEmail: jest.Mock };
   let identityService: { verify: jest.Mock };
   let notify: { notifyUser: jest.Mock };
+  let listings: { deactivateForProperty: jest.Mock };
 
   const CONFIG_VALUES: Record<string, string> = {
     FRONTEND_URL: 'http://localhost:4200',
@@ -154,6 +155,7 @@ describe('AuthService', () => {
     emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
     identityService = { verify: jest.fn().mockResolvedValue({ id: 'verif-1', status: 'PENDING' }) };
     notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
+    listings = { deactivateForProperty: jest.fn().mockResolvedValue(undefined) };
 
     service = new AuthService(
       prisma as never,
@@ -162,6 +164,7 @@ describe('AuthService', () => {
       emailService as never,
       identityService as never,
       notify as never,
+      listings as never,
     );
   });
 
@@ -490,6 +493,9 @@ describe('AuthService', () => {
         where: { id: 'property-1' },
         data: { status: 'OCCUPIED' },
       });
+      // Bien passé OCCUPIED — annonce désactivée dans la même transaction
+      // (voir /architect module Annonces, 2026-07-28).
+      expect(listings.deactivateForProperty).toHaveBeenCalledWith(tx, 'property-1');
 
       type SendEmailArgs = {
         to: string;

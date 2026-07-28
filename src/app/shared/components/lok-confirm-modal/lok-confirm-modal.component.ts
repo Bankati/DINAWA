@@ -1,8 +1,10 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'lok-confirm-modal',
   standalone: true,
+  imports: [FormsModule],
   template: `
     <div class="fixed inset-0 z-50 flex items-center justify-center">
       <!-- Overlay -->
@@ -30,17 +32,30 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
           {{ message }}
         </p>
 
+        @if (reasonLabel) {
+          <div class="mb-6 text-left">
+            <label class="block text-xs font-semibold text-gray-700 mb-1">{{ reasonLabel }}</label>
+            <textarea
+              [(ngModel)]="reason"
+              [placeholder]="reasonPlaceholder"
+              rows="3"
+              class="input-field w-full"
+            ></textarea>
+          </div>
+        }
+
         <!-- Boutons -->
         <div class="flex gap-3">
-          <button 
+          <button
             (click)="onCancel.emit()"
             class="flex-1 btn-secondary"
           >
             {{ cancelLabel }}
           </button>
-          <button 
-            (click)="onConfirm.emit()"
+          <button
+            (click)="onConfirm.emit(reasonLabel ? reason : undefined)"
             class="flex-1 btn-danger"
+            [disabled]="!!reasonLabel && reasonRequired && !reason.trim()"
           >
             {{ confirmLabel }}
           </button>
@@ -61,7 +76,14 @@ export class LokConfirmModalComponent {
   @Input() confirmLabel: string = 'Confirmer';
   @Input() cancelLabel: string = 'Annuler';
   @Input() detailMessage?: string;
-  @Output() onConfirm = new EventEmitter<void>();
+  // Si renseigné, affiche un champ de saisie (ex: motif de rejet) — onConfirm
+  // émet alors la valeur saisie plutôt que void. Consommateurs existants qui
+  // n'utilisent pas reasonLabel ne sont pas affectés (émission de undefined).
+  @Input() reasonLabel?: string;
+  @Input() reasonPlaceholder = '';
+  @Input() reasonRequired = true;
+  reason = '';
+  @Output() onConfirm = new EventEmitter<string | undefined>();
   @Output() onCancel = new EventEmitter<void>();
 }
 

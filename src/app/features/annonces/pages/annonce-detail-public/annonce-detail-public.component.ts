@@ -1,16 +1,16 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Meta, Title } from '@angular/platform-browser';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { AnnoncesService } from '../../services/annonces.service';
-import { Annonce, TypeAnnonce } from '@core/models/annonce.model';
+import { PublicListingsService } from '../../services/public-listings.service';
+import { PublicListingDetail, PROPERTY_TYPE_LABELS } from '@core/models/listing-public.model';
 import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton/lok-skeleton.component';
+import { LokEmptyStateComponent } from '../../../../shared/components/lok-empty-state/lok-empty-state.component';
 
 @Component({
   selector: 'app-annonce-detail-public',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule, LokSkeletonComponent],
+  imports: [CommonModule, RouterModule, LokSkeletonComponent, LokEmptyStateComponent],
   template: `
     <div class="detail-page">
 
@@ -23,23 +23,25 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
             </svg>
             Retour aux annonces
           </button>
-          <div class="share-btns">
-            <button (click)="partager('whatsapp')" class="share-btn share-wa" title="WhatsApp">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.15-.149.345-.39.523-.587.174-.195.23-.334.346-.559.111-.225.056-.42-.041-.57-.097-.149-.81-1.949-1.054-2.563-.247-.611-.5-.529-.69-.539-.18-.01-.39-.01-.598-.01-.21 0-.553.08-.846.395-.293.314-1.12 1.095-1.12 2.67 0 1.572 1.155 3.092 1.314 3.305.16.21 2.197 3.36 5.328 4.573 3.13 1.213 3.13.81 3.696.758.567-.05 1.833-.75 2.093-1.473.26-.722.26-1.34.18-1.474-.075-.13-.27-.205-.57-.354z"/>
-                <path d="M12.012 2C6.504 2 2 6.477 2 12c0 1.93.55 3.74 1.5 5.27L2 22l4.84-1.47A9.96 9.96 0 0012.012 22C17.52 22 22 17.523 22 12S17.52 2 12.012 2zm0 18.18c-1.7 0-3.27-.5-4.6-1.36l-.33-.21-3.4 1.03 1.04-3.33-.22-.34A8.13 8.13 0 013.84 12c0-4.5 3.67-8.16 8.18-8.16 4.5 0 8.16 3.66 8.16 8.16 0 4.5-3.66 8.18-8.17 8.18z"/>
-              </svg>
-            </button>
-            <button (click)="copierLien()" class="share-btn share-copy" title="Copier le lien">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 11-5.656-5.656l1.5-1.5"/>
-                <path d="M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 115.656 5.656l-1.5 1.5"/>
-              </svg>
-            </button>
-            @if (lienCopie) {
-              <span class="copy-toast">Lien copié !</span>
-            }
-          </div>
+          @if (annonce) {
+            <div class="share-btns">
+              <button (click)="partager()" class="share-btn share-wa" title="Partager sur WhatsApp">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.15-.149.345-.39.523-.587.174-.195.23-.334.346-.559.111-.225.056-.42-.041-.57-.097-.149-.81-1.949-1.054-2.563-.247-.611-.5-.529-.69-.539-.18-.01-.39-.01-.598-.01-.21 0-.553.08-.846.395-.293.314-1.12 1.095-1.12 2.67 0 1.572 1.155 3.092 1.314 3.305.16.21 2.197 3.36 5.328 4.573 3.13 1.213 3.13.81 3.696.758.567-.05 1.833-.75 2.093-1.473.26-.722.26-1.34.18-1.474-.075-.13-.27-.205-.57-.354z"/>
+                  <path d="M12.012 2C6.504 2 2 6.477 2 12c0 1.93.55 3.74 1.5 5.27L2 22l4.84-1.47A9.96 9.96 0 0012.012 22C17.52 22 22 17.523 22 12S17.52 2 12.012 2zm0 18.18c-1.7 0-3.27-.5-4.6-1.36l-.33-.21-3.4 1.03 1.04-3.33-.22-.34A8.13 8.13 0 013.84 12c0-4.5 3.67-8.16 8.18-8.16 4.5 0 8.16 3.66 8.16 8.16 0 4.5-3.66 8.18-8.17 8.18z"/>
+                </svg>
+              </button>
+              <button (click)="copierLien()" class="share-btn share-copy" title="Copier le lien">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 11-5.656-5.656l1.5-1.5"/>
+                  <path d="M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 115.656 5.656l-1.5 1.5"/>
+                </svg>
+              </button>
+              @if (lienCopie) {
+                <span class="copy-toast">Lien copié !</span>
+              }
+            </div>
+          }
         </div>
       </div>
 
@@ -48,12 +50,22 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
           <lok-skeleton type="card"></lok-skeleton>
           <lok-skeleton type="card"></lok-skeleton>
         </div>
+      } @else if (notFound) {
+        <div class="not-found-wrap">
+          <lok-empty-state
+            titre="Annonce introuvable"
+            description="Cette annonce n'existe pas ou n'est plus disponible."
+            ctaLabel="Voir les autres annonces"
+            icon="default"
+            (ctaAction)="goBack()"
+          ></lok-empty-state>
+        </div>
       } @else if (annonce) {
 
         <!-- Hero image -->
         <div class="detail-hero">
           @if (annonce.photos && annonce.photos.length > 0) {
-            <img [src]="photoPrincipale" [alt]="annonce.titre" class="detail-hero-img">
+            <img [src]="photoPrincipale" [alt]="titreAffiche" class="detail-hero-img">
           } @else {
             <div class="detail-hero-placeholder">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -82,43 +94,48 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
               <!-- Titre + badges -->
               <div class="detail-title-block">
                 <div class="detail-badges">
-                  <span class="type-badge" [class.badge-loc]="annonce.type === TypeAnnonce.LOCATION" [class.badge-ven]="annonce.type === TypeAnnonce.VENTE">
-                    {{ annonce.type === TypeAnnonce.LOCATION ? 'Location' : 'Vente' }}
-                  </span>
-                  @if (annonce.typeBien) {
-                    <span class="bien-badge">{{ annonce.typeBien }}</span>
-                  }
-                  @if (annonce.statut === 'ACTIVE') {
-                    <span class="dispo-badge">Disponible</span>
-                  }
+                  <span class="type-badge">{{ typeLabel }}</span>
+                  <span class="dispo-badge">Disponible</span>
                 </div>
-                <h1 class="detail-title">{{ annonce.titre }}</h1>
+                <h1 class="detail-title">{{ titreAffiche }}</h1>
                 <p class="detail-location">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                     <circle cx="12" cy="10" r="3"></circle>
                   </svg>
-                  {{ annonce.adresse.quartier }}, {{ annonce.adresse.ville }}
+                  {{ annonce.address }}
                 </p>
               </div>
 
               <!-- Description -->
-              <div class="detail-section">
-                <h2 class="section-title">Description</h2>
-                <p class="section-text">{{ annonce.description }}</p>
-              </div>
-
-              <!-- Localisation -->
-              <div class="detail-section">
-                <h2 class="section-title">Localisation</h2>
-                <div class="loc-row">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                    <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                  <span>{{ annonce.adresse.quartier }}, {{ annonce.adresse.ville }}</span>
+              @if (annonce.description) {
+                <div class="detail-section">
+                  <h2 class="section-title">Description</h2>
+                  <p class="section-text">{{ annonce.description }}</p>
                 </div>
-                <p class="loc-note">L'adresse exacte sera communiquée après validation de votre candidature.</p>
+              }
+
+              <!-- Caractéristiques -->
+              <div class="detail-section">
+                <h2 class="section-title">Caractéristiques</h2>
+                <div class="caract-grid">
+                  <div class="caract-item">
+                    <span class="caract-label">Surface</span>
+                    <span class="caract-value">{{ annonce.surfaceArea }} m²</span>
+                  </div>
+                  @if (annonce.roomsCount) {
+                    <div class="caract-item">
+                      <span class="caract-label">Pièces</span>
+                      <span class="caract-value">{{ annonce.roomsCount }}</span>
+                    </div>
+                  }
+                  @if (annonce.monthlyCharges) {
+                    <div class="caract-item">
+                      <span class="caract-label">Charges mensuelles</span>
+                      <span class="caract-value">{{ annonce.monthlyCharges | number:'1.0-0' }} FCFA</span>
+                    </div>
+                  }
+                </div>
               </div>
             </div>
 
@@ -127,63 +144,32 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
 
               <!-- Prix -->
               <div class="aside-card price-card">
-                <div class="price-amount">{{ annonce.prix | number:'1.0-0' }} <span class="price-currency">FCFA</span></div>
-                <div class="price-period">{{ annonce.type === TypeAnnonce.LOCATION ? 'par mois' : 'prix de vente' }}</div>
+                <div class="price-amount">{{ annonce.monthlyRent | number:'1.0-0' }} <span class="price-currency">FCFA</span></div>
+                <div class="price-period">par mois</div>
               </div>
 
-              <!-- Propriétaire -->
+              <!-- Contact -->
               <div class="aside-card">
-                <h3 class="aside-card-title">Propriétaire</h3>
+                <h3 class="aside-card-title">Contact</h3>
                 <div class="owner-row">
-                  <div class="owner-avatar">{{ premierPrenom(annonce.contact.nom).charAt(0) }}</div>
+                  <div class="owner-avatar">{{ annonce.contactName.charAt(0) }}</div>
                   <div class="owner-info">
-                    <p class="owner-name">{{ premierPrenom(annonce.contact.nom) }}</p>
-                    @if (annonce.contact.note) {
-                      <div class="owner-rating">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                        </svg>
-                        {{ annonce.contact.note }}/5
-                      </div>
+                    <p class="owner-name">{{ annonce.contactName }}</p>
+                    @if (annonce.contactPhone) {
+                      <p class="owner-phone">{{ annonce.contactPhone }}</p>
                     }
                   </div>
                 </div>
-                @if (annonce.contact.nombreBiensGeres) {
-                  <p class="owner-biens">{{ annonce.contact.nombreBiensGeres }} bien(s) géré(s) sur WARAH</p>
-                }
-              </div>
-
-              <!-- Formulaire de contact -->
-              <div class="aside-card contact-card">
-                @if (!messageEnvoye) {
-                  <h3 class="aside-card-title">Vous êtes intéressé(e) ?</h3>
-                  <form [formGroup]="contactForm" (ngSubmit)="envoyerMessage()" class="contact-form">
-                    <div class="cf-group">
-                      <label class="cf-label">Votre prénom</label>
-                      <input type="text" formControlName="prenom" class="cf-input" placeholder="Ex : Kofi">
-                    </div>
-                    <div class="cf-group">
-                      <label class="cf-label">Téléphone</label>
-                      <input type="tel" formControlName="telephone" class="cf-input" placeholder="+228 90 00 00 00">
-                    </div>
-                    <div class="cf-group">
-                      <label class="cf-label">Message (optionnel)</label>
-                      <textarea formControlName="message" rows="3" class="cf-input cf-textarea" placeholder="Je souhaite visiter ce bien..."></textarea>
-                    </div>
-                    <button type="submit" [disabled]="contactForm.invalid || envoiEnCours" class="cf-submit">
-                      {{ envoiEnCours ? 'Envoi...' : 'Contacter le propriétaire' }}
-                    </button>
-                  </form>
+                @if (whatsappLink) {
+                  <a [href]="whatsappLink" target="_blank" rel="noopener" class="whatsapp-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.15-.149.345-.39.523-.587.174-.195.23-.334.346-.559.111-.225.056-.42-.041-.57-.097-.149-.81-1.949-1.054-2.563-.247-.611-.5-.529-.69-.539-.18-.01-.39-.01-.598-.01-.21 0-.553.08-.846.395-.293.314-1.12 1.095-1.12 2.67 0 1.572 1.155 3.092 1.314 3.305.16.21 2.197 3.36 5.328 4.573 3.13 1.213 3.13.81 3.696.758.567-.05 1.833-.75 2.093-1.473.26-.722.26-1.34.18-1.474-.075-.13-.27-.205-.57-.354z"/>
+                      <path d="M12.012 2C6.504 2 2 6.477 2 12c0 1.93.55 3.74 1.5 5.27L2 22l4.84-1.47A9.96 9.96 0 0012.012 22C17.52 22 22 17.523 22 12S17.52 2 12.012 2zm0 18.18c-1.7 0-3.27-.5-4.6-1.36l-.33-.21-3.4 1.03 1.04-3.33-.22-.34A8.13 8.13 0 013.84 12c0-4.5 3.67-8.16 8.18-8.16 4.5 0 8.16 3.66 8.16 8.16 0 4.5-3.66 8.18-8.17 8.18z"/>
+                    </svg>
+                    Contacter sur WhatsApp
+                  </a>
                 } @else {
-                  <div class="contact-success">
-                    <div class="success-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                    <p class="success-title">Message envoyé !</p>
-                    <p class="success-sub">Le propriétaire vous recontactera directement.</p>
-                  </div>
+                  <p class="no-phone-note">Numéro de contact indisponible pour cette annonce.</p>
                 }
               </div>
             </div>
@@ -271,10 +257,13 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    .loading-wrap {
+    .loading-wrap, .not-found-wrap {
       max-width: 1100px;
       margin: 2rem auto;
       padding: 0 2rem;
+    }
+
+    .loading-wrap {
       display: grid;
       grid-template-columns: 2fr 1fr;
       gap: 1.5rem;
@@ -362,7 +351,7 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
       margin-bottom: 0.75rem;
     }
 
-    .type-badge, .bien-badge, .dispo-badge {
+    .type-badge, .dispo-badge {
       display: inline-flex;
       padding: 0.2rem 0.75rem;
       border-radius: 999px;
@@ -372,9 +361,7 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
       letter-spacing: 0.04em;
     }
 
-    .badge-loc { background: rgba(15,76,129,.1); color: var(--color-primary); }
-    .badge-ven { background: rgba(201,152,46,.15); color: #92400E; }
-    .bien-badge { background: #F3F4F6; color: #374151; }
+    .type-badge { background: rgba(15,76,129,.1); color: var(--color-primary); }
     .dispo-badge { background: #D1FAE5; color: #065F46; }
 
     .detail-title {
@@ -415,24 +402,15 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
       line-height: 1.65;
     }
 
-    .loc-row {
-      display: flex;
-      align-items: center;
-      gap: 0.625rem;
-      font-size: 0.9375rem;
-      color: var(--color-text);
-      margin-bottom: 0.75rem;
+    .caract-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
     }
 
-    .loc-row svg { width: 18px; height: 18px; color: var(--color-text-muted); flex-shrink: 0; }
-
-    .loc-note {
-      font-size: 0.8125rem;
-      color: var(--color-text-muted);
-      background: #F9FAFB;
-      border-radius: 8px;
-      padding: 0.625rem 0.875rem;
-    }
+    .caract-item { display: flex; flex-direction: column; gap: 0.25rem; }
+    .caract-label { font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+    .caract-value { font-size: 1rem; font-weight: 700; color: var(--color-text); }
 
     /* ── Aside ── */
     .detail-aside {
@@ -483,12 +461,12 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
       margin-top: 0.375rem;
     }
 
-    /* Propriétaire */
+    /* Contact */
     .owner-row {
       display: flex;
       align-items: center;
       gap: 0.875rem;
-      margin-bottom: 0.75rem;
+      margin-bottom: 1rem;
     }
 
     .owner-avatar {
@@ -511,104 +489,38 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
       font-size: 0.9375rem;
     }
 
-    .owner-rating {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
+    .owner-phone {
       font-size: 0.8125rem;
-      color: #92400E;
+      color: var(--color-text-muted);
       margin-top: 0.125rem;
     }
 
-    .owner-rating svg { width: 12px; height: 12px; fill: var(--color-accent); }
-
-    .owner-biens {
-      font-size: 0.8125rem;
-      color: var(--color-text-muted);
-    }
-
-    /* Contact form */
-    .contact-card { }
-
-    .contact-form { display: flex; flex-direction: column; gap: 0.875rem; }
-
-    .cf-group { display: flex; flex-direction: column; gap: 0.3rem; }
-
-    .cf-label {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--color-text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .cf-input {
-      width: 100%;
-      height: 42px;
-      padding: 0 0.875rem;
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-      font-size: 0.875rem;
-      color: var(--color-text);
-      box-sizing: border-box;
-      transition: border-color 0.2s;
-      font-family: inherit;
-    }
-
-    .cf-input:focus {
-      outline: none;
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px rgba(15,76,129,.1);
-    }
-
-    .cf-textarea {
-      height: auto;
-      padding: 0.625rem 0.875rem;
-      resize: none;
-    }
-
-    .cf-submit {
-      width: 100%;
-      height: 46px;
-      background: linear-gradient(135deg, var(--color-accent), var(--color-accent-light, #E8B84B));
-      color: var(--color-primary-900);
-      border: none;
-      border-radius: 10px;
-      font-size: 0.9375rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: filter 0.2s, transform 0.2s;
-      font-family: inherit;
-    }
-
-    .cf-submit:hover:not(:disabled) {
-      filter: brightness(1.08);
-      transform: translateY(-1px);
-    }
-
-    .cf-submit:disabled { opacity: 0.6; cursor: not-allowed; }
-
-    /* Succès */
-    .contact-success {
-      text-align: center;
-      padding: 1rem 0;
-    }
-
-    .success-icon {
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      background: #D1FAE5;
-      color: #065F46;
+    .whatsapp-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 0.875rem;
+      gap: 0.625rem;
+      width: 100%;
+      height: 46px;
+      background: #25D366;
+      color: white;
+      border-radius: 10px;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.2s;
     }
 
-    .success-icon svg { width: 24px; height: 24px; }
-    .success-title { font-weight: 700; color: var(--color-text); margin-bottom: 0.375rem; }
-    .success-sub { font-size: 0.875rem; color: var(--color-text-muted); line-height: 1.4; }
+    .whatsapp-btn:hover { background: #1EBE57; transform: translateY(-1px); }
+    .whatsapp-btn svg { width: 20px; height: 20px; }
+
+    .no-phone-note {
+      font-size: 0.8125rem;
+      color: var(--color-text-muted);
+      background: #F9FAFB;
+      border-radius: 8px;
+      padding: 0.625rem 0.875rem;
+    }
 
     /* ── Responsive ── */
     @media (max-width: 900px) {
@@ -628,54 +540,65 @@ import { LokSkeletonComponent } from '../../../../shared/components/lok-skeleton
   `
 })
 export class AnnonceDetailPublicComponent implements OnInit {
-  annonce: Annonce | null = null;
+  annonce: PublicListingDetail | null = null;
   loading = true;
-  TypeAnnonce = TypeAnnonce;
+  notFound = false;
   photoPrincipale = '';
-
-  contactForm: FormGroup;
-  envoiEnCours = false;
-  messageEnvoye = false;
   lienCopie = false;
 
   constructor(
-    private annoncesService: AnnoncesService,
-    private router: Router,
-    private route: ActivatedRoute,
-    private fb: FormBuilder,
-    private titleService: Title,
-    private metaService: Meta
-  ) {
-    this.contactForm = this.fb.group({
-      prenom: ['', Validators.required],
-      telephone: ['', Validators.required],
-      message: ['']
-    });
-  }
+    private readonly publicListingsService: PublicListingsService,
+    private readonly router: Router,
+    private readonly route: ActivatedRoute,
+    private readonly titleService: Title,
+    private readonly metaService: Meta,
+  ) {}
 
   ngOnInit(): void {
     this.route.paramMap.subscribe(params => {
-      const id = params.get('id');
-      if (id) this.loadAnnonce(id);
+      const slug = params.get('slug');
+      if (slug) this.loadAnnonce(slug);
     });
   }
 
-  loadAnnonce(id: string): void {
+  get typeLabel(): string {
+    return this.annonce ? PROPERTY_TYPE_LABELS[this.annonce.type] : '';
+  }
+
+  get titreAffiche(): string {
+    return this.annonce ? `${this.typeLabel} — ${this.annonce.neighborhood}` : '';
+  }
+
+  get whatsappLink(): string | null {
+    if (!this.annonce?.contactPhone) return null;
+    const digits = this.annonce.contactPhone.replace(/\D/g, '');
+    const international = digits.length === 8 ? `228${digits}` : digits;
+    const message = `Bonjour, je suis intéressé(e) par votre annonce "${this.titreAffiche}" sur WARAH.`;
+    return `https://wa.me/${international}?text=${encodeURIComponent(message)}`;
+  }
+
+  loadAnnonce(slug: string): void {
     this.loading = true;
-    this.annoncesService.getAnnonceById(id).subscribe({
+    this.notFound = false;
+    this.publicListingsService.getListingBySlug(slug).subscribe({
       next: (data) => {
         this.annonce = data;
         this.photoPrincipale = data.photos?.[0] ?? '';
         this.loading = false;
         this.updateMetaTags(data);
       },
-      error: () => { this.loading = false; }
+      error: () => {
+        this.loading = false;
+        this.notFound = true;
+      },
     });
   }
 
-  private updateMetaTags(a: Annonce): void {
-    const titre = `${a.titre} — ${a.adresse.quartier}, ${a.adresse.ville} | WARAH`;
-    const desc = a.description.length > 160 ? `${a.description.slice(0, 157)}...` : a.description;
+  private updateMetaTags(a: PublicListingDetail): void {
+    const titre = `${this.titreAffiche} — ${a.city} | WARAH`;
+    const desc = a.description && a.description.length > 160
+      ? `${a.description.slice(0, 157)}...`
+      : a.description ?? `${this.typeLabel} à louer à ${a.neighborhood}, ${a.city} sur WARAH.`;
     this.titleService.setTitle(titre);
     this.metaService.updateTag({ name: 'description', content: desc });
     this.metaService.updateTag({ property: 'og:title', content: titre });
@@ -683,27 +606,10 @@ export class AnnonceDetailPublicComponent implements OnInit {
     if (a.photos?.[0]) this.metaService.updateTag({ property: 'og:image', content: a.photos[0] });
   }
 
-  premierPrenom(nom: string): string {
-    return nom?.split(' ')[0] || '';
-  }
-
-  envoyerMessage(): void {
-    if (this.contactForm.invalid) return;
-    this.envoiEnCours = true;
-    setTimeout(() => {
-      this.envoiEnCours = false;
-      this.messageEnvoye = true;
-    }, 1000);
-  }
-
-  partager(canal: 'whatsapp' | 'facebook'): void {
+  partager(): void {
     const url = window.location.href;
-    const texte = this.annonce ? `Découvrez cette annonce sur WARAH : ${this.annonce.titre}` : 'Découvrez cette annonce sur WARAH';
-    if (canal === 'whatsapp') {
-      window.open(`https://wa.me/?text=${encodeURIComponent(texte + ' ' + url)}`, '_blank');
-    } else {
-      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
-    }
+    const texte = this.annonce ? `Découvrez cette annonce sur WARAH : ${this.titreAffiche}` : 'Découvrez cette annonce sur WARAH';
+    window.open(`https://wa.me/?text=${encodeURIComponent(texte + ' ' + url)}`, '_blank');
   }
 
   copierLien(): void {

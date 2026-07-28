@@ -26,6 +26,7 @@ import { LeasesModule } from './modules/leases/leases.module';
 import { ReceiptsModule } from './modules/receipts/receipts.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PaymentDeclarationsModule } from './modules/payment-declarations/payment-declarations.module';
+import { ListingsModule } from './modules/listings/listings.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -111,6 +112,9 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Déclaration de paiement par le locataire + relances (voir build-plan.md unité 20)
     PaymentDeclarationsModule,
+
+    // Annonces publiques — publication/désactivation automatiques, page publique (voir build-plan.md unités 28-29)
+    ListingsModule,
   ],
   providers: [
     {

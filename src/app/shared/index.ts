@@ -25,5 +25,3 @@ export { FcfaPipe } from './pipes/fcfa.pipe';
 export { Bien, TypeBien, StatutBien } from '../core/models/bien.model';
 export { Paiement, FrequencePaiement, StatutPaiement, ModePaiement } from '../core/models/paiement.model';
 export { Locataire } from '../core/models/locataire.model';
-export { Annonce, StatutAnnonce } from '../core/models/annonce.model';
-export { Proprietaire, StatutProprietaire } from '../core/models/proprietaire.model';
