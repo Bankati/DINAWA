@@ -7,7 +7,6 @@ import * as overdueAlert from './overdue-alert.template';
 import * as paymentDeclarationPending from './payment-declaration-pending.template';
 import * as paymentRejected from './payment-rejected.template';
 import * as monthlyReport from './monthly-report.template';
-import * as listingContact from './listing-contact.template';
 import * as inactivityWarning from './inactivity-warning.template';
 import * as accountSuspended from './account-suspended.template';
 import * as accountReactivated from './account-reactivated.template';
@@ -24,7 +23,6 @@ export type EmailTemplate =
   | 'payment-declaration-pending'
   | 'payment-rejected'
   | 'monthly-report'
-  | 'listing-contact'
   | 'inactivity-warning'
   | 'account-suspended'
   | 'account-reactivated'
@@ -40,7 +38,6 @@ const registry: Record<EmailTemplate, TemplateModule> = {
   'payment-declaration-pending': paymentDeclarationPending,
   'payment-rejected': paymentRejected,
   'monthly-report': monthlyReport,
-  'listing-contact': listingContact,
   'inactivity-warning': inactivityWarning,
   'account-suspended': accountSuspended,
   'account-reactivated': accountReactivated,

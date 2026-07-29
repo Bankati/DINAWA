@@ -497,17 +497,17 @@ describe('AuthService', () => {
       // (voir /architect module Annonces, 2026-07-28).
       expect(listings.deactivateForProperty).toHaveBeenCalledWith(tx, 'property-1');
 
-      type SendEmailArgs = {
-        to: string;
-        template: string;
+      type NotifyTenantInvitationArgs = {
+        userId: string;
+        event: string;
         variables: { inviterName: string; propertyAddress: string; invitationUrl: string };
       };
-      const [emailArgs] = emailService.sendEmail.mock.calls[0] as [SendEmailArgs];
-      expect(emailArgs.to).toBe(inviteDto.email);
-      expect(emailArgs.template).toBe('tenant-invitation');
-      expect(emailArgs.variables.inviterName).toBe('Jean Dupont');
-      expect(emailArgs.variables.propertyAddress).toBe(property.address);
-      expect(emailArgs.variables.invitationUrl).toContain('/activate-account?token=');
+      const [invitationArgs] = notify.notifyUser.mock.calls[0] as [NotifyTenantInvitationArgs];
+      expect(invitationArgs.userId).toBe('tenant-1');
+      expect(invitationArgs.event).toBe('tenant-invitation');
+      expect(invitationArgs.variables.inviterName).toBe('Jean Dupont');
+      expect(invitationArgs.variables.propertyAddress).toBe(property.address);
+      expect(invitationArgs.variables.invitationUrl).toContain('/activate-account?token=');
       expect(result.invitationUrl).toContain('/activate-account?token=');
       expect(result.lease).toEqual({
         id: 'lease-1',

@@ -183,6 +183,7 @@ describe('LeasesService', () => {
       expect(prisma.paymentScheduleEntry.findMany).toHaveBeenCalledWith({
         where: { leaseId: 'lease-1' },
         orderBy: { periodStart: 'asc' },
+        take: 100,
       });
     });
   });

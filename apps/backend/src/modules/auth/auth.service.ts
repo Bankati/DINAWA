@@ -478,15 +478,26 @@ export class AuthService {
       const token = createInvitationToken(user.id, secret);
       invitationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/activate-account?token=${token}`;
 
-      await this.emailService.sendEmail({
-        to: dto.email,
-        template: 'tenant-invitation',
-        variables: {
-          inviterName: `${inviter.firstName} ${inviter.lastName}`,
-          propertyAddress: property.address,
-          invitationUrl,
-        },
-      });
+      // Événement métier, jamais un email direct (voir architecture.md,
+      // invariant #7 — seuls signup-confirmation et password-reset-otp sont
+      // exemptés). Une notification manquée ne doit jamais faire échouer
+      // l'invitation elle-même — même réflexe que lease-created ci-dessous.
+      try {
+        await this.notify.notifyUser({
+          userId: user.id,
+          event: 'tenant-invitation',
+          variables: {
+            inviterName: `${inviter.firstName} ${inviter.lastName}`,
+            propertyAddress: property.address,
+            invitationUrl,
+          },
+        });
+      } catch (notifyError) {
+        this.logger.error(
+          `[tenant-invitation] notification échouée pour tenant=${user.id}`,
+          notifyError,
+        );
+      }
     }
 
     // Événement métier, jamais un email direct (voir architecture.md,

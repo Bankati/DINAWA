@@ -460,7 +460,6 @@ export type EmailTemplate =
   | 'overdue-alert'
   | 'payment-declaration-pending'
   | 'monthly-report'
-  | 'listing-contact'
   | 'inactivity-warning'
   | 'account-suspended';
 

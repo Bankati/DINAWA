@@ -43,11 +43,6 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: 'Votre rapport pour {period} est prêt.',
     url: '/dashboard/reports',
   },
-  'listing-contact': {
-    title: 'Nouveau contact annonce',
-    body: '{candidateName} est intéressé(e) par {listingAddress}.',
-    url: '/dashboard/listings',
-  },
   'inactivity-warning': {
     title: 'Compte bientôt suspendu',
     body: 'Il vous reste {daysRemaining} jours avant suspension.',

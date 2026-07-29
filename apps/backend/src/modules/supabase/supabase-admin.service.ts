@@ -1,8 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
+import { withTimeout } from '../../common/utils/with-timeout';
 
 type SupabaseClient = ReturnType<typeof createClient>;
+
+// Défaut aligné sur EmailService (voir code-standards.md, "Timeouts et retry
+// sur les appels externes" — 10s par défaut) — borne chaque tentative
+// individuelle de withRetry(), indépendamment du nombre de retries.
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 10_000;
 
 // Défaut aligné sur EmailService/WebPushService (mêmes valeurs pRetry) —
 // absorbe un blip réseau ponctuel vers l'infrastructure Supabase (voir
@@ -57,12 +63,18 @@ export class SupabaseAdminService {
   // exception) traverse normalement dès le premier essai, aucun retry inutile.
   async withRetry<T>(
     fn: () => Promise<T>,
-    options: { retries?: number; minTimeout?: number; maxTimeout?: number } = {},
+    options: {
+      retries?: number;
+      minTimeout?: number;
+      maxTimeout?: number;
+      timeoutMs?: number;
+    } = {},
   ): Promise<T> {
     const { default: pRetry } = await import('p-retry');
-    return pRetry(fn, {
+    const { timeoutMs = DEFAULT_ATTEMPT_TIMEOUT_MS, ...retryOptions } = options;
+    return pRetry(() => withTimeout(fn(), timeoutMs), {
       ...DEFAULT_RETRY_OPTIONS,
-      ...options,
+      ...retryOptions,
       onFailedAttempt: (error) => {
         this.logger.warn(
           `[supabase-admin] tentative ${error.attemptNumber} échouée, ${error.retriesLeft} restante(s) — ${error.message}`,

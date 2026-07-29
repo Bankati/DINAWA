@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -41,6 +42,8 @@ function computeEntryStatus(paidAmount: number, expectedAmount: number): Schedul
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -198,7 +201,10 @@ export class PaymentsService {
     } catch (notifyError) {
       // Une notification manquée ne doit jamais faire échouer le rejet
       // lui-même — même réflexe que AuthService.inviteTenant().
-      void notifyError;
+      this.logger.error(
+        `[payments] notification rejet échouée pour payment=${rejected.id}`,
+        notifyError,
+      );
     }
 
     return rejected;

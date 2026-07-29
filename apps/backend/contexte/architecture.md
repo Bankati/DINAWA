@@ -94,7 +94,7 @@ Source de vérité pour toutes les données métier et techniques :
 - Baux (`Lease`) et calendrier d'échéances (`PaymentScheduleEntry`) générés à la création du bail
 - Paiements (`Payment`) avec leur `source` (`CASHPAY_API` / `MANUAL_OWNER` / `TENANT_DECLARATION`) et leur statut
 - Déclarations de paiement par le locataire (`PaymentDeclaration`)
-- Annonces (`Listing`) et demandes de contact (`ListingContact`)
+- Annonces (`Listing`)
 - Mandats gestionnaire ↔ propriétaire (`Mandate`)
 - Avis sur les gestionnaires (`ManagerReview`)
 - Abonnements (`Subscription`) et historique des factures (`SubscriptionInvoice`)
@@ -254,8 +254,8 @@ Tous les jobs cron utilisent `@nestjs/schedule` et tournent dans le même conten
 
 | Job                                                                | Fréquence               | Verrou Postgres | Rôle                                                                                                          |
 | ------------------------------------------------------------------ | ----------------------- | :-------------: | ------------------------------------------------------------------------------------------------------------- |
-| `reminders.task.ts`                                                | Toutes les heures       |       non       | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
-| `overdue.task.ts`                                                  | Toutes les heures       |       non       | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
+| `reminders.task.ts`                                                | Toutes les heures       |     **oui**     | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
+| `overdue.task.ts`                                                  | Toutes les heures       |     **oui**     | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
 | `payment-declaration-reminders.task.ts` **(construit 2026-07-25)** | Tous les jours à 8h UTC |     **oui**     | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours |
 | `inactivity.task.ts`                                               | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                 |
 | `listing-suspension.task.ts`                                       | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                   |

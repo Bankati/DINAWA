@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Payment, Prisma } from '@prisma/client';
@@ -24,6 +25,8 @@ type DeclarationWithAccess = Prisma.PaymentGetPayload<{
 // build-plan.md unité 20).
 @Injectable()
 export class PaymentDeclarationsService {
+  private readonly logger = new Logger(PaymentDeclarationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -97,7 +100,10 @@ export class PaymentDeclarationsService {
         },
       });
     } catch (notifyError) {
-      void notifyError;
+      this.logger.error(
+        `[payment-declarations] notification création échouée pour payment=${payment.id}`,
+        notifyError,
+      );
     }
 
     return payment;
@@ -110,6 +116,7 @@ export class PaymentDeclarationsService {
     proof?: Express.Multer.File,
   ): Promise<Payment> {
     const payment = await this.loadOwnDeclaration(user, paymentId);
+    const previousProofStoragePath = payment.proofStoragePath ?? undefined;
 
     const declaredAt = dto.declaredAt ? new Date(dto.declaredAt) : undefined;
 
@@ -119,8 +126,8 @@ export class PaymentDeclarationsService {
       await this.storage.upload('payment-proofs', proofStoragePath, proof.buffer, proof.mimetype);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.payment.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.update({
         where: { id: paymentId },
         data: {
           ...(dto.declaredAmount !== undefined ? { paidAmount: dto.declaredAmount } : {}),
@@ -143,8 +150,21 @@ export class PaymentDeclarationsService {
         },
       });
 
-      return updated;
+      return updatedPayment;
     });
+
+    // Suppression de l'ancien justificatif seulement après que le nouveau
+    // soit uploadé et la transaction confirmée — jamais l'inverse, même
+    // principe que ProfileService.updateProfile() pour les remplacements.
+    if (
+      proofStoragePath &&
+      previousProofStoragePath &&
+      previousProofStoragePath !== proofStoragePath
+    ) {
+      await this.storage.remove('payment-proofs', previousProofStoragePath);
+    }
+
+    return updated;
   }
 
   async cancel(user: AuthenticatedUser, paymentId: string): Promise<{ message: string }> {

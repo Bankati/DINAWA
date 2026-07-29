@@ -12,6 +12,21 @@ export type NotifyUserParams = {
   emailAttachments?: EmailAttachment[];
 };
 
+// Clés jamais persistées dans l'historique (Notification.payload) même si
+// elles sont nécessaires à l'envoi push/email — invitationUrl embarque un
+// token d'activation de compte valide 7 jours (voir invitation-token.ts),
+// un secret d'authentification qui n'a rien à faire dans un historique
+// consultable via GET /api/notifications.
+const SENSITIVE_PAYLOAD_KEYS = new Set(['invitationUrl']);
+
+function sanitizePayloadForStorage(variables: TemplateVariables): TemplateVariables {
+  const safe: TemplateVariables = {};
+  for (const [key, value] of Object.entries(variables)) {
+    if (!SENSITIVE_PAYLOAD_KEYS.has(key)) safe[key] = value;
+  }
+  return safe;
+}
+
 // Point d'entrée unique pour toute notification métier — jamais d'appel
 // direct à EmailService ou WebPushService depuis un service métier ou un
 // cron (voir architecture.md, invariant #6). Une pièce jointe force le
@@ -45,6 +60,7 @@ export class NotifyService {
 
     if (canPush && !params.emailAttachments) {
       await this.push.sendToUser(user.id, renderPushContent(params.event, params.variables));
+      await this.recordDispatch(params, 'PUSH', 'SENT');
       return;
     }
 
@@ -55,11 +71,36 @@ export class NotifyService {
       return;
     }
 
-    await this.email.sendEmail({
+    const delivered = await this.email.sendEmail({
       to: user.email,
       template: params.event,
       variables: params.variables,
       attachments: params.emailAttachments,
     });
+    await this.recordDispatch(params, 'EMAIL', delivered ? 'SENT' : 'FAILED');
+  }
+
+  // Historique consulté par NotifyController (GET /notifications,
+  // /notifications/unread-count) — un échec d'écriture ne doit jamais faire
+  // échouer l'envoi qui vient de réussir, donc jamais dans le même try que
+  // l'envoi lui-même.
+  private async recordDispatch(
+    params: NotifyUserParams,
+    channel: 'PUSH' | 'EMAIL',
+    status: 'SENT' | 'FAILED',
+  ): Promise<void> {
+    try {
+      await this.prisma.notification.create({
+        data: {
+          userId: params.userId,
+          event: params.event,
+          channel,
+          status,
+          payload: sanitizePayloadForStorage(params.variables),
+        },
+      });
+    } catch (error) {
+      this.logger.error(`[notify/${params.event}] échec d'écriture de l'historique`, error);
+    }
   }
 }

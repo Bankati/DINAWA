@@ -32,3 +32,7 @@ export const PAYMENT_DECLARATION_REMINDER_DAYS = [3, 7] as const;
 // du jour selon la date d'échéance exacte.
 export const CRON_PAYMENT_REMINDERS = '0 * * * *';
 export const CRON_OVERDUE_ALERTS = '30 * * * *';
+
+// Supabase free tier met le projet en veille après ~5 min d'inactivité — ce
+// ping maintient la connexion PostgreSQL active (voir supabase-keepalive.task.ts).
+export const CRON_SUPABASE_KEEPALIVE = '0 */4 * * * *';

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class SignupManagerDto {
   @ApiProperty()
@@ -15,10 +15,12 @@ export class SignupManagerDto {
 
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
   firstName!: string;
 
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
   lastName!: string;
 
   @ApiProperty({ example: '90330557' })
@@ -30,5 +32,6 @@ export class SignupManagerDto {
   // inscription owner/manager).
   @ApiProperty({ example: 'Lomé' })
   @IsString()
+  @MaxLength(100)
   city!: string;
 }

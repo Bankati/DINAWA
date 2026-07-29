@@ -11,7 +11,7 @@ describe('PaymentDeclarationRemindersTask', () => {
   let task: PaymentDeclarationRemindersTask;
   let prisma: {
     paymentDeclaration: { findMany: jest.Mock; update: jest.Mock };
-    mandate: { findFirst: jest.Mock };
+    mandate: { findMany: jest.Mock };
   };
   let notify: { notifyUser: jest.Mock };
 
@@ -32,7 +32,7 @@ describe('PaymentDeclarationRemindersTask', () => {
   beforeEach(() => {
     prisma = {
       paymentDeclaration: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
-      mandate: { findFirst: jest.fn().mockResolvedValue(null) },
+      mandate: { findMany: jest.fn().mockResolvedValue([]) },
     };
     notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
 
@@ -72,7 +72,7 @@ describe('PaymentDeclarationRemindersTask', () => {
   });
 
   it('notifie le gestionnaire mandaté plutôt que le propriétaire si un mandat actif existe', async () => {
-    prisma.mandate.findFirst.mockResolvedValue({ managerId: 'manager-1', status: 'ACTIVE' });
+    prisma.mandate.findMany.mockResolvedValue([{ propertyId: 'prop-1', managerId: 'manager-1' }]);
     prisma.paymentDeclaration.findMany
       .mockResolvedValueOnce([makeDeclaration()])
       .mockResolvedValueOnce([]);

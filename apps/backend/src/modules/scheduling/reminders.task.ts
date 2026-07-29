@@ -55,7 +55,7 @@ export class RemindersTask {
           },
         },
       },
-      take: 200,
+      take: 100,
     });
 
     for (const entry of candidates) {

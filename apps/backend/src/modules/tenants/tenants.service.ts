@@ -208,6 +208,7 @@ export class TenantsService {
         role: 'TENANT',
         tenantProfile: { invitedByUserId: user.id },
       },
+      take: 100,
       select: {
         id: true,
         firstName: true,

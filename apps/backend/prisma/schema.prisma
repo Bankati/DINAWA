@@ -556,25 +556,9 @@ model Listing {
   createdAt         DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
 
-  contacts ListingContact[]
-
   @@index([propertyId])
   @@index([status])
   @@map("listings")
-}
-
-model ListingContact {
-  id        String   @id @default(cuid())
-  listingId String
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  firstName String
-  phone     String
-  message   String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-
-  @@index([listingId])
-  @@map("listing_contacts")
 }
 
 // ────────────────────────────────────────────────────────────────

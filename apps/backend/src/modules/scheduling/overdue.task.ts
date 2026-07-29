@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
-import { resolveResponsibleUserId } from '../../common/permissions/property-access';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
 import { CRON_OVERDUE_ALERTS } from '../../common/constants';
 
@@ -58,8 +57,20 @@ export class OverdueAlertsTask {
           },
         },
       },
-      take: 200,
+      take: 100,
     });
+
+    // Un seul aller-retour DB pour tous les mandats actifs des biens candidats,
+    // plutôt qu'un resolveResponsibleUserId() (donc un findFirst) par itération
+    // (voir /review — N+1 corrigé).
+    const propertyIds = [...new Set(candidates.map((entry) => entry.lease.property.id))];
+    const activeMandates = await this.prisma.mandate.findMany({
+      where: { propertyId: { in: propertyIds }, status: 'ACTIVE' },
+      select: { propertyId: true, managerId: true },
+    });
+    const responsibleUserByPropertyId = new Map(
+      activeMandates.map((m) => [m.propertyId, m.managerId]),
+    );
 
     for (const entry of candidates) {
       try {
@@ -67,7 +78,8 @@ export class OverdueAlertsTask {
         const daysOverdue = Math.floor((now.getTime() - entry.dueDate.getTime()) / MS_PER_DAY);
         if (daysOverdue < graceDays) continue;
 
-        const responsibleUserId = await resolveResponsibleUserId(this.prisma, entry.lease.property);
+        const responsibleUserId =
+          responsibleUserByPropertyId.get(entry.lease.property.id) ?? entry.lease.property.ownerId;
 
         await this.notify.notifyUser({
           userId: responsibleUserId,

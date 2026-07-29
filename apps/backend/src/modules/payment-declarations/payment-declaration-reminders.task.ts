@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
-import { resolveResponsibleUserId } from '../../common/permissions/property-access';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
 import { CRON_PAYMENT_DECLARATION_REMINDERS } from '../../common/constants';
 
@@ -61,12 +60,23 @@ export class PaymentDeclarationRemindersTask {
       take: 100,
     });
 
+    // Un seul aller-retour DB pour tous les mandats actifs des biens candidats,
+    // plutôt qu'un resolveResponsibleUserId() (donc un findFirst) par itération
+    // (voir /review — N+1 corrigé).
+    const propertyIds = [...new Set(declarations.map((d) => d.payment.lease.property.id))];
+    const activeMandates = await this.prisma.mandate.findMany({
+      where: { propertyId: { in: propertyIds }, status: 'ACTIVE' },
+      select: { propertyId: true, managerId: true },
+    });
+    const responsibleUserByPropertyId = new Map(
+      activeMandates.map((m) => [m.propertyId, m.managerId]),
+    );
+
     for (const declaration of declarations) {
       try {
-        const responsibleUserId = await resolveResponsibleUserId(
-          this.prisma,
-          declaration.payment.lease.property,
-        );
+        const responsibleUserId =
+          responsibleUserByPropertyId.get(declaration.payment.lease.property.id) ??
+          declaration.payment.lease.property.ownerId;
         await this.notify.notifyUser({
           userId: responsibleUserId,
           event: 'payment-declaration-pending',

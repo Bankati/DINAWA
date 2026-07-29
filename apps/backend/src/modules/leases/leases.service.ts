@@ -81,6 +81,7 @@ export class LeasesService {
     return this.prisma.paymentScheduleEntry.findMany({
       where: { leaseId },
       orderBy: { periodStart: 'asc' },
+      take: 100,
     });
   }
 

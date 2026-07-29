@@ -37,7 +37,10 @@ export function isAllowedMimeType(bucket: StorageBucket, mimetype: string): bool
 // Cache centralisé des URLs signées — évite N aller-retours réseau vers Supabase
 // Storage (latence ~1-3s depuis Afrique/Togo vers serveurs US). TTL 55 min
 // (les URLs signées expirent à 60 min par défaut).
-interface CachedSignedUrl { url: string; expiresAt: number }
+interface CachedSignedUrl {
+  url: string;
+  expiresAt: number;
+}
 const URL_CACHE_TTL_MS = 55 * 60 * 1000;
 
 // Wrapper Supabase Storage — seul point d'entrée pour manipuler les 6 buckets
@@ -59,9 +62,9 @@ export class StorageService {
   ): Promise<string> {
     this.assertValid(bucket, file, contentType);
 
-    const { error } = await this.supabase.raw.storage
-      .from(bucket)
-      .upload(path, file, { contentType, upsert: false });
+    const { error } = await this.supabase.withRetry(() =>
+      this.supabase.raw.storage.from(bucket).upload(path, file, { contentType, upsert: false }),
+    );
     if (error) throw new InternalServerErrorException(`Upload ${bucket} échoué: ${error.message}`);
     return path;
   }
@@ -75,9 +78,9 @@ export class StorageService {
     const cached = this.urlCache.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt) return cached.url;
 
-    const { data, error } = await this.supabase.raw.storage
-      .from(bucket)
-      .createSignedUrl(path, expiresIn);
+    const { data, error } = await this.supabase.withRetry(() =>
+      this.supabase.raw.storage.from(bucket).createSignedUrl(path, expiresIn),
+    );
     if (error || !data) throw new InternalServerErrorException(`URL signée ${bucket} échouée`);
     this.urlCache.set(cacheKey, { url: data.signedUrl, expiresAt: Date.now() + URL_CACHE_TTL_MS });
     return data.signedUrl;
@@ -105,14 +108,17 @@ export class StorageService {
     }
 
     if (uncached.length > 0) {
-      const { data, error } = await this.supabase.raw.storage
-        .from(bucket)
-        .createSignedUrls(uncached, expiresIn);
+      const { data, error } = await this.supabase.withRetry(() =>
+        this.supabase.raw.storage.from(bucket).createSignedUrls(uncached, expiresIn),
+      );
       if (!error && data) {
         for (const item of data) {
           if (item.signedUrl && item.path) {
             result.set(item.path, item.signedUrl);
-            this.urlCache.set(`${bucket}:${item.path}`, { url: item.signedUrl, expiresAt: now + URL_CACHE_TTL_MS });
+            this.urlCache.set(`${bucket}:${item.path}`, {
+              url: item.signedUrl,
+              expiresAt: now + URL_CACHE_TTL_MS,
+            });
           }
         }
       }
@@ -126,8 +132,18 @@ export class StorageService {
     this.urlCache.delete(`${bucket}:${path}`);
   }
 
+  // Budget réduit (1 seule tentative, 5s) — remove() est souvent appelé en
+  // ligne dans une requête HTTP utilisateur (remplacement de photo/document,
+  // nettoyage d'un ancien justificatif) pour une opération non bloquante
+  // pour l'utilisateur ; le budget par défaut de withRetry() (jusqu'à
+  // ~40-47s, pensé pour les crons) y ferait attendre la réponse trop
+  // longtemps. Un fichier orphelin résiduel en cas d'échec est sans impact
+  // fonctionnel (même risque que le fichier restait déjà avant ce wrapping).
   async remove(bucket: StorageBucket, path: string): Promise<void> {
-    await this.supabase.raw.storage.from(bucket).remove([path]);
+    await this.supabase.withRetry(() => this.supabase.raw.storage.from(bucket).remove([path]), {
+      retries: 0,
+      timeoutMs: 5_000,
+    });
   }
 
   private assertValid(bucket: StorageBucket, file: Buffer, contentType: string): void {

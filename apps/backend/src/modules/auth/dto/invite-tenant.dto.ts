@@ -39,10 +39,12 @@ export class InviteTenantDto {
 
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
   firstName!: string;
 
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
   lastName!: string;
 
   @ApiProperty()
