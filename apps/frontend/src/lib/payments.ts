@@ -102,8 +102,10 @@ export const paymentsApi = {
     api.post<Payment>(`/payments/${id}/reject`, dto),
 
   // Récupérer l'historique des paiements
-  getPayments: (query?: { leaseId?: string; status?: string; page?: number; limit?: number }) => 
-    api.get<{ data: Payment[]; total: number }>('/payments', query),
+  getPayments: (query?: { leaseId?: string; status?: string; page?: number; limit?: number }) => {
+    const params = query ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])).toString() : '';
+    return api.get<{ data: Payment[]; total: number }>(`/payments${params}`);
+  },
 
   // Télécharger la quittance PDF
   downloadReceipt: (id: string) => 

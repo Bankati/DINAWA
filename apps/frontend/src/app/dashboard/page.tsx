@@ -125,19 +125,25 @@ export default function DashboardPage() {
 
   return (
     <div className="dash-page">
-      <header className="dash-header">
-        <div className="header-left">
-          <h1 className="header-greeting">Bonjour, {utilisateurPrenom}</h1>
-          <p className="header-date">{dateCourante}</p>
+      {/* ── Hero banner FACAM ── */}
+      <div className="dash-hero">
+        <div className="hero-meta">
+          <span className="hero-date-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {dateCourante}
+          </span>
+          <span className="hero-role-badge">Propriétaire</span>
         </div>
-        <div className="header-right">
-          <Link href="/dashboard/notifications" className={`notif-btn${alertes.length > 0 ? ' has-alertes' : ''}`}>
+        <h1 className="hero-greeting">Bonjour, {utilisateurPrenom} !</h1>
+        <p className="hero-subtitle">Voici un aperçu de votre portefeuille immobilier</p>
+        <div className="hero-actions">
+          <Link href="/dashboard/notifications" className={`hero-notif-btn${alertes.length > 0 ? ' has-alertes' : ''}`}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            {alertes.length > 0 && <span className="notif-badge">{alertes.length}</span>}
+            {alertes.length > 0 && <span className="hero-notif-badge">{alertes.length}</span>}
           </Link>
-          <div className="header-avatar">{userInitiales}</div>
+          <div className="hero-avatar">{userInitiales}</div>
         </div>
-      </header>
+      </div>
 
       <div className="dash-body">
         {error && (
@@ -145,61 +151,62 @@ export default function DashboardPage() {
             Certaines données n&apos;ont pas pu être chargées. Réessayez plus tard.
           </div>
         )}
-        {/* ── KPI asymétrique ── */}
-        <div className="kpi-layout">
+
+        {/* ── KPI 4 colonnes FACAM ── */}
+        <div className="kpi-grid">
           {loadingKPIs ? (
             <>
-              <div className="kpi-hero-card"><div className="sk-line" style={{ height: '100%', minHeight: 220 }} /></div>
-              <div className="kpi-biens-card"><div className="sk-line" /></div>
-              <div className="kpi-taux-card"><div className="sk-line" /></div>
-              <div className="kpi-impayes-card"><div className="sk-line" /></div>
+              <div className="kpi-card kpi-card-blue"><div className="sk-line" /></div>
+              <div className="kpi-card kpi-card-green"><div className="sk-line" /></div>
+              <div className="kpi-card kpi-card-amber"><div className="sk-line" /></div>
+              <div className="kpi-card kpi-card-red"><div className="sk-line" /></div>
             </>
           ) : (
             <>
-              <div className="kpi-hero-card">
-                <p className="kpi-h-eyebrow">Revenus ce mois</p>
-                <p className="kpi-h-amount">{fcfa(kpis.revenusMensuels)}</p>
-                <p className="kpi-h-trend">↑ +5 % vs mois dernier</p>
-                <div className="kpi-h-sep" />
-                <div className="kpi-h-footer">
-                  <span className="kpi-h-ann-label">Total annuel</span>
-                  <span className="kpi-h-ann-val">{fcfa(kpis.revenusAnnuels)}</span>
-                </div>
-              </div>
-
-              <div className="kpi-biens-card">
-                <p className="kpi-label">Parc immobilier</p>
-                <div className="kpi-biens-row">
-                  <p className="kpi-big">{kpis.totalBiens}</p>
-                  <div className="biens-pills">
-                    <span className="biens-pill occ">{kpis.biensOccupes} occupés</span>
-                    <span className="biens-pill vac">{kpis.biensVacants} vacants</span>
+              <div className="kpi-card kpi-card-blue">
+                <div className="kpi-card-top">
+                  <p className="kpi-card-eyebrow">Revenus ce mois</p>
+                  <div className="kpi-card-icon kpi-icon-blue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
                   </div>
                 </div>
-                <div className="biens-bar-track">
-                  <div className="biens-bar-fill" style={{ width: `${kpis.totalBiens > 0 ? (kpis.biensOccupes / kpis.totalBiens) * 100 : 0}%` }} />
-                </div>
+                <p className="kpi-card-value">{fcfa(kpis.revenusMensuels)}</p>
+                <p className="kpi-card-sub">Total annuel : {fcfa(kpis.revenusAnnuels)}</p>
               </div>
 
-              <div className="kpi-taux-card">
-                <p className="kpi-label">Occupation</p>
-                <div className="taux-body">
-                  <div>
-                    <p className="kpi-big accent">{kpis.tauxOccupation}%</p>
-                    <p className="kpi-sub">{kpis.totalLocataires} locataires</p>
+              <div className="kpi-card kpi-card-green">
+                <div className="kpi-card-top">
+                  <p className="kpi-card-eyebrow">Biens occupés</p>
+                  <div className="kpi-card-icon kpi-icon-green">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                   </div>
-                  <svg viewBox="0 0 44 44" className="ring-svg" aria-hidden="true">
-                    <circle cx="22" cy="22" r="17" className="ring-bg" />
-                    <circle cx="22" cy="22" r="17" className="ring-fill" strokeDasharray={`${((kpis.tauxOccupation / 100) * 106.81).toFixed(2)} 106.81`} />
-                  </svg>
                 </div>
+                <p className="kpi-card-value">{kpis.biensOccupes}<span style={{ fontSize: 16, fontWeight: 500, color: '#9CA3AF' }}>/{kpis.totalBiens}</span></p>
+                <p className="kpi-card-sub">Taux d&apos;occupation : {kpis.tauxOccupation}%</p>
               </div>
 
-              <div className="kpi-impayes-card">
-                <p className="kpi-label">Impayés</p>
-                <p className="kpi-big danger">{kpis.impayes}</p>
-                <p className="kpi-sub">loyer{kpis.impayes !== 1 ? 's' : ''} en retard</p>
-                {kpis.impayes > 0 ? <span className="urgent-pill">Urgent</span> : <span className="ok-pill">À jour</span>}
+              <div className="kpi-card kpi-card-amber">
+                <div className="kpi-card-top">
+                  <p className="kpi-card-eyebrow">Locataires actifs</p>
+                  <div className="kpi-card-icon kpi-icon-amber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                </div>
+                <p className="kpi-card-value">{kpis.totalLocataires}</p>
+                <p className="kpi-card-sub">{kpis.biensVacants} bien{kpis.biensVacants !== 1 ? 's' : ''} vacant{kpis.biensVacants !== 1 ? 's' : ''}</p>
+              </div>
+
+              <div className="kpi-card kpi-card-red">
+                <div className="kpi-card-top">
+                  <p className="kpi-card-eyebrow">Impayés</p>
+                  <div className="kpi-card-icon kpi-icon-red">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  </div>
+                </div>
+                <p className="kpi-card-value">{kpis.impayes}</p>
+                <span className={`kpi-card-urgent ${kpis.impayes > 0 ? 'red' : 'green'}`}>
+                  {kpis.impayes > 0 ? 'Urgent' : 'À jour'}
+                </span>
               </div>
             </>
           )}

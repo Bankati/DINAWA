@@ -2,198 +2,209 @@
 
 import { useState } from 'react';
 import { paymentsApi, type CreatePaymentDeclarationDto } from '@/lib/payments';
+import '../../locataire.css';
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Espèces' },
   { value: 'BANK_TRANSFER', label: 'Virement bancaire' },
 ];
 
+const EMPTY_FORM: CreatePaymentDeclarationDto = {
+  leaseId: '',
+  scheduleEntryId: '',
+  declaredAmount: 0,
+  paymentMethod: 'CASH',
+  note: '',
+};
+
 export default function PaymentDeclarationPage() {
-  const [formData, setFormData] = useState<CreatePaymentDeclarationDto>({
-    leaseId: '',
-    scheduleEntryId: '',
-    declaredAmount: 0,
-    paymentMethod: 'CASH',
-    note: '',
-  });
+  const [formData, setFormData] = useState<CreatePaymentDeclarationDto>(EMPTY_FORM);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const [dateCourante] = useState(() =>
+    new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrorMessage('Le fichier ne doit pas dépasser 5 Mo');
-        return;
-      }
-      if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
-        setErrorMessage('Formats acceptés: JPEG, PNG, WebP, PDF');
-        return;
-      }
-      setSelectedFile(file);
-      setErrorMessage('');
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setError('Le fichier ne doit pas dépasser 5 Mo'); return; }
+    if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
+      setError('Formats acceptés : JPEG, PNG, WebP, PDF');
+      return;
     }
+    setSelectedFile(file);
+    setError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setErrorMessage('');
-    setSuccessMessage('');
-
+    setError('');
+    setSuccess('');
     try {
       await paymentsApi.createDeclaration(formData, selectedFile || undefined);
-      setSuccessMessage('Déclaration de paiement envoyée avec succès');
-      setFormData({
-        leaseId: '',
-        scheduleEntryId: '',
-        declaredAmount: 0,
-        paymentMethod: 'CASH',
-        note: '',
-      });
+      setSuccess('Déclaration envoyée avec succès. Elle sera examinée par votre propriétaire.');
+      setFormData(EMPTY_FORM);
       setSelectedFile(null);
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (error: any) {
-      setErrorMessage(error.message || 'Erreur lors de la déclaration');
+      setTimeout(() => setSuccess(''), 7000);
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la déclaration');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Déclaration de paiement</h1>
-        <p className="text-gray-600 mb-6">Déclarez votre paiement et joignez la preuve de transaction.</p>
+    <div className="loc-page">
+      {/* ── Hero ── */}
+      <div className="loc-hero">
+        <div className="loc-hero-meta">
+          <span className="loc-date-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {dateCourante}
+          </span>
+          <span className="loc-role-badge">Locataire</span>
+        </div>
+        <h1 className="loc-hero-title">Déclaration de paiement</h1>
+        <p className="loc-hero-sub">Déclarez votre paiement et joignez la preuve de transaction</p>
+      </div>
 
-        {errorMessage && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 flex items-center justify-between">
-            <span>⚠️ {errorMessage}</span>
-            <button onClick={() => setErrorMessage('')} className="text-red-700 hover:text-red-900 text-xl">×</button>
+      <div className="loc-body">
+        {error && (
+          <div className="loc-alert loc-alert-error">
+            <span>{error}</span>
+            <button onClick={() => setError('')}>×</button>
+          </div>
+        )}
+        {success && (
+          <div className="loc-alert loc-alert-success">
+            <span>{success}</span>
+            <button onClick={() => setSuccess('')}>×</button>
           </div>
         )}
 
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4 flex items-center justify-between">
-            <span>✓ {successMessage}</span>
-            <button onClick={() => setSuccessMessage('')} className="text-green-700 hover:text-green-900 text-xl">×</button>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">ID du bail</label>
-            <input
-              type="text"
-              value={formData.leaseId}
-              onChange={(e) => setFormData({ ...formData, leaseId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+        <div className="loc-card">
+          <div className="loc-card-header">
+            <h2 className="loc-card-title">Informations du paiement</h2>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">ID de l'échéance</label>
-            <input
-              type="text"
-              value={formData.scheduleEntryId}
-              onChange={(e) => setFormData({ ...formData, scheduleEntryId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="loc-form">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="loc-field">
+                <label className="loc-label">
+                  ID du bail
+                  <span className="loc-label-hint">(requis)</span>
+                </label>
+                <input
+                  className="loc-input"
+                  type="text"
+                  value={formData.leaseId}
+                  onChange={(e) => setFormData({ ...formData, leaseId: e.target.value })}
+                  placeholder="ex. clxxx..."
+                  required
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Montant déclaré (FCFA)</label>
-            <input
-              type="number"
-              value={formData.declaredAmount}
-              onChange={(e) => setFormData({ ...formData, declaredAmount: Number(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-              min="0"
-            />
-          </div>
+              <div className="loc-field">
+                <label className="loc-label">
+                  ID de l&apos;échéance
+                  <span className="loc-label-hint">(requis)</span>
+                </label>
+                <input
+                  className="loc-input"
+                  type="text"
+                  value={formData.scheduleEntryId}
+                  onChange={(e) => setFormData({ ...formData, scheduleEntryId: e.target.value })}
+                  placeholder="ex. clyyy..."
+                  required
+                />
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mode de paiement</label>
-            <select
-              value={formData.paymentMethod}
-              onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method.value} value={method.value}>
-                  {method.label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="loc-field">
+                <label className="loc-label">Montant déclaré (FCFA)</label>
+                <input
+                  className="loc-input"
+                  type="number"
+                  value={formData.declaredAmount || ''}
+                  onChange={(e) => setFormData({ ...formData, declaredAmount: Number(e.target.value) })}
+                  placeholder="0"
+                  required
+                  min="0"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Note (optionnel)</label>
-            <textarea
-              value={formData.note}
-              onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows={3}
-            />
-          </div>
+              <div className="loc-field">
+                <label className="loc-label">Mode de paiement</label>
+                <select
+                  className="loc-select"
+                  value={formData.paymentMethod}
+                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                  required
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Preuve de paiement</label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+            <div className="loc-field">
+              <label className="loc-label">
+                Note <span className="loc-label-hint">(optionnel)</span>
+              </label>
+              <textarea
+                className="loc-textarea"
+                value={formData.note}
+                onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                placeholder="Ajoutez une précision si nécessaire..."
+                rows={3}
+              />
+            </div>
+
+            <div className="loc-field">
+              <label className="loc-label">Preuve de paiement</label>
               <input
                 type="file"
-                onChange={handleFileChange}
+                id="proof-upload"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
-                className="hidden"
-                id="file-upload"
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
               />
-              <label htmlFor="file-upload" className="cursor-pointer">
-                <div className="text-gray-500">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <p className="mt-1 text-sm">Cliquez pour télécharger ou glissez-déposez</p>
-                  <p className="text-xs text-gray-400">JPEG, PNG, WebP, PDF (max 5 Mo)</p>
-                </div>
+              <label htmlFor="proof-upload" className="loc-dropzone">
+                <svg className="loc-dropzone-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                </svg>
+                <p className="loc-dropzone-text">Cliquez pour téléverser ou glissez-déposez</p>
+                <p className="loc-dropzone-hint">JPEG, PNG, WebP, PDF — max 5 Mo</p>
+                {selectedFile && (
+                  <p className="loc-file-ok">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}><polyline points="20 6 9 17 4 12"/></svg>
+                    {selectedFile.name}
+                  </p>
+                )}
               </label>
-              {selectedFile && (
-                <p className="mt-2 text-sm text-green-600">✓ {selectedFile.name}</p>
-              )}
             </div>
-          </div>
 
-          <div className="flex gap-4">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isLoading ? 'Envoi en cours...' : 'Envoyer la déclaration'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFormData({
-                  leaseId: '',
-                  scheduleEntryId: '',
-                  declaredAmount: 0,
-                  paymentMethod: 'CASH',
-                  note: '',
-                });
-                setSelectedFile(null);
-              }}
-              className="flex-1 bg-gray-200 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-300 transition-colors"
-            >
-              Annuler
-            </button>
-          </div>
-        </form>
+            <div className="loc-form-actions">
+              <button type="submit" className="loc-btn-primary" disabled={isLoading}>
+                {isLoading ? 'Envoi en cours…' : 'Envoyer la déclaration'}
+              </button>
+              <button
+                type="button"
+                className="loc-btn-secondary"
+                onClick={() => { setFormData(EMPTY_FORM); setSelectedFile(null); }}
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

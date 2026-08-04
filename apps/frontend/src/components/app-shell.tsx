@@ -62,6 +62,23 @@ const MANAGER_NAV: NavSection[] = [
   },
 ];
 
+const TENANT_NAV: NavSection[] = [
+  {
+    label: 'Paiements',
+    items: [
+      { icon: 'paiements', label: 'Historique', route: '/locataire/paiements/historique' },
+      { icon: 'export', label: 'Déclarer un paiement', route: '/locataire/paiements/declaration' },
+    ],
+  },
+  {
+    label: 'Compte',
+    items: [
+      { icon: 'profil', label: 'Mon profil', route: '/locataire/profil' },
+      { icon: 'notifications', label: 'Notifications', route: '/locataire/notifications', notif: true },
+    ],
+  },
+];
+
 const ROLE_LABELS: Record<string, string> = { OWNER: 'Propriétaire', MANAGER: 'Gestionnaire', TENANT: 'Locataire', ADMIN: 'Administrateur' };
 
 const ICONS: Record<NavIcon, React.ReactNode> = {
@@ -85,7 +102,7 @@ interface AccountStatusResponse {
   unblockCondition: string | null;
 }
 
-function AccountBanner({ isManager }: { isManager: boolean }) {
+function AccountBanner({ isManager, isTenant }: { isManager: boolean; isTenant: boolean }) {
   const [status, setStatus] = useState<AccountStatusResponse | null>(null);
 
   useEffect(() => {
@@ -103,7 +120,7 @@ function AccountBanner({ isManager }: { isManager: boolean }) {
     status.accountStatus === 'SUSPENDED_PAYMENT' ? 'Compte suspendu — paiement en attente' :
     "Compte suspendu par l'administration";
 
-  const ajouterBienRoute = isManager ? '/gestionnaire/biens/nouveau' : '/dashboard/biens/nouveau';
+  const ajouterBienRoute = isTenant ? '#' : isManager ? '/gestionnaire/biens/nouveau' : '/dashboard/biens/nouveau';
 
   return (
     <div className={bannerClass}>
@@ -128,8 +145,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isManager = user?.role === 'MANAGER';
-  const navSections = isManager ? MANAGER_NAV : OWNER_NAV;
-  const homeRoute = isManager ? '/gestionnaire/dashboard' : '/dashboard';
+  const isTenant = user?.role === 'TENANT';
+  const navSections = isManager ? MANAGER_NAV : isTenant ? TENANT_NAV : OWNER_NAV;
+  const homeRoute = isManager ? '/gestionnaire/dashboard' : isTenant ? '/locataire/paiements/historique' : '/dashboard';
   const roleLabel = user ? ROLE_LABELS[user.role] : '';
   const userInitiales = user ? initiales(user.firstName, user.lastName) : '';
   const unreadCount = 0; // notifications temps réel pas encore portées
@@ -142,7 +160,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {sidebarOpen && <div className="overlay" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar${isManager ? ' sidebar-manager' : ''}${sidebarOpen ? ' open' : ''}`}>
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-logo">
           <Link href={homeRoute} className="logo-link">
             <img src="/warah-icon.png" alt="" className="logo-icon" />
@@ -182,7 +200,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
-          {!isManager && (
+          {!isManager && !isTenant && (
             <Link href="/" className="footer-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
               <span>Accueil</span>
@@ -196,7 +214,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="main-content">
-        <AccountBanner isManager={isManager} />
+        <AccountBanner isManager={isManager} isTenant={isTenant} />
         {children}
       </main>
     </div>

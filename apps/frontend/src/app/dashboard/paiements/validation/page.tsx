@@ -216,7 +216,7 @@ export default function PaymentValidationPage() {
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Rejeter le paiement</h2>
               <p className="text-gray-600 mb-4">
-                Veuillez indiquer la raison du rejet de ce paiement de {formatAmount(selectedPayment?.declaredAmount || 0)} FCFA.
+                Veuillez indiquer la raison du rejet de ce paiement de {formatAmount(selectedPayment?.paidAmount || 0)} FCFA.
               </p>
 
               <textarea

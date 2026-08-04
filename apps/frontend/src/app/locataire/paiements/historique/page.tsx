@@ -1,66 +1,62 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { paymentsApi, type Payment } from '@/lib/payments';
+import '../../locataire.css';
 
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
+const STATUS_LABELS: Record<string, string> = {
   PENDING: 'En attente',
   PAID: 'Payé',
   PARTIAL: 'Partiel',
   LATE: 'En retard',
   OVERDUE: 'Impayé',
   REJECTED: 'Rejeté',
+  PENDING_CONFIRMATION: 'À confirmer',
 };
 
-const PAYMENT_STATUS_CLASSES: Record<string, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  PAID: 'bg-green-100 text-green-800',
-  PARTIAL: 'bg-orange-100 text-orange-800',
-  LATE: 'bg-orange-100 text-orange-800',
-  OVERDUE: 'bg-red-100 text-red-800',
-  REJECTED: 'bg-red-100 text-red-800',
+const STATUS_CLASS: Record<string, string> = {
+  PAID: 'loc-badge-paid',
+  PENDING: 'loc-badge-pending',
+  PENDING_CONFIRMATION: 'loc-badge-pending',
+  PARTIAL: 'loc-badge-pending',
+  LATE: 'loc-badge-pending',
+  OVERDUE: 'loc-badge-rejected',
+  REJECTED: 'loc-badge-rejected',
 };
 
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
+const METHOD_LABELS: Record<string, string> = {
   MOBILE_MONEY: 'Mobile Money',
-  BANK_TRANSFER: 'Virement bancaire',
+  BANK_TRANSFER: 'Virement',
   CASH: 'Espèces',
   CHECK: 'Chèque',
+  TMONEY: 'T-Money',
+  FLOOZ: 'Flooz',
 };
+
+function formatDate(s: string) {
+  return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatMontant(n: number) {
+  return n.toLocaleString('fr-FR') + ' FCFA';
+}
 
 export default function PaymentHistoryPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const [dateCourante] = useState(() =>
+    new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  );
 
   useEffect(() => {
-    loadPayments();
+    paymentsApi.getPayments()
+      .then((res) => setPayments(res.data || []))
+      .catch((e: any) => setError(e.message || 'Erreur de chargement'))
+      .finally(() => setIsLoading(false));
   }, []);
-
-  const loadPayments = async () => {
-    setIsLoading(true);
-    setErrorMessage('');
-    try {
-      const response = await paymentsApi.getPayments();
-      setPayments(response.data || []);
-    } catch (error: any) {
-      setErrorMessage(error.message || 'Erreur lors du chargement des paiements');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR');
-  };
-
-  const formatAmount = (amount: number) => {
-    return amount.toLocaleString('fr-FR');
-  };
-
-  const getPaymentMethodLabel = (method: string) => {
-    return PAYMENT_METHOD_LABELS[method] || method;
-  };
 
   const downloadReceipt = async (paymentId: string) => {
     try {
@@ -73,84 +69,96 @@ export default function PaymentHistoryPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (error: any) {
-      setErrorMessage(error.message || 'Erreur lors du téléchargement de la quittance');
+    } catch (e: any) {
+      setError(e.message || 'Erreur lors du téléchargement');
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Historique des paiements</h1>
-        <p className="text-gray-600 mb-6">Consultez l'historique complet de vos paiements.</p>
+    <div className="loc-page">
+      {/* ── Hero ── */}
+      <div className="loc-hero">
+        <div className="loc-hero-meta">
+          <span className="loc-date-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {dateCourante}
+          </span>
+          <span className="loc-role-badge">Locataire</span>
+        </div>
+        <h1 className="loc-hero-title">Historique des paiements</h1>
+        <p className="loc-hero-sub">Consultez et téléchargez vos quittances de loyer</p>
+      </div>
 
-        {errorMessage && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 flex items-center justify-between">
-            <span>⚠️ {errorMessage}</span>
-            <button onClick={() => setErrorMessage('')} className="text-red-700 hover:text-red-900 text-xl">×</button>
+      <div className="loc-body">
+        {error && (
+          <div className="loc-alert loc-alert-error">
+            <span>{error}</span>
+            <button onClick={() => setError('')}>×</button>
           </div>
         )}
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <span className="ml-4 text-gray-600">Chargement des paiements...</span>
+        <div className="loc-card">
+          <div className="loc-card-header">
+            <h2 className="loc-card-title">Mes paiements</h2>
+            <Link href="/locataire/paiements/declaration" className="loc-dl-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Déclarer un paiement
+            </Link>
           </div>
-        ) : payments.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <div className="text-gray-400 text-5xl mb-4">📄</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun paiement enregistré</h3>
-            <p className="text-gray-600">Votre historique de paiements apparaîtra ici.</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bien</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mode</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {payments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(payment.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {payment.lease?.property?.address || '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatAmount(payment.paidAmount)} FCFA
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {getPaymentMethodLabel(payment.paymentMethod)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${PAYMENT_STATUS_CLASSES[payment.status] || 'bg-gray-100 text-gray-800'}`}>
-                        {PAYMENT_STATUS_LABELS[payment.status] || payment.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {payment.status === 'PAID' && (
-                        <button
-                          onClick={() => downloadReceipt(payment.id)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          Télécharger la quittance
-                        </button>
-                      )}
-                    </td>
+
+          {isLoading ? (
+            <><div className="loc-sk" /><div className="loc-sk" /><div className="loc-sk" /></>
+          ) : payments.length === 0 ? (
+            <div className="loc-empty">
+              <svg className="loc-empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+              </svg>
+              <p className="loc-empty-title">Aucun paiement enregistré</p>
+              <p className="loc-empty-desc">Votre historique de paiements apparaîtra ici.</p>
+            </div>
+          ) : (
+            <div className="loc-table-wrap">
+              <table className="loc-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Bien</th>
+                    <th>Montant</th>
+                    <th>Mode</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {payments.map((p) => (
+                    <tr key={p.id}>
+                      <td style={{ color: '#6B7280', fontSize: 12 }}>{formatDate(p.createdAt)}</td>
+                      <td style={{ fontWeight: 500 }}>{p.lease?.property?.address || '—'}</td>
+                      <td style={{ fontWeight: 700, color: '#0A2650', fontVariantNumeric: 'tabular-nums' }}>
+                        {formatMontant(p.paidAmount)}
+                      </td>
+                      <td style={{ color: '#6B7280' }}>{METHOD_LABELS[p.paymentMethod] || p.paymentMethod}</td>
+                      <td>
+                        <span className={`loc-badge ${STATUS_CLASS[p.status] ?? 'loc-badge-default'}`}>
+                          <span className="loc-badge-dot" />
+                          {STATUS_LABELS[p.status] || p.status}
+                        </span>
+                      </td>
+                      <td>
+                        {p.status === 'PAID' && (
+                          <button className="loc-dl-btn" onClick={() => downloadReceipt(p.id)}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Quittance
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

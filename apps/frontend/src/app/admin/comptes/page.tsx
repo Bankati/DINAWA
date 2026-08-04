@@ -1,84 +1,57 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getComptes, changerStatutCompte, type CompteUtilisateur, type RoleUtilisateur } from '@/lib/admin';
+import Link from 'next/link';
+import { adminApi, type AdminUser } from '@/lib/admin';
 import { initiales } from '@/lib/format';
 import './page.css';
 
-const ROLE_LABEL: Record<RoleUtilisateur, string> = {
-  PROPRIETAIRE: 'Propriétaire',
-  LOCATAIRE: 'Locataire',
-  GESTIONNAIRE: 'Gestionnaire',
-  ADMINISTRATEUR: 'Administrateur',
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: 'Propriétaire',
+  TENANT: 'Locataire',
+  MANAGER: 'Gestionnaire',
+  ADMIN: 'Administrateur',
 };
 
-const AVATAR_COLORS: Record<RoleUtilisateur, string> = {
-  PROPRIETAIRE: '#0F4C81',
-  GESTIONNAIRE: '#C9982E',
-  LOCATAIRE: '#1F7A5C',
-  ADMINISTRATEUR: '#B5563A',
+const AVATAR_COLORS: Record<string, string> = {
+  OWNER: '#0F4C81',
+  MANAGER: '#C9982E',
+  TENANT: '#1F7A5C',
+  ADMIN: '#B5563A',
 };
 
-const TABS: { key: string; label: string; roles?: RoleUtilisateur[] }[] = [
-  { key: 'tous', label: 'Tous' },
-  { key: 'proprietaires', label: 'Propriétaires', roles: ['PROPRIETAIRE'] },
-  { key: 'gestionnaires', label: 'Gestionnaires', roles: ['GESTIONNAIRE'] },
-  { key: 'locataires', label: 'Locataires', roles: ['LOCATAIRE'] },
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE: 'Actif',
+  SUSPENDED_INACTIVITY: 'Suspendu',
+  SUSPENDED_PAYMENT: 'Suspendu',
+  SUSPENDED_ADMIN: 'Suspendu',
+};
+
+const TABS = [
+  { key: 'tous', label: 'Tous', role: undefined },
+  { key: 'owners', label: 'Propriétaires', role: 'OWNER' },
+  { key: 'managers', label: 'Gestionnaires', role: 'MANAGER' },
+  { key: 'tenants', label: 'Locataires', role: 'TENANT' },
 ];
 
-function statusLabel(s: CompteUtilisateur['statut']) {
-  if (s === 'ACTIF') return 'Actif';
-  if (s === 'SUSPENDU') return 'Suspendu';
-  return 'En attente';
-}
-
-function initialesCompte(c: CompteUtilisateur) {
-  return initiales(c.prenom, c.nom);
-}
-
 export default function ComptesPage() {
-  const [comptes, setComptes] = useState<CompteUtilisateur[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tous');
   const [search, setSearch] = useState('');
-  const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getComptes()
-      .then(setComptes)
-      .catch(() => setError('Impossible de charger les comptes. Réessayez plus tard.'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = useMemo(() => {
     const tab = TABS.find((t) => t.key === activeTab);
-    let list = comptes;
-    if (tab?.roles) list = list.filter((c) => tab.roles!.includes(c.role));
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(
-        (c) => `${c.prenom} ${c.nom}`.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.telephone.includes(q),
-      );
-    }
-    return list;
-  }, [comptes, activeTab, search]);
+    setLoading(true);
+    adminApi.listUsers({ role: tab?.role, search: search.trim() || undefined, limit: 100 })
+      .then((res) => { setUsers(res.data); setTotal(res.total); })
+      .catch(() => setError('Impossible de charger les comptes.'))
+      .finally(() => setLoading(false));
+  }, [activeTab, search]);
 
-  const totalActifs = comptes.filter((c) => c.statut === 'ACTIF').length;
-
-  async function toggleStatut(compte: CompteUtilisateur) {
-    const nouveauStatut = compte.statut === 'ACTIF' ? 'SUSPENDU' : 'ACTIF';
-    setPendingId(compte.id);
-    setError(null);
-    try {
-      const updated = await changerStatutCompte(compte.id, nouveauStatut);
-      setComptes((prev) => prev.map((c) => (c.id === compte.id ? updated : c)));
-    } catch {
-      setError(`Impossible de changer le statut de ${compte.prenom} ${compte.nom}. Réessayez plus tard.`);
-    } finally {
-      setPendingId(null);
-    }
-  }
+  const totalActifs = useMemo(() => users.filter((u) => u.accountStatus === 'ACTIVE').length, [users]);
 
   return (
     <div>
@@ -91,14 +64,15 @@ export default function ComptesPage() {
         <div className="panel-head">
           <h1 className="panel-title">Comptes</h1>
           <div className="panel-actions">
-            <div className="search-wrap" style={{ width: 220 }}>
+            <div className="search-wrap" style={{ width: 240 }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" className="search-input" placeholder="Rechercher un compte..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              <input
+                type="text" className="search-input"
+                placeholder="Nom, email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
-            <button className="btn-solid">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Ajouter un compte
-            </button>
           </div>
         </div>
 
@@ -111,7 +85,7 @@ export default function ComptesPage() {
             ))}
           </div>
           <div className="stats-inline">
-            Total comptes : <strong>{comptes.length}</strong> · Actifs : <strong>{totalActifs}</strong>
+            Total : <strong>{total}</strong> · Actifs : <strong>{totalActifs}</strong>
           </div>
         </div>
 
@@ -120,47 +94,55 @@ export default function ComptesPage() {
             <thead>
               <tr>
                 <th>Membre</th>
-                <th>Téléphone</th>
                 <th>Email</th>
+                <th>Ville</th>
+                <th>Biens / Baux</th>
+                <th>Inscription</th>
                 <th>Statut</th>
-                <th>Actions</th>
+                <th style={{ textAlign: 'center' }}>Voir</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr className="empty-row"><td colSpan={5}>Chargement…</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={5}>Aucun compte ne correspond à votre recherche.</td></tr>
+                <tr className="empty-row"><td colSpan={7}>Chargement…</td></tr>
+              ) : users.length === 0 ? (
+                <tr className="empty-row"><td colSpan={7}>Aucun compte trouvé.</td></tr>
               ) : (
-                filtered.map((c) => (
-                  <tr key={c.id}>
+                users.map((u) => (
+                  <tr key={u.id}>
                     <td>
                       <div className="cell-member">
-                        <div className="member-avatar" style={{ background: AVATAR_COLORS[c.role] }}>{initialesCompte(c)}</div>
+                        <div className="member-avatar" style={{ background: AVATAR_COLORS[u.role] ?? '#6B7280' }}>
+                          {initiales(u.firstName, u.lastName)}
+                        </div>
                         <div>
-                          <div className="member-name">{c.prenom} {c.nom}</div>
-                          <div className="member-role">{ROLE_LABEL[c.role]}</div>
+                          <div className="member-name">{u.firstName} {u.lastName}</div>
+                          <div className="member-role">{ROLE_LABEL[u.role] ?? u.role}</div>
                         </div>
                       </div>
                     </td>
-                    <td>{c.telephone}</td>
-                    <td>{c.email}</td>
-                    <td><span className={`status-badge status-${c.statut.toLowerCase()}`}>{statusLabel(c.statut)}</span></td>
+                    <td style={{ fontSize: 12.5, color: '#6B7280' }}>{u.email ?? '—'}</td>
+                    <td style={{ fontSize: 12.5 }}>{u.city ?? '—'}</td>
+                    <td style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
+                      {u.role === 'OWNER' || u.role === 'MANAGER'
+                        ? `${u._count.ownedProperties} bien${u._count.ownedProperties !== 1 ? 's' : ''}`
+                        : `${u._count.leasesAsTenant} bail${u._count.leasesAsTenant !== 1 ? 's' : ''}`}
+                    </td>
+                    <td style={{ fontSize: 12, color: '#9CA3AF' }}>
+                      {new Date(u.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
                     <td>
-                      <div className="cell-actions">
-                        {c.statut !== 'EN_ATTENTE' && (
-                          <button
-                            className={`pill-toggle ${c.statut === 'ACTIF' ? 'pill-suspendre' : 'pill-activer'}`}
-                            onClick={() => toggleStatut(c)}
-                            disabled={pendingId === c.id}
-                          >
-                            {pendingId === c.id ? '…' : c.statut === 'ACTIF' ? 'Suspendre' : 'Activer'}
-                          </button>
-                        )}
-                        <button className="icon-btn icon-btn-danger" aria-label="Supprimer" title="Supprimer">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                        </button>
-                      </div>
+                      <span className={`status-badge status-${u.accountStatus === 'ACTIVE' ? 'actif' : 'suspendu'}`}>
+                        {STATUS_LABEL[u.accountStatus] ?? u.accountStatus}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <Link href={`/admin/comptes/${u.id}`} className="icon-btn" title="Voir le profil" aria-label="Voir le profil">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </Link>
                     </td>
                   </tr>
                 ))
