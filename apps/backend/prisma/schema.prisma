@@ -50,11 +50,6 @@ enum NotificationConsent {
   DECLINED
 }
 
-enum IdVerificationStatus {
-  PENDING
-  VERIFIED
-  REJECTED
-}
 
 enum PropertyType {
   VILLA
@@ -220,7 +215,6 @@ model User {
   managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
   managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
   subscription           Subscription?
-  identityVerifications  IdentityVerification[]
   pushSubscriptions      PushSubscription[]
   passwordResetOtps      PasswordResetOtp[]
   notifications          Notification[]
@@ -230,14 +224,13 @@ model User {
 }
 
 model OwnerProfile {
-  id                   String               @id @default(cuid())
-  userId               String               @unique
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  residenceCountry     String
-  idVerificationStatus IdVerificationStatus @default(PENDING)
-  betaUntil            DateTime?            @db.Timestamptz(6)
-  createdAt            DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime             @updatedAt @db.Timestamptz(6)
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  residenceCountry String
+  betaUntil        DateTime? @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
 
   @@map("owner_profiles")
 }
@@ -246,29 +239,27 @@ model OwnerProfile {
 // existe donc avant même que le locataire n'ait terminé son inscription
 // via le lien d'invitation (voir unité 09).
 model TenantProfile {
-  id                   String               @id @default(cuid())
-  userId               String               @unique
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  idVerificationStatus IdVerificationStatus @default(PENDING)
-  invitedByUserId      String?
-  invitedBy            User?                @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
-  createdAt            DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime             @updatedAt @db.Timestamptz(6)
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedByUserId String?
+  invitedBy       User?     @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
   @@map("tenant_profiles")
 }
 
 model ManagerProfile {
-  id                   String               @id @default(cuid())
-  userId               String               @unique
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  idVerificationStatus IdVerificationStatus @default(PENDING)
-  zonesOfIntervention  String[]             @default([])
-  pricingNote          String?
-  ratingAverage        Float                @default(0)
-  ratingCount          Int                  @default(0)
-  createdAt            DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime             @updatedAt @db.Timestamptz(6)
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zonesOfIntervention String[] @default([])
+  pricingNote         String?
+  ratingAverage       Float    @default(0)
+  ratingCount         Int      @default(0)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("manager_profiles")
 }
@@ -296,36 +287,6 @@ model PasswordResetOtp {
   @@map("password_reset_otps")
 }
 
-// Contrainte non exprimable en Prisma : une seule IdentityVerification
-// PENDING par userId à la fois (voir invariant #15 — l'OCR tourne en
-// arrière-plan via IdentityVerificationListener, jamais dans le request
-// handler). À ajouter manuellement dans la migration générée : CREATE
-// UNIQUE INDEX identity_verifications_user_pending_unique ON
-// identity_verifications (user_id) WHERE status = 'PENDING'.
-model IdentityVerification {
-  id          String               @id @default(cuid())
-  userId      String
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storagePath String
-  status      IdVerificationStatus
-  reason      String?
-  rawText     String?              @db.Text
-  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime             @updatedAt @db.Timestamptz(6)
-
-  // Verso obligatoire à l'upload (voir IdentityService) mais jamais gate sur
-  // `status` — échec de lecture laisse simplement ces champs vides. Le
-  // checksum MRZ est un signal secondaire (bruit OCR fréquent sur cette
-  // police dense), jamais une autorité de décision à lui seul.
-  storagePathBack       String?
-  rawTextBack           String?  @db.Text
-  emergencyContactRaw   String?
-  emergencyContactPhone String?
-  mrzChecksumValid      Boolean?
-
-  @@index([userId])
-  @@map("identity_verifications")
-}
 
 // ────────────────────────────────────────────────────────────────
 // Patrimoine immobilier

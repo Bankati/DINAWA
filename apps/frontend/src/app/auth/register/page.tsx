@@ -8,7 +8,7 @@ import { ApiError } from '@/lib/auth-context';
 import './page.css';
 
 type Role = 'OWNER' | 'MANAGER';
-type Step = 'role' | 'info' | 'cni' | 'success';
+type Step = 'role' | 'info' | 'success';
 
 interface InfoForm {
   firstName: string;
@@ -36,13 +36,7 @@ export default function RegisterPage() {
   const [countrySearch, setCountrySearch] = useState('');
   const phoneWrapRef = useRef<HTMLDivElement>(null);
 
-  const [cniRecto, setCniRecto] = useState<File | null>(null);
-  const [cniVerso, setCniVerso] = useState<File | null>(null);
-  const [refDocs, setRefDocs] = useState<File[]>([]);
-  const rectoInputRef = useRef<HTMLInputElement>(null);
-  const versoInputRef = useRef<HTMLInputElement>(null);
-
-  const stepIndex = { role: 0, info: 1, cni: 2, success: 3 }[step];
+  const stepIndex = { role: 0, info: 1, success: 2 }[step];
 
   // Ferme le sélecteur de pays au clic extérieur / touche Échap
   useEffect(() => {
@@ -122,29 +116,9 @@ export default function RegisterPage() {
     if (selectedRole) setStep('info');
   }
 
-  function goToCni(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (infoFormValid) {
-      setStep('cni');
-    } else {
-      setTouched({ firstName: true, lastName: true, email: true, password: true, phone: true, city: true });
-    }
-  }
-
-  function onFile(e: ChangeEvent<HTMLInputElement>, side: 'recto' | 'verso') {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (side === 'recto') setCniRecto(file);
-    else setCniVerso(file);
-  }
-
-  function onRefDocs(e: ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (files) setRefDocs(Array.from(files).slice(0, 5));
-  }
-
-  async function submit() {
-    if (!cniRecto || !cniVerso || !selectedRole) return;
+    if (!infoFormValid || !selectedRole) return;
     setIsLoading(true);
     setErrorMessage('');
 
@@ -160,8 +134,6 @@ export default function RegisterPage() {
           phone,
           city: info.city,
           residenceCountry: info.residenceCountry || 'TG',
-          cniRecto,
-          cniVerso,
         });
       } else {
         await signupManager({
@@ -171,9 +143,6 @@ export default function RegisterPage() {
           lastName: info.lastName,
           phone,
           city: info.city,
-          cniRecto,
-          cniVerso,
-          referenceDocuments: refDocs.length ? refDocs : undefined,
         });
       }
       setIsLoading(false);
@@ -198,7 +167,6 @@ export default function RegisterPage() {
             <li>Gérez vos biens à distance</li>
             <li>Encaissez via T-Money &amp; Flooz</li>
             <li>Statistiques en temps réel</li>
-            <li>Vérification CNI sécurisée</li>
           </ul>
           <div className="steps-indicator">
             <div className={`step-item${step === 'role' ? ' active' : ''}${stepIndex > 0 ? ' done' : ''}`}>
@@ -207,10 +175,6 @@ export default function RegisterPage() {
             <div className="step-line" />
             <div className={`step-item${step === 'info' ? ' active' : ''}${stepIndex > 1 ? ' done' : ''}`}>
               <span className="step-num">2</span><span>Informations</span>
-            </div>
-            <div className="step-line" />
-            <div className={`step-item${step === 'cni' ? ' active' : ''}${stepIndex > 2 ? ' done' : ''}`}>
-              <span className="step-num">3</span><span>Pièce d&apos;identité</span>
             </div>
           </div>
         </div>
@@ -257,7 +221,7 @@ export default function RegisterPage() {
               <button className="back-btn" onClick={() => setStep('role')}>← Retour</button>
               <h2>Vos informations</h2>
               <p className="subtitle">{selectedRole === 'OWNER' ? 'Compte propriétaire' : 'Compte gestionnaire immobilier'}</p>
-              <form onSubmit={goToCni} className="form-fields">
+              <form onSubmit={submit} className="form-fields">
                 <div className="field-row">
                   <div className="field">
                     <label>Prénom *</label>
@@ -341,78 +305,25 @@ export default function RegisterPage() {
                   {cityInvalid && <span className="error">Ville requise</span>}
                 </div>
 
-                <button type="submit" className="btn-primary" disabled={!infoFormValid}>
-                  Continuer
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                <button type="submit" className="btn-primary" disabled={!infoFormValid || isLoading}>
+                  {isLoading ? (
+                    <>
+                      <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" opacity=".25"/><path d="M12 2a10 10 0 0110 10" opacity=".75"/></svg>
+                      Création en cours…
+                    </>
+                  ) : (
+                    <>
+                      Créer mon compte
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </>
+                  )}
                 </button>
+                {errorMessage && <div className="error-banner">{errorMessage}</div>}
               </form>
             </div>
           )}
 
-          {/* ÉTAPE 3 : CNI upload */}
-          {step === 'cni' && (
-            <div className="step-content">
-              <button className="back-btn" onClick={() => setStep('info')}>← Retour</button>
-              <h2>Pièce d&apos;identité</h2>
-              <p className="subtitle">CNI en cours de validité — recto et verso (JPG/PNG, max 5 Mo)</p>
-
-              {errorMessage && <div className="error-banner">{errorMessage}</div>}
-
-              <div className="cni-grid">
-                <button type="button" className={`upload-zone${cniRecto ? ' has-file' : ''}`} onClick={() => rectoInputRef.current?.click()}>
-                  <input ref={rectoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => onFile(e, 'recto')} style={{ display: 'none' }} />
-                  {cniRecto ? (
-                    <span className="file-preview">
-                      <span className="file-preview-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
-                      <span>{cniRecto.name}</span>
-                    </span>
-                  ) : (
-                    <>
-                      <span className="upload-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg></span>
-                      <strong>CNI Recto</strong>
-                      <span>Cliquer pour sélectionner</span>
-                    </>
-                  )}
-                </button>
-                <button type="button" className={`upload-zone${cniVerso ? ' has-file' : ''}`} onClick={() => versoInputRef.current?.click()}>
-                  <input ref={versoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => onFile(e, 'verso')} style={{ display: 'none' }} />
-                  {cniVerso ? (
-                    <span className="file-preview">
-                      <span className="file-preview-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
-                      <span>{cniVerso.name}</span>
-                    </span>
-                  ) : (
-                    <>
-                      <span className="upload-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg></span>
-                      <strong>CNI Verso</strong>
-                      <span>Cliquer pour sélectionner</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {selectedRole === 'MANAGER' && (
-                <div className="field" style={{ marginTop: '1rem' }}>
-                  <label>Références professionnelles <small>(optionnel — max 5 fichiers)</small></label>
-                  <input type="file" accept="image/*,.pdf" multiple onChange={onRefDocs} style={{ width: '100%', padding: '.5rem', border: '1px dashed #d1d5db', borderRadius: '.5rem', cursor: 'pointer' }} />
-                  {refDocs.length > 0 && <span style={{ fontSize: 13, color: '#6b7280' }}>{refDocs.length} fichier(s) sélectionné(s)</span>}
-                </div>
-              )}
-
-              <button className="btn-primary" disabled={!cniRecto || !cniVerso || isLoading} onClick={submit}>
-                {isLoading ? (
-                  <>
-                    <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" opacity=".25"/><path d="M12 2a10 10 0 0110 10" opacity=".75"/></svg>
-                    Création en cours…
-                  </>
-                ) : (
-                  'Créer mon compte'
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* ÉTAPE 4 : Succès */}
+          {/* ÉTAPE 3 : Succès */}
           {step === 'success' && (
             <div className="step-content success-content">
               <div className="success-icon">
@@ -421,8 +332,7 @@ export default function RegisterPage() {
                 </svg>
               </div>
               <h2>Compte créé !</h2>
-              <p>Votre compte a été créé avec succès. Votre pièce d&apos;identité est en cours de vérification (sous 24h).</p>
-              <p className="info-note">Vous pouvez vous connecter dès maintenant. Certaines fonctionnalités seront disponibles après validation de votre CNI.</p>
+              <p>Votre compte a été créé avec succès.</p>
               <Link href="/auth/login" className="btn-primary">Se connecter</Link>
             </div>
           )}

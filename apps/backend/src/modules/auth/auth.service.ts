@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { addMonths, format } from 'date-fns';
-import { Lease, IdentityVerification, Prisma, User } from '@prisma/client';
+import { Lease, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { canActOnProperty } from '../../common/permissions/property-access';
@@ -18,7 +18,6 @@ import { assertTenantNotBlocked } from '../../common/permissions/tenant-block';
 import { createInvitationToken, verifyInvitationToken } from '../../common/utils/invitation-token';
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { EmailService } from '../email/email.service';
-import { IdentityService, IdentityVerificationFiles } from '../identity/identity.service';
 import { NotifyService } from '../notify/notify.service';
 import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
 import { ListingsService } from '../listings/listings.service';
@@ -56,21 +55,14 @@ export type AuthMeResponse = Omit<
     | UserWithProfiles['tenantProfile']
     | UserWithProfiles['managerProfile']
     | UserWithProfiles['adminProfile'];
-  // Date à laquelle idVerificationStatus est passé à VERIFIED — dérivée de
-  // IdentityVerification.updatedAt, jamais stockée en double (voir
-  // /architect révision inscription owner/manager, "badge type LinkedIn").
-  // null tant que le compte n'a jamais été vérifié.
-  identityVerifiedAt: Date | null;
 };
 
 export type SignupOwnerResponse = {
   user: User;
-  identityVerification: IdentityVerification | null;
 };
 
 export type SignupManagerResponse = {
   user: User;
-  identityVerification: IdentityVerification | null;
 };
 
 export type InviteTenantResponse = {
@@ -97,7 +89,6 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly emailService: EmailService,
-    private readonly identityService: IdentityService,
     private readonly notify: NotifyService,
     private readonly listings: ListingsService,
   ) {}
@@ -114,15 +105,9 @@ export class AuthService {
         },
       });
 
-    const lastVerified = await this.prisma.identityVerification.findFirst({
-      where: { userId: user.id, status: 'VERIFIED' },
-      orderBy: { updatedAt: 'desc' },
-    });
-
     return {
       ...base,
       profile: ownerProfile ?? tenantProfile ?? managerProfile ?? adminProfile ?? null,
-      identityVerifiedAt: lastVerified?.updatedAt ?? null,
     };
   }
 
@@ -284,7 +269,6 @@ export class AuthService {
 
   async signupOwner(
     dto: SignupOwnerDto,
-    files: IdentityVerificationFiles,
   ): Promise<SignupOwnerResponse> {
     const { user, confirmationUrl } = await this.createConfirmedAccount({
       email: dto.email,
@@ -306,22 +290,11 @@ export class AuthService {
       variables: { firstName: dto.firstName, confirmationUrl },
     });
 
-    // La CNI est facultative à l'inscription (voir /architect révision
-    // inscription owner/manager) — le compte se crée sans elle. Si une image
-    // est fournie, on tente la vérification tout de suite ; sinon, elle
-    // reste à faire plus tard via POST /api/identity/verify, et le compte
-    // reste bloqué à la création de bien tant qu'elle n'est pas VERIFIED
-    // (voir PropertiesService.create()).
-    const identityVerification = files.image?.[0]
-      ? await this.identityService.verify(user, files)
-      : null;
-
-    return { user, identityVerification };
+    return { user };
   }
 
   async signupManager(
     dto: SignupManagerDto,
-    files: IdentityVerificationFiles,
   ): Promise<SignupManagerResponse> {
     const { user, confirmationUrl } = await this.createConfirmedAccount({
       email: dto.email,
@@ -340,12 +313,7 @@ export class AuthService {
       variables: { firstName: dto.firstName, confirmationUrl },
     });
 
-    // Même mécanique que signupOwner — CNI facultative à l'inscription.
-    const identityVerification = files.image?.[0]
-      ? await this.identityService.verify(user, files)
-      : null;
-
-    return { user, identityVerification };
+    return { user };
   }
 
   // Fusionne l'invitation du locataire et la création du bail (voir

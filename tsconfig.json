@@ -18,6 +18,7 @@
     ],
     "useDefineForClassFields": false,
     "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@app/*": ["src/app/*"],
       "@core/*": ["src/app/core/*"],

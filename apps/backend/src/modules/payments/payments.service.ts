@@ -112,12 +112,19 @@ export class PaymentsService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
+    // Un locataire ne voit que ses propres paiements — pas de propertyVisibilityWhere
+    // qui ne s'applique qu'aux propriétaires/gestionnaires.
+    const leaseWhere: Prisma.LeaseWhereInput =
+      user.role === 'TENANT'
+        ? { tenantUserId: user.id, ...(query.propertyId ? { propertyId: query.propertyId } : {}) }
+        : {
+            property: propertyVisibilityWhere(user),
+            ...(query.propertyId ? { propertyId: query.propertyId } : {}),
+            ...(query.tenantUserId ? { tenantUserId: query.tenantUserId } : {}),
+          };
+
     const where: Prisma.PaymentWhereInput = {
-      lease: {
-        property: propertyVisibilityWhere(user),
-        ...(query.propertyId ? { propertyId: query.propertyId } : {}),
-        ...(query.tenantUserId ? { tenantUserId: query.tenantUserId } : {}),
-      },
+      lease: leaseWhere,
       ...(query.status ? { status: query.status } : {}),
       ...(query.source ? { source: query.source } : {}),
       ...(query.from || query.to
@@ -133,6 +140,7 @@ export class PaymentsService {
     const [data, total] = await Promise.all([
       this.prisma.payment.findMany({
         where,
+        include: { lease: { include: { property: true, tenant: true } } },
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -140,7 +148,7 @@ export class PaymentsService {
       this.prisma.payment.count({ where }),
     ]);
 
-    return { data, page, limit, total };
+    return { data: data as unknown as Payment[], page, limit, total };
   }
 
   // Réservé au propriétaire/gestionnaire mandaté — confirme une déclaration

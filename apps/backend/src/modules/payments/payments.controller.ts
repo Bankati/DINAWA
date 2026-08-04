@@ -52,7 +52,7 @@ export class PaymentsController {
   }
 
   @Get()
-  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN, UserRole.TENANT)
   @ApiOperation({ summary: 'Historique paginé des paiements, filtrable' })
   findAll(
     @CurrentUser() user: AuthenticatedUser,

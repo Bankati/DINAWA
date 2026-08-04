@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import {
   AccountStatus,
-  IdVerificationStatus,
   LeaseStatus,
   PaymentFrequency,
   Prisma,
@@ -60,7 +59,6 @@ export type TenantSummary = {
   accountStatus: AccountStatus;
   createdAt: Date;
   updatedAt: Date;
-  idVerificationStatus: IdVerificationStatus;
   activeLease: { propertyId: string; address: string } | null;
 };
 
@@ -152,7 +150,6 @@ export class TenantsService {
         accountStatus: true,
         createdAt: true,
         updatedAt: true,
-        tenantProfile: { select: { idVerificationStatus: true } },
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
           select: { propertyId: true, property: { select: { address: true } } },
@@ -173,7 +170,6 @@ export class TenantsService {
       accountStatus: tenant.accountStatus,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
-      idVerificationStatus: tenant.tenantProfile?.idVerificationStatus ?? 'PENDING',
       activeLease: tenant.leasesAsTenant[0]
         ? {
             propertyId: tenant.leasesAsTenant[0].propertyId,
@@ -218,7 +214,6 @@ export class TenantsService {
         accountStatus: true,
         createdAt: true,
         updatedAt: true,
-        tenantProfile: { select: { idVerificationStatus: true } },
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
           select: { propertyId: true, property: { select: { address: true } } },
@@ -238,7 +233,6 @@ export class TenantsService {
       accountStatus: t.accountStatus,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
-      idVerificationStatus: t.tenantProfile?.idVerificationStatus ?? 'PENDING',
       activeLease: t.leasesAsTenant[0]
         ? {
             propertyId: t.leasesAsTenant[0].propertyId,

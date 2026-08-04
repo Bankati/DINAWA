@@ -103,15 +103,8 @@ describe('PropertiesService', () => {
       },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
       lease: { findFirst: jest.fn().mockResolvedValue(null) },
-      // VERIFIED par défaut — la plupart des tests ne portent pas sur le
-      // verrou d'identité (voir /architect révision inscription
-      // owner/manager) ; les tests dédiés ci-dessous écrasent cette valeur.
-      ownerProfile: {
-        findUnique: jest.fn().mockResolvedValue({ idVerificationStatus: 'VERIFIED' }),
-      },
-      managerProfile: {
-        findUnique: jest.fn().mockResolvedValue({ idVerificationStatus: 'VERIFIED' }),
-      },
+      ownerProfile: { findUnique: jest.fn() },
+      managerProfile: { findUnique: jest.fn() },
       propertyPhoto: {
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
@@ -204,49 +197,6 @@ describe('PropertiesService', () => {
       expect(listings.publishForProperty).toHaveBeenCalledWith(prisma, created, 'owner-1');
     });
 
-    // CNI facultative à l'inscription mais bloquante à la création de bien
-    // (voir /architect révision inscription owner/manager) —
-    // assertIdentityVerified() est le seul verrou fonctionnel.
-    describe('verrou identité (idVerificationStatus)', () => {
-      const createDto = {
-        type: 'APARTMENT',
-        address: '1 Rue Test',
-        neighborhood: 'Bè',
-        city: 'Lomé',
-        surfaceArea: 40,
-        monthlyRent: 30000,
-      } as never;
-
-      it('rejette avec 403 si le propriétaire a idVerificationStatus=PENDING (jamais soumis)', async () => {
-        prisma.ownerProfile.findUnique.mockResolvedValueOnce({ idVerificationStatus: 'PENDING' });
-
-        await expect(service.create(owner, createDto)).rejects.toThrow(ForbiddenException);
-        expect(prisma.property.create).not.toHaveBeenCalled();
-      });
-
-      it('rejette avec 403 si le propriétaire a idVerificationStatus=REJECTED', async () => {
-        prisma.ownerProfile.findUnique.mockResolvedValueOnce({ idVerificationStatus: 'REJECTED' });
-
-        await expect(service.create(owner, createDto)).rejects.toThrow(ForbiddenException);
-        expect(prisma.property.create).not.toHaveBeenCalled();
-      });
-
-      it('autorise la création si le propriétaire est VERIFIED', async () => {
-        prisma.ownerProfile.findUnique.mockResolvedValueOnce({ idVerificationStatus: 'VERIFIED' });
-        prisma.property.create.mockResolvedValueOnce(makeProperty());
-
-        await expect(service.create(owner, createDto)).resolves.toBeDefined();
-      });
-
-      it('vérifie le profil gestionnaire (pas propriétaire) quand un MANAGER crée son propre bien', async () => {
-        prisma.managerProfile.findUnique.mockResolvedValueOnce({
-          idVerificationStatus: 'PENDING',
-        });
-
-        await expect(service.create(manager, createDto)).rejects.toThrow(ForbiddenException);
-        expect(prisma.ownerProfile.findUnique).not.toHaveBeenCalled();
-      });
-    });
   });
 
   describe('findAll', () => {

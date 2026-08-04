@@ -16,7 +16,6 @@ import { PushModule } from './modules/push/push.module';
 import { NotifyModule } from './modules/notify/notify.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { IdentityModule } from './modules/identity/identity.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { AccountModule } from './modules/account/account.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
@@ -82,9 +81,6 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Authentification et profil courant
     AuthModule,
-
-    // Vérification automatique CNI togolaise (OCR Tesseract.js)
-    IdentityModule,
 
     // Gestion du profil (infos personnelles, photo, préférences, anonymisation)
     ProfileModule,
