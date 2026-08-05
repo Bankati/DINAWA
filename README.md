@@ -1,199 +1,98 @@
-# LOKATO - Frontend
+# WARAH
 
 Plateforme de gestion locative immobilière pour le Togo.
 
 ## 🏠 À propos
 
-LOKATO est une SaaS B2B conçue spécifiquement pour le marché togolais, permettant aux propriétaires immobiliers (locaux et diaspora) de gérer leurs biens, encaisser les loyers et automatiser les quittances.
+WARAH est une SaaS B2B conçue spécifiquement pour le marché togolais, permettant aux propriétaires immobiliers (locaux et diaspora) de gérer leurs biens, encaisser les loyers et automatiser les quittances.
 
 ### Stack Technique
 
-- **Frontend** : Angular 20 (Standalone Components)
-- **Styling** : Tailwind CSS
-- **Backend** : Next.js 14/15+ (API REST) - À implémenter
-- **Base de données** : PostgreSQL + Supabase - À implémenter
-- **Paiements** : T-Money + Flooz via Paygate Globale - À implémenter
+- **Frontend** (`apps/frontend/`) : Next.js 16 (App Router, Turbopack), TypeScript, Tailwind CSS v4
+- **Backend** (`apps/backend/`) : NestJS, Prisma, PostgreSQL (Supabase), Supabase Auth/Storage
+- **Emails** : Resend — **Push web** : `web-push` (VAPID)
+- **PDF** : PDFKit (quittances/rapports générés à la volée, jamais stockés)
+- **Hébergement** : backend sur Railway (Docker), frontend sur Vercel
 
 ## 📦 Installation
 
-### Prérequis
-
-- Node.js 20+
-- npm ou yarn
-
-### Étapes
+Monorepo à deux applications indépendantes, chacune avec son propre `package.json`/lockfile.
 
 ```bash
-# Installer les dépendances
+# Backend
+cd apps/backend
 npm install
+npm run dev          # nest start --watch, port 3001
 
-# Démarrer le serveur de développement
-npm start
-
-# Builder pour la production
-npm run build
+# Frontend
+cd apps/frontend
+npm install
+npm run dev           # next dev, port 4300 (voir package.json)
 ```
+
+Voir `apps/backend/.env.example` pour les variables d'environnement requises côté backend (Supabase, Resend, VAPID, etc.).
 
 ## 🏗️ Structure du Projet
 
 ```
-src/
-├── app/
-│   ├── core/              # Guards, interceptors, services globaux
-│   │   └── models/        # Interfaces TypeScript (Bien, Paiement, etc.)
-│   ├── shared/            # Composants réutilisables
-│   │   ├── components/    # Composants UI partagés
-│   │   └── pipes/         # Pipes Angular personnalisés
-│   ├── features/          # Modules fonctionnels
-│   │   ├── auth/          # Authentification
-│   │   ├── dashboard/     # Tableau de bord
-│   │   ├── biens/         # Gestion des biens
-│   │   ├── locataires/    # Gestion des locataires
-│   │   ├── paiements/     # Collecte des loyers
-│   │   └── annonces/      # Module annonces public
-│   └── layouts/           # Shell propriétaire, shell public
-```
-
-## 🎨 Composants Partagés
-
-### LokBadgeStatut
-Badge coloré pour les statuts de bien (OCCUPÉ, VACANT, EN TRAVAUX, ARCHIVÉ).
-
-```html
-<lok-badge-statut [statut]="bien.statut"></lok-badge-statut>
-```
-
-### LokBadgePaiement
-Badge coloré pour les statuts de paiement (PAYÉ, EN RETARD, IMPAYÉ, PARTIEL).
-
-```html
-<lok-badge-paiement [statut]="paiement.statut"></lok-badge-paiement>
-```
-
-### LokMontantFcfa
-Composant et pipe pour formater les montants en FCFA.
-
-```html
-<lok-montant-fcfa [montant]="150000" size="lg" color="primary"></lok-montant-fcfa>
-<!-- ou avec le pipe -->
-{{ 150000 | fcfa }}  <!-- Affiche : "150 000 FCFA" -->
-```
-
-### LokCardBien
-Card réutilisable pour afficher un bien immobilier.
-
-```html
-<lok-card-bien 
-  [bien]="bien" 
-  [showActions]="true"
-  (onCardClick)="navigateToBien($event)"
-  (onEdit)="editBien($event)"
-  (onView)="viewBien($event)"
-></lok-card-bien>
-```
-
-### LokAlerte
-Composant d'alerte (info, warning, error, success).
-
-```html
-<lok-alerte 
-  type="error" 
-  titre="Erreur" 
-  message="Une erreur est survenue"
-  [dismissible]="true"
-></lok-alerte>
-```
-
-### LokSkeleton
-Skeleton loader pour les états de chargement.
-
-```html
-<lok-skeleton type="card"></lok-skeleton>
-<lok-skeleton type="list" [count]="5"></lok-skeleton>
-```
-
-### LokEmptyState
-État vide avec illustration et CTA.
-
-```html
-<lok-empty-state 
-  titre="Aucun bien ajouté"
-  description="Commencez par ajouter votre premier bien immobilier."
-  ctaLabel="Ajouter un bien"
-  icon="bien"
-  (ctaAction)="addBien()"
-></lok-empty-state>
-```
-
-### LokConfirmModal
-Modal de confirmation pour les actions destructives.
-
-```html
-<lok-confirm-modal 
-  titre="Supprimer le bien"
-  message="Êtes-vous sûr de vouloir supprimer ce bien ?"
-  (onConfirm)="deleteBien()"
-  (onCancel)="closeModal()"
-></lok-confirm-modal>
-```
-
-### LokUpload
-Composant d'upload de fichiers (images + PDF) avec drag & drop.
-
-```html
-<lok-upload 
-  accept="image/*,.pdf"
-  [maxSize]="5"
-  [multiple]="true"
-  [maxFiles]="10"
-  (filesChange)="onFilesChange($event)"
-></lok-upload>
-```
-
-### LokTelephoneTogo
-Input de téléphone avec préfixe +228 et validation du format togolais.
-
-```html
-<lok-telephone-togo 
-  [formControl]="telephoneControl"
-  [showError]="true"
-></lok-telephone-togo>
+apps/
+├── backend/
+│   ├── src/modules/<feature>/   # controller, service, dto/ par module métier
+│   ├── src/common/               # guards, decorators, permissions, constants
+│   ├── prisma/                   # schema.prisma + migrations versionnées
+│   └── contexte/                 # architecture.md, code-standards.md (référence du projet)
+└── frontend/
+    └── src/
+        ├── app/            # routes App Router (page.tsx + page.css par route)
+        ├── components/      # composants partagés (AppShell, RequireRole, navbar/footer)
+        └── lib/             # client API, contexte auth, utilitaires de formatage
 ```
 
 ## 🎨 Palette de Couleurs
 
-- **Primaire** : Vert profond `#1A7A4A`
-- **Secondaire** : Or/Ambre `#F59E0B`
+- **Primaire** : Bleu marine `#0F4C81` (`--color-primary`)
+- **Primaire foncé** : `#0A2650` (`--color-primary-dark`)
+- **Accent** : Or `#C9982E` (`--color-accent`)
 - **Fond** : Blanc cassé `#F9FAFB`
-- **Texte principal** : Gris très foncé `#111827`
 - **Succès** : Vert `#10B981`
 - **Erreur** : Rouge `#EF4444`
 - **Avertissement** : Orange `#F59E0B`
 
+Variables définies dans `apps/frontend/src/app/globals.css` — toujours les utiliser plutôt qu'une valeur hexadécimale codée en dur.
+
 ## 📝 Règles de Développement
 
-- Utiliser des composants Angular standalone
-- TypeScript strict avec interfaces pour tous les modèles
-- Tailwind CSS pour le styling
-- Reactive Forms pour les formulaires
-- RxJS pour la gestion des états asynchrones
-- Commentaires en français dans le code
-- Loading states et empty states pour chaque liste
-- Zones cliquables ≥ 44px (accessibilité mobile)
+- TypeScript strict partout, interfaces/DTOs explicites
+- Commentaires en français dans le code, uniquement quand le pourquoi n'est pas évident
+- Loading states et états d'erreur visibles pour chaque appel API
+- Zones cliquables ≥ 44px (accessibilité mobile), éléments interactifs toujours de vrais `<button>`/`<a>`
+- Côté backend : voir `apps/backend/contexte/code-standards.md` pour les conventions NestJS/Prisma détaillées
 
 ## 🚀 Scripts Disponibles
 
+Backend (`apps/backend/`) :
+
 ```bash
-npm start          # Démarrer le serveur de développement
-npm run build      # Builder pour la production
-npm test           # Exécuter les tests
-npm run lint       # Linter le code
+npm run dev         # nest start --watch
+npm run build       # nest build
+npm run test        # jest
+npm run lint        # eslint
+npm run typecheck   # tsc --noEmit
+```
+
+Frontend (`apps/frontend/`) :
+
+```bash
+npm run dev         # next dev
+npm run build       # next build
+npm run lint        # eslint
+npm run typecheck   # tsc --noEmit
 ```
 
 ## 📄 Licence
 
-Confidentiel - Usage interne LOKATO
+Confidentiel - Usage interne WARAH
 
 ---
 
-*LOKATO — Gérez vos biens. Encaissez vos loyers. Dormez tranquille.*
+_WARAH — Gérez vos biens. Encaissez vos loyers. Dormez tranquille._

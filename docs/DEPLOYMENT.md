@@ -25,7 +25,7 @@ Comptes déjà créés :
 
 - [x] **GitHub** — dépôt du code source
 - [x] **Railway** — hébergement du backend NestJS
-- [x] **Vercel** — hébergement du frontend Angular
+- [x] **Vercel** — hébergement du frontend Next.js
 - [x] **Supabase** — PostgreSQL + Auth + Storage
 - [x] **Resend** — emails transactionnels
 
@@ -44,7 +44,7 @@ Comptes à créer (voir section 2) :
 2. Créer une **Organisation** (ex. `warah`)
 3. Créer **deux projets** :
    - Projet `warah-backend` (plateforme : Node.js)
-   - Projet `warah-frontend` (plateforme : Angular)
+   - Projet `warah-frontend` (plateforme : Next.js)
 4. Pour chaque projet, copier le **DSN** (Settings → Client Keys → DSN)
 5. Configurer les alertes recommandées (voir section 9)
 
@@ -172,24 +172,22 @@ Si le health check échoue, le déploiement est marqué en erreur.
 
 1. Vercel Dashboard → Add New → Project → Import GitHub repo
 2. Sélectionner le dépôt WARAH
-3. **Framework Preset** : Angular
-4. **Root Directory** : `apps/frontend`
-5. **Build Command** : `npm run build:prod`
-6. **Output Directory** : `dist/warah-frontend/browser`
+3. **Framework Preset** : Next.js
+4. **Root Directory** : laisser la racine du dépôt (ne **pas** mettre `apps/frontend`)
 
-> Vercel détecte automatiquement le `vercel.json` dans `apps/frontend/`.
+> Le `vercel.json` à la racine du dépôt gère lui-même le `cd apps/frontend` pour l'install/le build (monorepo sans workspaces npm) — `buildCommand`/`installCommand`/`outputDirectory` y sont déjà configurés, rien à répéter ici dans le dashboard.
 
 ### 5b. Variables d'environnement Vercel
 
 Dans Vercel → Project → Settings → Environment Variables :
 
-| Variable                  | Valeur                                       |
-| ------------------------- | -------------------------------------------- |
-| `NG_APP_API_URL`          | `https://votre-service.up.railway.app/api`   |
-| `NG_APP_SENTRY_DSN`       | DSN du projet `warah-frontend` Sentry        |
-| `NG_APP_VAPID_PUBLIC_KEY` | Clé publique VAPID (même valeur que Railway) |
+| Variable              | Valeur                                     |
+| --------------------- | ------------------------------------------ |
+| `NEXT_PUBLIC_API_URL` | `https://votre-service.up.railway.app/api` |
 
-Ces variables sont injectées **à la compilation** par Angular.
+D'autres variables (Sentry, VAPID) seront à ajouter ici si/quand ces intégrations sont câblées côté frontend — non utilisées actuellement.
+
+Ces variables sont injectées **à la compilation** par Next.js (préfixe `NEXT_PUBLIC_` obligatoire pour être exposées au navigateur).
 
 ### 5c. Déploiements automatiques
 

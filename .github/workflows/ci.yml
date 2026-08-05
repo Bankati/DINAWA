@@ -68,20 +68,24 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
 
+      # apps/frontend est autonome (son propre package-lock.json), même
+      # pattern que apps/backend — voir ci-dessus.
       - name: Install dependencies
-        run: npm ci --workspace=apps/frontend
+        working-directory: apps/frontend
+        run: npm ci
 
       - name: Lint
-        run: npm run lint --workspace=apps/frontend
+        working-directory: apps/frontend
+        run: npm run lint
 
       - name: Type check
-        run: npm run typecheck --workspace=apps/frontend
+        working-directory: apps/frontend
+        run: npm run typecheck
 
       - name: Build production
-        run: npm run build:frontend
+        working-directory: apps/frontend
+        run: npm run build
         env:
-          # Variables injectées au build CI pour éviter les erreurs de déclaration NG_APP_*
-          NG_APP_API_URL: https://placeholder.up.railway.app/api
-          NG_APP_SENTRY_DSN: ""
-          NG_APP_VAPID_PUBLIC_KEY: ""
+          NEXT_PUBLIC_API_URL: https://placeholder.up.railway.app/api

@@ -1,4 +1,4 @@
-# Instructions projet — WARAH Frontend
+# Instructions projet — WARAH
 
 Ce fichier est lu automatiquement au début de chaque session dans ce dossier.
 Le respecter avant toute modification du projet.
@@ -9,27 +9,27 @@ Toujours répondre et commenter en **français**. C'est une consigne permanente 
 
 ## Stack technique
 
-- Angular 20, composants **standalone** uniquement
-- Tailwind CSS pour le styling (sauf landing page publique, voir plus bas)
-- TypeScript strict, interfaces pour tous les modèles (`core/models/`)
-- Reactive Forms pour les formulaires, RxJS pour l'état asynchrone
-- Backend Next.js + PostgreSQL/Supabase — pas encore implémentés, ne pas supposer leur présence
+- **Frontend** (`apps/frontend/`) : Next.js 16 (App Router, Turbopack), React, TypeScript strict, Tailwind CSS v4 (CSS-first, `@theme inline` dans `globals.css`). Lire `apps/frontend/AGENTS.md` avant toute modification — cette version de Next.js a des breaking changes par rapport aux données d'entraînement.
+- **Backend** (`apps/backend/`) : NestJS + Prisma + PostgreSQL (Supabase) + Supabase Auth/Storage. Voir `apps/backend/contexte/architecture.md` et `code-standards.md` pour les invariants du projet — à lire avant toute modification backend.
+- Aucun framework Angular dans ce projet — le frontend Angular historique a été entièrement retiré (voir historique git, commits "fin angular" / "remplace le frontend angular par un port nextjs").
 
 ## Structure
 
 ```
-src/app/
-├── core/         # guards, interceptors, services globaux, models/
-├── shared/       # composants UI partagés (Lok*), pipes
-├── features/     # modules métier (auth, dashboard, biens, locataires, paiements, annonces, public...)
-└── layouts/      # shells (propriétaire, public, etc.)
+apps/
+├── backend/            # NestJS — src/modules/<feature>/ (controller, service, dto/)
+└── frontend/           # Next.js — App Router
+    src/
+    ├── app/            # routes (page.tsx + page.css par route), layout.tsx racine
+    ├── components/      # composants partagés (AppShell, RequireRole, navbar/footer publics)
+    └── lib/             # client API (api.ts), auth-context.tsx, format.ts (formatFcfa/initiales...), etc.
 ```
 
-`features/public/pages/landing/landing.component.ts` est la landing page marketing : template et styles **inline** dans le composant (pas de fichiers séparés), pas de Tailwind — tout en CSS custom avec variables.
+`apps/frontend/src/app/page.tsx` + `page.css` est la landing page marketing : CSS custom avec variables (pas de classes Tailwind), fichiers séparés (pas de style inline).
 
 ## Palette de couleurs (source unique de vérité)
 
-Toujours utiliser les variables CSS custom properties, jamais de valeurs hexadécimales codées en dur pour les couleurs de marque :
+Toujours utiliser les variables CSS custom properties (définies dans `apps/frontend/src/app/globals.css`), jamais de valeurs hexadécimales codées en dur pour les couleurs de marque :
 
 - `--color-primary` : bleu marine `#0F4C81` (logo WARAH)
 - `--color-primary-50` / `--color-primary-dark` (`#0A2650`) / `--color-primary-900` (`#081E41`) : nuances dérivées
@@ -37,92 +37,97 @@ Toujours utiliser les variables CSS custom properties, jamais de valeurs hexadé
 - `--color-text` / `--color-text-muted` / `--color-border`
 
 Pour les sections avec fond sombre (navbar au scroll, stats, footer), le bleu foncé de référence est :
+
 ```css
 linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%)
 ```
-(utilisé dans `.stats-overlay` et `.footer` — garder cohérent si on retouche l'un des deux ; ces teintes correspondent déjà à `--color-primary-dark`/`--color-primary`/`--color-primary-900`).
+
+(ces teintes correspondent déjà à `--color-primary-dark`/`--color-primary`/`--color-primary-900`).
 
 **Si l'utilisateur rejette une couleur précise** (ex: "la couleur de vert ne me plaît pas"), ne changer **que** cette propriété de couleur — conserver intégralement le reste du travail structurel/UX déjà fait. Demander via question à choix si la nouvelle couleur n'est pas évidente.
 
-## Règles de développement (héritées du README)
+## Règles de développement
 
-- Composants standalone uniquement
+- Composants React fonctionnels avec hooks (`useState`/`useEffect`/`useMemo`) — pas de classes
 - Commentaires en français dans le code, et seulement quand le POURQUOI n'est pas évident
-- Loading states + empty states pour chaque liste (`LokSkeleton`, `LokEmptyState`)
-- Zones cliquables ≥ 44px (accessibilité mobile)
-- Composants partagés `Lok*` (BadgeStatut, BadgePaiement, MontantFcfa, CardBien, Alerte, Skeleton, EmptyState, ConfirmModal, Upload, TelephoneTogo) à réutiliser plutôt que recréer
+- Loading states + états d'erreur visibles pour chaque appel API (jamais un échec avalé silencieusement — voir `lib/api.ts`/`ApiError`)
+- Zones cliquables ≥ 44px, éléments interactifs toujours de vrais `<button>`/`<a>` (jamais un `<div onClick>` sans `role`/`tabIndex`/`onKeyDown`)
+- Utilitaires partagés dans `lib/format.ts` (`formatFcfa`, `formatNumber`, `initiales`) à réutiliser plutôt que recréer une implémentation locale
+- Côté backend : suivre strictement `apps/backend/contexte/code-standards.md` (DTOs validés, exceptions HTTP typées, `canActOnProperty()` comme autorité unique, pagination + anti-N+1, etc.)
 
 ## Vérification avant de considérer une tâche terminée
 
-Après toute modification de code Angular, lancer un build pour vérifier l'absence d'erreurs :
+**Frontend** (`apps/frontend/`), après toute modification :
 
 ```bash
-npx ng build --configuration development
+npx tsc --noEmit
+npx next build
 ```
 
-**Important** : utiliser l'outil Bash pour cette commande, **pas** PowerShell `Start-Process -FilePath "npx"` (échoue avec "n'est pas une application Win32 valide" dans cet environnement).
+**Backend** (`apps/backend/`), après toute modification :
+
+```bash
+npx tsc --noEmit
+npx eslint <fichiers modifiés> --config eslint.config.mjs
+npx jest --silent
+```
+
+**Important** : utiliser l'outil Bash pour ces commandes, **pas** PowerShell `Start-Process -FilePath "npx"` (échoue avec "n'est pas une application Win32 valide" dans cet environnement).
 
 ## Contraintes d'environnement (Windows / PowerShell + Git Bash)
 
 - `python3` / `python` ne sont pas disponibles — ne pas s'appuyer dessus pour des scripts.
 - Les heredocs PowerShell (`@'...'@`) cassent si le contenu contient des séquences `$(` (interprétées comme sous-expressions), même en littéral. Pour des CSS avec `rgba(...)`, etc., préférer l'outil `Edit` directement.
-- Les heredocs Bash (`cat > file << 'EOF'`) et `node -e "..."` inline sont peu fiables pour du contenu multi-lignes volumineux avec guillemets imbriqués (erreurs "unexpected EOF").
-- Pour insérer un gros bloc HTML/CSS généré : écrire le contenu dans un fichier via l'outil `Write` (pas de souci d'échappement shell), puis utiliser un petit script Node (écrit via l'outil `Write`, exécuté via Bash `node script.js`) qui repère des marqueurs dans le fichier cible et fait la substitution.
+- Les heredocs Bash (`cat > file << 'EOF'`) et `node -e "..."` inline sont peu fiables pour du contenu multi-lignes volumineux avec guillemets imbriqués (erreurs "unexpected EOF") — utiliser l'outil `Write` pour créer le fichier, puis un script Node exécuté via Bash si une substitution dans un fichier existant est nécessaire.
 - Si édition directe via PowerShell `[System.IO.File]::WriteAllText` est nécessaire, toujours forcer l'encodage `[System.Text.UTF8Encoding]::new($false)` pour éviter le mojibake sur les caractères accentués français.
-
-## Notes diverses
-
-- `features/contrats/pages/contrat-bail/` est vide — composant PDF de contrat de bail à construire un jour, mais ne pas y toucher sans demande explicite.
-- Le dossier n'est pas (encore) un dépôt Git (`git init` à proposer si l'utilisateur veut versionner). Pas de backend ni de DB pour l'instant — Next.js/PostgreSQL/Supabase listés au README sont "à implémenter".
+- Des remplacements de masse (ex. couleurs codées en dur → variables CSS) sur de nombreux fichiers/occurrences sont plus fiables via un petit script Node (écrit via `Write`, exécuté via Bash) qu'via des appels `Edit` répétés.
 
 ## Bonnes pratiques logicielles de référence
 
-Checklists condensées à appliquer selon ce qui est pertinent à l'état actuel du projet (frontend Angular seul, backend pas encore implémenté). Ne pas sur-ingénierer une partie qui n'existe pas encore — utiliser comme guide quand ces parties seront construites.
-
-### Applicables dès maintenant (frontend)
+Checklists condensées à appliquer selon ce qui est pertinent. Ne pas sur-ingénierer une partie qui n'existe pas encore.
 
 **UI/UX & accessibilité**
-- Hiérarchie visuelle claire, feedback visuel sur chaque action (loading/empty/error states via `LokSkeleton`/`LokEmptyState`/`LokAlerte`)
+
+- Hiérarchie visuelle claire, feedback visuel sur chaque action (loading/empty/error states)
 - WCAG AA : `alt` sur les images, contraste suffisant, navigation clavier, HTML sémantique (`header`, `nav`, `main`, `button` plutôt que `div` cliquable)
 - Zones cliquables ≥ 44px (déjà dans les règles ci-dessus)
-- Design system cohérent : réutiliser les variables CSS de couleur et les composants `Lok*` plutôt que recréer un style ad hoc à chaque page
+- Design system cohérent : réutiliser les variables CSS de couleur et les utilitaires `lib/format.ts` plutôt que recréer un style/formatage ad hoc à chaque page
 
 **Code & architecture**
-- SOLID quand on écrit des services/classes : responsabilité unique, dépendre d'interfaces/abstractions plutôt que d'implémentations concrètes
-- Séparer clairement composants (présentation), services (logique), models (`core/models/`)
-- Gestion d'erreurs cohérente : pas de `console.log` pour les erreurs utilisateur, passer par `LokAlerte` ou un service de notification
-- Pas de `SELECT *` mental côté front non plus : ne récupérer/exposer que les données nécessaires aux composants
+
+- SOLID quand on écrit des services/classes côté backend : responsabilité unique, dépendre d'interfaces/abstractions plutôt que d'implémentations concrètes
+- Séparer clairement pages (présentation), `lib/*.ts` (logique/accès API), composants partagés
+- Gestion d'erreurs cohérente : pas de `console.log` pour les erreurs utilisateur, un état d'erreur visible à la place
+- Ne récupérer/exposer côté front que les données nécessaires aux composants
 
 **Tests**
-- Pas de suite de tests projet actuellement (seulement les `.spec.ts` par défaut d'Angular CLI dans `node_modules`) — à mettre en place avec Jasmine/Karma (déjà fourni par Angular) ou migrer vers Jest si demandé
-- Quand des tests sont ajoutés : unitaires sur la logique des services/pipes en priorité, puis composants critiques (formulaires, calculs de montants FCFA)
-- Ne jamais désactiver un test qui échoue pour "faire passer" la CI — corriger la cause
 
-**Git (une fois le dépôt initialisé)**
-- Workflow feature branch : une branche par fonctionnalité/correctif, PR avant fusion sur `main`
-- Messages de commit clairs à l'impératif (« Ajoute… », « Corrige… »), jamais de commit vide ni de `--no-verify`/`--amend` sauf demande explicite (déjà couvert par les règles système)
+- Backend : suite Jest complète dans `apps/backend/` (voir `contexte/code-standards.md` pour la couverture minimale attendue) — ne jamais désactiver un test qui échoue pour "faire passer" la CI, corriger la cause
+- Frontend : pas encore de suite de tests automatisés — vérification actuelle par `tsc`/`next build`/vérification visuelle manuelle ; à mettre en place (Jest + React Testing Library ou Vitest) si demandé
 
-### À appliquer quand le backend sera construit
+**Git**
 
-**Base de données**
-- Schéma normalisé (1NF-3NF), une table = une entité métier ; dé-normaliser seulement si un besoin de perf concret l'exige
-- Index sur les colonnes utilisées en `WHERE`/`JOIN` ; éviter le sur-indexage qui ralentit les écritures
-- Toujours des requêtes paramétrées (jamais de concaténation de l'input utilisateur) — protection injection SQL
-- Transactions explicites `BEGIN…COMMIT/ROLLBACK` pour toute opération multi-étapes critique (ex. paiement + mise à jour solde)
-- Migrations versionnées avec le code (Flyway/Liquibase ou équivalent JS/TS comme TypeORM/Prisma migrations), jamais de modification d'un script déjà exécuté en prod
-- Sauvegardes automatisées + test de restauration périodique (règle 3-2-1)
-- Principe du moindre privilège pour l'utilisateur DB de l'application
+- Workflow feature branch : une branche par fonctionnalité/correctif, PR avant fusion sur `dev`/`main`
+- Messages de commit en Conventional Commits (`feat(scope): ...`, `fix(scope): ...`), voir `.commitlintrc.js` à la racine — jamais de commit vide ni de `--no-verify`/`--amend` sauf demande explicite (déjà couvert par les règles système)
+
+**Base de données** (déjà en place côté backend, à respecter pour toute évolution)
+
+- Schéma normalisé, migrations Prisma versionnées et rétrocompatibles (jamais `DROP`/`RENAME COLUMN` dans la même release qu'un changement de code)
+- Toujours des requêtes paramétrées via Prisma (jamais de SQL brut concaténé)
+- Transactions explicites (`prisma.$transaction`) pour toute opération multi-étapes critique
 
 **API & sécurité**
-- REST : ressources nommées au pluriel, verbes HTTP sémantiques, versionnement (`/v1/...`), codes HTTP corrects, doc OpenAPI/Swagger
-- Auth : JWT ou sessions, mots de passe hashés (bcrypt/Argon2), HTTPS obligatoire, RBAC pour les rôles (Propriétaire/Gestionnaire/Locataire déjà distincts dans ce projet)
-- Protection XSS/CSRF/CORS, validation stricte des entrées (surtout les uploads — taille, type MIME)
-- Cache (Redis) pour les données fréquentes et peu volatiles, avec TTL et invalidation explicite
+
+- Auth via Supabase Auth (JWT), jamais de hashage de mot de passe côté NestJS
+- RBAC pour les rôles (Propriétaire/Gestionnaire/Locataire/Admin)
+- Validation stricte des entrées (`class-validator` sur tous les DTOs), uploads validés en type/taille avant lecture complète
 
 **CI/CD**
-- Pipeline minimal : lint + build + tests unitaires à chaque push/PR, déploiement staging automatique, prod après validation
-- GitHub Actions si le repo est sur GitHub (cohérent avec l'écosystème actuel), sinon GitLab CI
+
+- `.github/workflows/ci.yml` : jobs `backend-ci`/`frontend-ci` (lint + typecheck + build/test) à chaque PR vers `main`/`staging`/`dev`
+- Déploiement : backend sur Railway (Docker), frontend sur Vercel (voir `vercel.json` à la racine, build pointé sur `apps/frontend`)
 
 **Observabilité**
-- Logs structurés avec niveaux (ERROR/WARN/INFO/DEBUG), pas de données sensibles dans les logs
-- Métriques de base (latence, taux d'erreur) dès que des endpoints réels existent
+
+- Backend : logs structurés Pino avec niveaux, pas de données sensibles dans les logs (voir `contexte/code-standards.md`)
+- Métriques de base (latence, taux d'erreur) sur les endpoints réels

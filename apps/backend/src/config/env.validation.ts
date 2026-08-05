@@ -92,7 +92,7 @@ class EnvironmentVariables {
   // CORS
   @IsString()
   @IsOptional()
-  ALLOWED_ORIGINS?: string = 'http://localhost:4200';
+  ALLOWED_ORIGINS?: string = 'http://localhost:4300';
 
   // URL du frontend — utilisée comme redirectTo du lien de confirmation
   // d'email généré par Supabase Auth (voir AuthService.signupOwner)

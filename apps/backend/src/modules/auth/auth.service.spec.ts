@@ -62,7 +62,7 @@ describe('AuthService', () => {
   let listings: { deactivateForProperty: jest.Mock };
 
   const CONFIG_VALUES: Record<string, string> = {
-    FRONTEND_URL: 'http://localhost:4200',
+    FRONTEND_URL: 'http://localhost:4300',
     INVITATION_TOKEN_SECRET: 'test-secret',
   };
 
@@ -319,7 +319,7 @@ describe('AuthService', () => {
         type: 'signup',
         email: ownerDto.email,
         password: ownerDto.password,
-        options: { data: { role: 'OWNER' }, redirectTo: 'http://localhost:4200' },
+        options: { data: { role: 'OWNER' }, redirectTo: 'http://localhost:4300' },
       });
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {

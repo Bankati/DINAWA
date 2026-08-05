@@ -2,7 +2,7 @@
 
 Ce document décrit l'architecture du backend WARAH — la plateforme de gestion locative immobilière pour le marché togolais. Il fixe les frontières des modules, le modèle de stockage, le modèle d'authentification et les invariants non négociables que l'ensemble du code doit respecter.
 
-Périmètre : backend uniquement (API REST consommée par un frontend Angular géré dans un dépôt séparé). Hébergement Railway. Périmètre métier strictement Togo en V1 (FCFA, français, fuseau `Africa/Lome`).
+Périmètre : backend uniquement (API REST consommée par un frontend Next.js, `apps/frontend/`, dans le même dépôt). Hébergement Railway. Périmètre métier strictement Togo en V1 (FCFA, français, fuseau `Africa/Lome`).
 
 ---
 
