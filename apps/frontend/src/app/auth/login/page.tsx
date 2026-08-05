@@ -37,9 +37,8 @@ function LoginForm() {
       router.replace(role ? roleDefaultRoute(role) : '/');
       return;
     }
-    // /health/ready = @Public(), exécute SELECT 1 → chauffe la connexion
-    // TCP ET le pool Prisma pendant que l'utilisateur saisit ses identifiants.
-    fetch(`${API_URL}/health/ready`).catch(() => {});
+    // /health/ready est exclu du préfixe /api (sonde Railway) → URL directe
+    fetch(`${API_URL.replace(/\/api$/, '')}/health/ready`).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -9,8 +9,9 @@
     "target": "ES2020",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
+    "rootDir": "./src",
     "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "skipLibCheck": true,
     "strict": true,
     "noImplicitAny": true,
@@ -22,10 +23,6 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    // Restreint explicitement les @types résolus — sans ça, TypeScript
-    // ramasse tout node_modules/@types/* visible, y compris ceux hoistés
-    // depuis apps/frontend par les workspaces npm (ex. @types/jasmine),
-    // qui redéfinit describe/it/expect en collision avec @types/jest.
     "types": ["node", "jest", "express", "multer", "supertest", "web-push", "pdfkit"]
   }
 }

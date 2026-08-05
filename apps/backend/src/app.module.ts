@@ -16,7 +16,6 @@ import { PushModule } from './modules/push/push.module';
 import { NotifyModule } from './modules/notify/notify.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { IdentityModule } from './modules/identity/identity.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { AccountModule } from './modules/account/account.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
@@ -27,6 +26,7 @@ import { ReceiptsModule } from './modules/receipts/receipts.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PaymentDeclarationsModule } from './modules/payment-declarations/payment-declarations.module';
 import { ListingsModule } from './modules/listings/listings.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -83,9 +83,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     // Authentification et profil courant
     AuthModule,
 
-    // Vérification automatique CNI togolaise (OCR Tesseract.js)
-    IdentityModule,
-
     // Gestion du profil (infos personnelles, photo, préférences, anonymisation)
     ProfileModule,
 
@@ -115,6 +112,9 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Annonces publiques — publication/désactivation automatiques, page publique (voir build-plan.md unités 28-29)
     ListingsModule,
+
+    // Panneau super admin — gestion des comptes
+    AdminModule,
   ],
   providers: [
     {

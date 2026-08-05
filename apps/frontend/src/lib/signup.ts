@@ -9,20 +9,8 @@ export function signupOwner(data: {
   phone: string;
   city: string;
   residenceCountry: string;
-  cniRecto: File;
-  cniVerso: File;
 }): Promise<{ user: WARAHUser }> {
-  const fd = new FormData();
-  fd.append("email", data.email);
-  fd.append("password", data.password);
-  fd.append("firstName", data.firstName);
-  fd.append("lastName", data.lastName);
-  fd.append("phone", data.phone);
-  fd.append("city", data.city);
-  fd.append("residenceCountry", data.residenceCountry);
-  fd.append("image", data.cniRecto);
-  fd.append("imageBack", data.cniVerso);
-  return api.post<{ user: WARAHUser }>("/auth/signup/owner", fd);
+  return api.post<{ user: WARAHUser }>("/auth/signup/owner", data);
 }
 
 export function signupManager(data: {
@@ -32,19 +20,6 @@ export function signupManager(data: {
   lastName: string;
   phone: string;
   city: string;
-  cniRecto: File;
-  cniVerso: File;
-  referenceDocuments?: File[];
 }): Promise<{ user: WARAHUser }> {
-  const fd = new FormData();
-  fd.append("email", data.email);
-  fd.append("password", data.password);
-  fd.append("firstName", data.firstName);
-  fd.append("lastName", data.lastName);
-  fd.append("phone", data.phone);
-  fd.append("city", data.city);
-  fd.append("image", data.cniRecto);
-  fd.append("imageBack", data.cniVerso);
-  data.referenceDocuments?.forEach((f) => fd.append("referenceDocuments", f));
-  return api.post<{ user: WARAHUser }>("/auth/signup/manager", fd);
+  return api.post<{ user: WARAHUser }>("/auth/signup/manager", data);
 }
