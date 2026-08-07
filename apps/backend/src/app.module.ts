@@ -27,6 +27,9 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { PaymentDeclarationsModule } from './modules/payment-declarations/payment-declarations.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { MandatesModule } from './modules/mandates/mandates.module';
+import { ExportsModule } from './modules/exports/exports.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -107,6 +110,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     // Saisie manuelle, historique, confirmation/rejet des paiements (voir build-plan.md unités 16, 19-20)
     PaymentsModule,
 
+    // Agrégation dashboard — résumé KPIs + revenus mensuels + biens/paiements récents en 1 appel
+    DashboardModule,
+
     // Déclaration de paiement par le locataire + relances (voir build-plan.md unité 20)
     PaymentDeclarationsModule,
 
@@ -115,6 +121,12 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Panneau super admin — gestion des comptes
     AdminModule,
+
+    // Délégation de biens à des gestionnaires (mandats)
+    MandatesModule,
+
+    // Exports PDF (paiements, biens, locataires, rapport financier)
+    ExportsModule,
   ],
   providers: [
     {
