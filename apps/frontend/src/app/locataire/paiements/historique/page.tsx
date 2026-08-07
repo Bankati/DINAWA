@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { paymentsApi, type Payment } from '@/lib/payments';
-import { ApiError } from '@/lib/auth-context';
-import { formatFcfa } from '@/lib/format';
+import { useApi, TTL } from '@/lib/use-api';
 import '../../locataire.css';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -40,21 +39,18 @@ function formatDate(s: string) {
   return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function formatMontant(n: number) {
+  return n.toLocaleString('fr-FR') + ' FCFA';
+}
+
 export default function PaymentHistoryPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const { data: res, loading: isLoading } = useApi<{ data: Payment[]; total: number }>('/payments', TTL.LIST);
+  const payments = res?.data ?? [];
 
   const [dateCourante] = useState(() =>
     new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   );
-
-  useEffect(() => {
-    paymentsApi.getPayments()
-      .then((res) => setPayments(res.data || []))
-      .catch((e) => setError(e instanceof ApiError ? e.message : 'Erreur de chargement'))
-      .finally(() => setIsLoading(false));
-  }, []);
 
   const downloadReceipt = async (paymentId: string) => {
     try {
@@ -67,8 +63,8 @@ export default function PaymentHistoryPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Erreur lors du téléchargement');
+    } catch (e: any) {
+      setError(e.message || 'Erreur lors du téléchargement');
     }
   };
 
@@ -132,10 +128,10 @@ export default function PaymentHistoryPage() {
                     <tr key={p.id}>
                       <td style={{ color: '#6B7280', fontSize: 12 }}>{formatDate(p.createdAt)}</td>
                       <td style={{ fontWeight: 500 }}>{p.lease?.property?.address || '—'}</td>
-                      <td style={{ fontWeight: 700, color: 'var(--color-primary-dark)', fontVariantNumeric: 'tabular-nums' }}>
-                        {formatFcfa(p.paidAmount)}
+                      <td style={{ fontWeight: 700, color: '#0A2650', fontVariantNumeric: 'tabular-nums' }}>
+                        {formatMontant(p.paidAmount)}
                       </td>
-                      <td style={{ color: '#6B7280' }}>{(p.paymentMethod && METHOD_LABELS[p.paymentMethod]) || p.paymentMethod || '—'}</td>
+                      <td style={{ color: '#6B7280' }}>{METHOD_LABELS[p.paymentMethod] || p.paymentMethod}</td>
                       <td>
                         <span className={`loc-badge ${STATUS_CLASS[p.status] ?? 'loc-badge-default'}`}>
                           <span className="loc-badge-dot" />

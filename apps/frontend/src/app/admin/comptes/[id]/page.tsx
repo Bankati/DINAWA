@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { adminApi, type AdminUserDetail } from '@/lib/admin';
 import { initiales } from '@/lib/format';
+import { cacheInvalidate } from '@/lib/cache';
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: 'Propriétaire', TENANT: 'Locataire', MANAGER: 'Gestionnaire', ADMIN: 'Administrateur',
@@ -33,11 +34,15 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function CompteDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
 
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -64,6 +69,19 @@ export default function CompteDetailPage() {
       </div>
     );
   }
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await adminApi.deleteUser(id);
+      cacheInvalidate('/admin/users');
+      router.push('/admin/comptes');
+    } catch (err: any) {
+      setDeleteError(err.message || 'Erreur lors de la suppression');
+      setDeleting(false);
+    }
+  };
 
   const statusColor = STATUS_COLOR[user.accountStatus] ?? '#6B7280';
   const roleColor = ROLE_COLOR[user.role] ?? '#6B7280';
@@ -124,6 +142,65 @@ export default function CompteDetailPage() {
           <InfoRow label="ID interne" value={<span style={{ fontFamily: 'monospace', fontSize: 11.5, color: '#9CA3AF' }}>{user.id}</span>} />
         </div>
       </div>
+
+      {/* Zone danger */}
+      <div style={{ background: '#FFF5F5', border: '1px solid #FECACA', borderRadius: 14, padding: '20px 24px' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: '#991B1B', margin: '0 0 6px' }}>Zone de danger</h2>
+        <p style={{ fontSize: 13, color: '#7F1D1D', margin: '0 0 16px', lineHeight: 1.5 }}>
+          La suppression anonymise définitivement ce compte et révoque l'accès immédiatement. Cette action est irréversible.
+        </p>
+        {deleteError && (
+          <div style={{ background: '#FEE2E2', color: '#DC2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+            {deleteError}
+          </div>
+        )}
+        <button
+          onClick={() => setShowDeleteModal(true)}
+          style={{ background: '#DC2626', color: 'white', border: 'none', borderRadius: 9, padding: '10px 20px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
+        >
+          Supprimer ce compte
+        </button>
+      </div>
+
+      {/* Modale de confirmation */}
+      {showDeleteModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+          onClick={() => !deleting && setShowDeleteModal(false)}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 16, padding: 28, maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 32, marginBottom: 12, textAlign: 'center' }}>⚠️</div>
+            <h2 style={{ fontSize: 17, fontWeight: 800, color: '#111827', margin: '0 0 10px', textAlign: 'center' }}>
+              Supprimer ce compte ?
+            </h2>
+            <p style={{ fontSize: 13.5, color: '#6B7280', lineHeight: 1.6, margin: '0 0 8px', textAlign: 'center' }}>
+              Le compte de <strong style={{ color: '#111827' }}>{user.firstName} {user.lastName}</strong> sera anonymisé.
+            </p>
+            <p style={{ fontSize: 13, color: '#DC2626', textAlign: 'center', margin: '0 0 24px', fontWeight: 600 }}>
+              Cette action est irréversible.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 9, padding: '11px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                style={{ flex: 1, background: '#DC2626', color: 'white', border: 'none', borderRadius: 9, padding: '11px 20px', fontSize: 14, fontWeight: 700, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1 }}
+              >
+                {deleting ? 'Suppression…' : 'Confirmer la suppression'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,25 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { getStatistiques, type StatistiquesPlateforme } from '@/lib/admin';
+import { useApi, TTL } from '@/lib/use-api';
+import type { StatistiquesPlateforme } from '@/lib/admin';
 import { formatFcfa, formatNumber } from '@/lib/format';
 import './page.css';
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<StatistiquesPlateforme | null>(null);
-  const [error, setError] = useState(false);
+  const { data: stats, loading, error: errMsg } = useApi<StatistiquesPlateforme>('/admin/stats', TTL.STABLE);
 
-  useEffect(() => {
-    getStatistiques()
-      .then(setStats)
-      .catch(() => setError(true));
-  }, []);
-
-  if (error) {
+  if (loading) return <div style={{ color: '#9CA3AF', fontSize: 13.5 }}>Chargement…</div>;
+  if (errMsg || !stats) {
     return <div style={{ color: '#DC2626', fontSize: 13.5 }}>Impossible de charger les statistiques. Réessayez plus tard.</div>;
   }
-
-  if (!stats) return <div style={{ color: '#9CA3AF', fontSize: 13.5 }}>Chargement…</div>;
 
   return (
     <div className="kpi-grid">

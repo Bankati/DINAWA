@@ -2,11 +2,15 @@
 
 import RequireRole from '@/components/require-role';
 import AppShell from '@/components/app-shell';
+import { OwnerPrefetcher } from '@/components/prefetcher';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireRole roles={['OWNER']}>
-      <AppShell>{children}</AppShell>
+      <AppShell>
+        <OwnerPrefetcher />
+        {children}
+      </AppShell>
     </RequireRole>
   );
 }
