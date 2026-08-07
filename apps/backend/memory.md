@@ -1,67 +1,70 @@
-# Mémoire — Backend WARAH (suppression identité + fix receipts)
+# Mémoire — Backend WARAH (audit tracker + démarrage Mandats)
 
-Dernière mise à jour : 2026-08-04
+Dernière mise à jour : 2026-08-06
 
 ## Historique condensé (avant cette session)
 
-Phases 1-3 (unités 01-15) terminées : auth, biens, locataires, baux. Phase 4 (paiements) déjà commitée par le binôme (`b55e718`) : `POST /api/payments/manual`, déclarations locataire, confirmation/rejet, `GET /api/payments/:id/receipt.pdf`. Frontend migré d'Angular vers Next.js (`4ed0535`). Corrections post-phase-5 commitées (`becf81c`).
+Phases 1-3 (unités 01-15) terminées : auth, biens, locataires, baux. Phase 4 (paiements) : `POST /api/payments/manual`, déclarations locataire, confirmation/rejet, `GET /api/payments/:id/receipt.pdf`. Phase 5 (unités 24-25, rappels/impayés) et Phase 7 unité 28 (annonces) terminées. Frontend migré d'Angular vers Next.js.
 
-## Ce qui a été fait (cette session — 2026-08-04)
+**Session du 2026-08-04** : suppression complète du système de vérification CNI (module `identity`, modèle `IdentityVerification`, `assertIdentityVerified()`, deps `tesseract.js`/`mrz`) — décision du boss à l'époque : suppression totale, pas de vérification différée. Fix `receipt-pdf.service.ts` (PDFKit encode le texte en hex dans les content streams TJ ; `fcfa()` cassait sur l'espace fine U+202F de `toLocaleString('fr-FR')`, encodée en `/` par WinAnsiEncoding). 257 tests à l'issue de cette session.
 
-**1. Suppression complète du système de vérification d'identité (CNI).**
-Décision du boss : Option B (suppression totale, pas de vérification différée).
+## Ce qui a été fait (cette session — 2026-08-06)
 
-Fichiers supprimés :
+**1. Audit de cohérence code ↔ `progress-tracker.md`** (le tracker n'avait pas été mis à jour depuis le 2026-07-28, alors que le code avait changé le 2026-08-04 dans une session dont la trace n'était que dans `memory.md`, jamais reportée dans le tracker).
 
-- `apps/backend/src/modules/identity/` (9 fichiers : module, controller, service, listener, events, specs)
-- `apps/backend/src/common/permissions/identity-verified.ts`
-- `apps/backend/src/common/permissions/identity-verified.spec.ts`
+Écarts trouvés et documentés dans `apps/backend/contexte/progress-tracker.md` :
 
-Fichiers modifiés :
+- Unité 07 (CNI) décochée avec note de retrait complet (2026-08-04) — historique conservé en biffé, plus plusieurs notes "obsolète" ajoutées sous les unités 08/09 et dans la section Decisions (le paragraphe CNI y est toujours présent mais marqué comme annulé).
+- `AdminModule` découvert non documenté (`src/modules/admin/` : `GET /admin/users`, `GET /admin/users/:id`, importé dans `app.module.ts`) — ajouté au Progress sous l'unité 37 (Phase 10) comme "partiel", avec ses lacunes listées (pas de tests, pas de DTO validé, 4 warnings ESLint).
+- `GET /api/payments` et `GET /api/payments/:id/receipt.pdf` acceptent maintenant `TENANT` — noté dans Current Status.
+- Vérifié en conditions réelles : `npx jest` → **25 suites, 257 tests, tous passants** ; `npx tsc --noEmit` propre ; `npx eslint src/` → **1 erreur réelle** (`account.controller.spec.ts:14`, `@typescript-eslint/no-unnecessary-type-assertion`) + 4 warnings (module admin). **Non corrigés** — audit seul, aucun code applicatif touché.
 
-- `src/modules/auth/auth.module.ts` — IdentityModule retiré
-- `src/modules/auth/auth.controller.ts` — imports FileFieldsInterceptor/UploadedFiles/ApiConsumes/MAX_PHOTO_BYTES retirés
-- `src/modules/auth/auth.service.spec.ts` — frontFile/backFile inutilisés supprimés, bloc commenté identité supprimé
-- `src/modules/properties/properties.service.spec.ts` — mocks idVerificationStatus + describe('verrou identité') supprimés
-- `apps/backend/package.json` — `tesseract.js` et `mrz` désinstallés (-92 packages)
+**2. Décisions produit actées avec le développeur (2026-08-06)**, questions ouvertes fermées dans le tracker :
 
-Note : `auth.service.ts`, `properties.service.ts`, `tenants.service.ts` et `prisma/schema.prisma` avaient déjà été nettoyés par le binôme (migration `20260730085655_remove_identity_verification` existante).
+- **CNI abandonnée définitivement.** Pas un oubli, un choix assumé — confirmé explicitement, aucune reconstruction prévue en V1.
+- **Cashpay (unités 17-18) reste reporté** — les agréments mobile money (T-Money/Flooz) ne sont pas encore obtenus côté produit (bloquant indépendant du code, pas juste un problème de documentation API comme noté précédemment). Pas de date de reprise connue.
+- **Direction retenue pour la suite : Phase 8 (Mandats et espace gestionnaire, unité 31)** plutôt que Cashpay ou la Phase 6 (déjà couverte côté frontend par composition client, voir `dashboard.service.ts`).
 
-**2. Fix receipt-pdf.service.ts + spec.**
-
-Problème : PDFKit encode le texte en hex dans les content streams TJ (`<466c6f6f7a>` pour "Flooz"). `buffer.toString('utf-8')` ne retrouve pas le texte — les tests échouaient tous.
-
-Corrections :
-
-- `compress: false` ajouté au `PDFDocument` (content streams lisibles dans les tests)
-- `fcfa()` : `.replace(/ /g, ' ')` — `toLocaleString('fr-FR')` produit U+202F (espace fine) que WinAnsiEncoding encode en `0x2F` = `/`, cassant les montants comme "55 000 FCFA"
-- Helper `extractPdfText(buffer)` ajouté dans le spec : parse les hex-strings `<...>` du content stream et les décode en latin1
+**3. `/architect` démarré sur l'unité 31 (Mandats)** — session interrompue par le développeur avant la fin, à reprendre. Voir "La prochaine session commencera par" ci-dessous pour l'état exact.
 
 ## Décisions prises
 
-- Vérification d'identité supprimée totalement — plus de CNI, plus de passeport, plus d'`idVerificationStatus` dans tout le projet. Aucun verrou d'identité nulle part.
-- `apps/backend/tsconfig.json` doit garder un `types` explicite (pollution cross-workspace npm via `@types/jasmine` sinon).
-- Backend "mon" (routes anglaises `/api/properties`, `/api/auth`, etc.) reste la référence — le backend concurrent du binôme (routes françaises) n'est pas intégré. Réconciliation reportée.
+- CNI : abandon définitif, confirmé (voir ci-dessus).
+- Cashpay : reporté sans date, bloqué par les agréments produit, pas par la technique.
+- Prochain chantier backend : Phase 8, en commençant par l'unité 31 (Mandats).
+- Vocabulaire validé pour l'unité 31 (voir section /architect ci-dessous) : « mandat actif » = `status = ACTIVE` uniquement (le statut `EXPIRED` du schéma reste non automatisé, comme pour les baux — aucun cron ne le déclenche, hypothèse implicite pas encore explicitement confirmée par le développeur au moment de l'interruption) ; « portefeuille » (`GET /api/manager/portfolio`) = uniquement les biens sous mandat actif, **distinct** de `GET /api/properties` qui montre déjà (via `propertyVisibilityWhere()`) biens propres + biens sous mandat mélangés.
 
 ## Problèmes résolus
 
-- PDFKit + WinAnsiEncoding : U+202F (espace fine fr-FR) → `0x2F` = `/` dans le PDF. Fix : `.replace(/ /g, ' ')` dans `fcfa()`.
-- Tests PDF : `buffer.toString('utf-8')` inutilisable sur PDF PDFKit (hex-strings TJ). Fix : helper `extractPdfText()` dans le spec.
-- `identity-verified.spec.ts` orphelin (référence module supprimé) → erreur de build → supprimé.
+Rien de nouveau cette session côté code — audit et documentation uniquement. Voir session du 2026-08-04 dans l'historique condensé pour les fixes PDFKit.
 
 ## État actuel
 
-- Backend : build propre, lint propre, **257 tests unitaires (25 suites)** passent tous.
-- Frontend : Next.js (React 19.2.4, Next.js 16.2.12, Tailwind CSS 4). Pages paiements disponibles. Routes frontend appellent les routes françaises du binôme — pas encore raccordées au backend principal.
-- Modules backend disponibles : auth, profile, account, properties, tenants, leases, payments, payment-declarations, receipts, listings, scheduling, push, notify.
+- Backend : build propre, lint quasi propre (1 erreur pré-existante non liée à cette session + 4 warnings sur le module admin), **257 tests unitaires (25 suites)** passent tous.
+- `apps/backend/contexte/progress-tracker.md` est maintenant à jour et fiable (audité ligne par ligne contre le code réel le 2026-08-06) — s'y fier davantage qu'à ce fichier `memory.md` pour l'état détaillé unité par unité.
+- Modules backend actifs : `account`, `admin` (partiel), `auth`, `email`, `health`, `leases`, `listings`, `notify`, `payment-declarations`, `payments`, `profile`, `properties`, `push`, `receipts`, `scheduling`, `storage`, `supabase`, `tenants`. Pas de module `identity` (retiré), pas de module `mandates` (à construire, unité 31 en cours de spec).
+- `Mandate`/`ManagerReview` existent déjà dans `prisma/schema.prisma` (posés par anticipation depuis l'unité 02) et sont déjà lus (pas écrits) par `canActOnProperty()`/`propertyVisibilityWhere()`/`resolveResponsibleUserId()` (`src/common/permissions/property-access.ts`) et par `AccountActivationService.hasQualifyingActivity()`. Ce dernier a un commentaire qui anticipe littéralement l'appel à `reactivateIfEligible()` depuis `MandatesService.accept()` — dépendance prête à fermer.
 
 ## La prochaine session commencera par
 
-`/remember restore` puis consulter `apps/backend/contexte/progress-tracker.md` pour identifier la prochaine unité à construire (les phases 1-4 semblent couvertes — vérifier exactement ce qui reste).
+`/remember restore`, puis **reprendre `/architect` sur l'unité 31 (Mandats) exactement où on s'est arrêté** : le vocabulaire est validé (« mandat actif », « portefeuille » — voir Décisions ci-dessus), mais **aucune décision d'implémentation n'a encore été posée**. Première question à poser au développeur (celle qui a le plus d'impact sur le reste) :
+
+> Comment le propriétaire désigne-t-il le gestionnaire dans `POST /api/mandates` — par `managerId` direct (suppose que le frontend connaît déjà l'ID, via quel endpoint puisque l'unité 34 "annuaire public des gestionnaires" n'existe pas encore ?), ou par email/téléphone avec recherche côté serveur (même pattern que `AuthService.inviteTenant()` qui cherche `where: { role: 'TENANT', OR: [{email}, {phone}] }`) ?
+
+Décisions suivantes déjà identifiées, à poser une par une après celle-ci (par ordre d'impact décroissant) :
+
+1. Un `Mandate` porte sur **un seul** `propertyId` dans le schéma — le build-plan parle de « un ou plusieurs biens » au pluriel. `POST /api/mandates` doit-il accepter un tableau de biens (plusieurs lignes `Mandate` créées en transaction) ou un bien à la fois ?
+2. Le gestionnaire peut-il **refuser** un mandat `PENDING` (pas seulement l'accepter) ? Le build-plan ne mentionne qu'accept/revoke — faut-il un état "declined" distinct, ou le refus passe par le même endpoint `revoke` depuis `PENDING` avec motif ?
+3. `MandateStatus.EXPIRED` : construire une transition automatique (cron) sur `endDate` dépassée dans cette passe, ou hors périmètre comme pour `Lease` (résiliation manuelle uniquement) ?
+4. Contrainte d'unicité : un bien peut-il avoir plusieurs mandats `ACTIVE` simultanés (avec des gestionnaires différents) ? `canActOnProperty()` fait un `findFirst` — ambigu si plusieurs mandats actifs coexistaient sur le même bien. Probablement à garder unique en garde applicative (pas de contrainte DB stricte a priori, sauf si le développeur préfère le pattern déjà utilisé pour `Lease` ACTIVE unique par tenant).
+5. `feeType`/`feeValue` (tarif du mandat) : juste stocké/informatif dans cette passe, ou une logique de calcul est-elle attendue déjà (probablement non — les rapports mensuels, unité 33, qui en auraient besoin, ne sont pas construits) ?
+
+Une fois ces décisions posées → "Blueprint ready." → plan d'implémentation → confirmation du développeur → code.
 
 ## Questions en suspens
 
-- Réconciliation frontend (routes françaises du binôme) ↔ backend principal (routes anglaises) — reportée, sans date.
-- Nettoyage lint frontend (~1017 erreurs pré-existantes) — chantier séparé, non planifié.
+- Décisions d'implémentation de l'unité 31 listées ci-dessus (5 points, pas encore posées au développeur).
+- 1 erreur ESLint (`account.controller.spec.ts:14`) + 4 warnings (module `admin`) trouvés le 2026-08-06, non corrigés — à caser à l'occasion, pas bloquant.
+- Périmètre définitif de l'`AdminModule` (unité 37) — construit de façon minimale sans passer par `/architect`. À aligner sur le build-plan ou à documenter comme réduit assumé.
 - Domaine `warah.tg` toujours pas vérifié sur Resend (hérité, toujours vrai).
-- `amountInWords()` dans `receipt-pdf.service.ts` est une version simplifiée (`"55000 francs CFA"`) — à améliorer si besoin d'un vrai convertisseur numérique en lettres.
+- `amountInWords()` dans `receipt-pdf.service.ts` reste une version simplifiée (hérité de la session du 04/08).

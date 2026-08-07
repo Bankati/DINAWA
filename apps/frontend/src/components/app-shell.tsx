@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { motion } from 'motion/react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { initiales } from '@/lib/format';
@@ -10,7 +11,7 @@ import './app-shell.css';
 
 type NavIcon =
   | 'dashboard' | 'biens' | 'locataires' | 'paiements' | 'annonces'
-  | 'profil' | 'notifications' | 'export' | 'identite'
+  | 'profil' | 'notifications' | 'export'
   | 'portefeuille' | 'rapports' | 'profil-public';
 
 interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; }
@@ -31,9 +32,7 @@ const OWNER_NAV: NavSection[] = [
     label: 'Compte',
     items: [
       { icon: 'profil', label: 'Mon profil', route: '/dashboard/profil' },
-      { icon: 'identite', label: 'Vérification CNI', route: '/dashboard/identite' },
       { icon: 'notifications', label: 'Notifications', route: '/dashboard/notifications', notif: true },
-      { icon: 'export', label: 'Export', route: '/dashboard/export' },
     ],
   },
 ];
@@ -55,9 +54,7 @@ const MANAGER_NAV: NavSection[] = [
     label: 'Compte',
     items: [
       { icon: 'profil-public', label: 'Profil public', route: '/gestionnaire/profil-public' },
-      { icon: 'identite', label: 'Vérification CNI', route: '/gestionnaire/identite' },
       { icon: 'notifications', label: 'Notifications', route: '/gestionnaire/notifications', notif: true },
-      { icon: 'export', label: 'Export', route: '/gestionnaire/export' },
     ],
   },
 ];
@@ -89,7 +86,6 @@ const ICONS: Record<NavIcon, React.ReactNode> = {
   annonces: <path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/>,
   profil: <><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
   'profil-public': <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></>,
-  identite: <><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></>,
   notifications: <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
   export: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
   portefeuille: <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>,
@@ -187,11 +183,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 const active = item.exact ? pathname === item.route : pathname.startsWith(item.route);
                 return (
                   <Link key={item.route} href={item.route} className={`nav-item${active ? ' active' : ''}`}>
+                    {active && <motion.span layoutId="nav-active-pill" className="nav-active-pill" transition={{ type: 'spring', stiffness: 380, damping: 32 }} />}
                     <span className="notif-icon-wrap">
                       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{ICONS[item.icon]}</svg>
                       {item.notif && unreadCount > 0 && <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
                     </span>
-                    <span>{item.label}</span>
+                    <span className="nav-item-label">{item.label}</span>
                   </Link>
                 );
               })}

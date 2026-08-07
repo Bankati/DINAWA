@@ -18,7 +18,7 @@ const slides: HeroSlide[] = [
 ];
 
 const fonctionnement = [
-  { num: '01', titre: 'Créez votre compte', desc: 'Inscription gratuite en 2 minutes. Renseignez vos informations et téléchargez votre CNI ou passeport pour validation.' },
+  { num: '01', titre: 'Créez votre compte', desc: 'Inscription gratuite en 2 minutes. Renseignez vos informations pour démarrer.' },
   { num: '02', titre: 'Ajoutez vos biens', desc: 'Enregistrez vos propriétés avec photos, description et conditions de location. Biens disponibles immédiatement.' },
   { num: '03', titre: 'Invitez vos locataires', desc: 'Envoyez une invitation par email ou SMS. Le locataire crée son compte et est associé à votre bail.' },
   { num: '04', titre: 'Gérez tout en temps réel', desc: "Suivez les paiements, générez des quittances et recevez des alertes dès qu'un loyer est en retard." },

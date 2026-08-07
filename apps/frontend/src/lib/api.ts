@@ -42,6 +42,23 @@ export const api = {
       body: data instanceof FormData ? data : JSON.stringify(data),
     }),
   patch: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: "PATCH", body: JSON.stringify(data) }),
+    request<T>(path, {
+      method: "PATCH",
+      body: data instanceof FormData ? data : JSON.stringify(data),
+    }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
+
+// Pour les réponses binaires (PDF, etc.) — `request()` ne peut pas les
+// gérer car il ne fait que du JSON.
+export async function getBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_URL}${path}`, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body);
+  }
+  return res.blob();
+}

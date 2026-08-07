@@ -1,27 +1,89 @@
-import { api } from "./api";
+import { api, getBlob } from "./api";
+
+export type PaymentStatus =
+  | "PENDING"
+  | "PENDING_CONFIRMATION"
+  | "PAID"
+  | "PARTIAL"
+  | "LATE"
+  | "OVERDUE"
+  | "REJECTED";
+export type PaymentSource =
+  "CASHPAY_API" | "MANUAL_OWNER" | "TENANT_DECLARATION";
+export type PaymentMethod = "TMONEY" | "FLOOZ" | "CASH" | "BANK_TRANSFER";
+// Le formulaire de saisie manuelle (propriétaire/gestionnaire) n'accepte que
+// ces deux modes — T-Money/Flooz dépendent de Cashpay (webhook non construit).
+export type ManualPaymentMethod = "CASH" | "BANK_TRANSFER";
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  PENDING: "En attente",
+  PENDING_CONFIRMATION: "À confirmer",
+  PAID: "Payé",
+  PARTIAL: "Partiel",
+  LATE: "En retard",
+  OVERDUE: "Impayé",
+  REJECTED: "Rejeté",
+};
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  TMONEY: "T-Money",
+  FLOOZ: "Flooz",
+  CASH: "Espèces",
+  BANK_TRANSFER: "Virement bancaire",
+};
+
+export const PAYMENT_STATUS_BADGE_CLASSES: Record<PaymentStatus, string> = {
+  PAID: "bg-green-100 text-green-800",
+  PARTIAL: "bg-yellow-100 text-yellow-800",
+  LATE: "bg-orange-100 text-orange-800",
+  OVERDUE: "bg-red-100 text-red-800",
+  REJECTED: "bg-red-100 text-red-800",
+  PENDING_CONFIRMATION: "bg-blue-50 text-blue-700",
+  PENDING: "bg-gray-100 text-gray-800",
+};
+
+export const PAYMENT_STATUS_DOT_CLASSES: Record<PaymentStatus, string> = {
+  PAID: "bg-green-500",
+  PARTIAL: "bg-yellow-500",
+  LATE: "bg-orange-500",
+  OVERDUE: "bg-red-500",
+  REJECTED: "bg-red-500",
+  PENDING_CONFIRMATION: "bg-blue-400",
+  PENDING: "bg-gray-500",
+};
+
+interface PersonSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+}
 
 export interface Payment {
   id: string;
   leaseId: string;
   scheduleEntryId: string | null;
-  status: string;
+  source: PaymentSource;
+  status: PaymentStatus;
+  paymentMethod: PaymentMethod | null;
   paidAmount: number;
-  paymentMethod: string;
+  paidAt: string | null;
+  transactionId: string | null;
   note: string | null;
   proofStoragePath: string | null;
+  recordedByUserId: string | null;
+  confirmedByUserId: string | null;
+  confirmedAt: string | null;
+  rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
   lease?: {
     id: string;
-    tenant?: {
-      id: string;
-      firstName: string;
-      lastName: string;
-      email: string;
-    };
+    tenant?: PersonSummary;
     property?: {
       id: string;
       address: string;
+      neighborhood: string;
       city: string;
     };
   };
@@ -63,6 +125,32 @@ export interface RejectPaymentDto {
   rejectionReason: string;
 }
 
+export interface CreateManualPaymentDto {
+  scheduleEntryId: string;
+  paidAmount: number;
+  paidAt: string;
+  paymentMethod: ManualPaymentMethod;
+  note?: string;
+}
+
+export interface ListPaymentsQuery {
+  page?: number;
+  limit?: number;
+  propertyId?: string;
+  tenantUserId?: string;
+  status?: PaymentStatus;
+  source?: PaymentSource;
+  from?: string;
+  to?: string;
+}
+
+export interface PaginatedPayments {
+  data: Payment[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 export const paymentsApi = {
   // Créer une déclaration de paiement locataire
   createDeclaration: (dto: CreatePaymentDeclarationDto, file?: File) => {
@@ -100,33 +188,31 @@ export const paymentsApi = {
   rejectPayment: (id: string, dto: RejectPaymentDto) =>
     api.post<Payment>(`/payments/${id}/reject`, dto),
 
-  // Récupérer l'historique des paiements
-  getPayments: (query?: {
-    leaseId?: string;
-    status?: string;
-    page?: number;
-    limit?: number;
-  }) => {
+  // Récupérer l'historique des paiements (propriétaire/gestionnaire/locataire)
+  getPayments: (query?: ListPaymentsQuery): Promise<PaginatedPayments> => {
     const params = query
       ? "?" +
         new URLSearchParams(
           Object.entries(query)
-            .filter(([, v]) => v != null)
+            .filter(([, v]) => v != null && v !== "")
             .map(([k, v]) => [k, String(v)]),
         ).toString()
       : "";
-    return api.get<{ data: Payment[]; total: number }>(`/payments${params}`);
+    return api.get<PaginatedPayments>(`/payments${params}`);
   },
 
-  // Télécharger la quittance PDF
-  downloadReceipt: (id: string) => api.get<Blob>(`/payments/${id}/receipt.pdf`),
+  // Télécharger la quittance PDF — réponse binaire, jamais du JSON
+  downloadReceipt: (id: string) => getBlob(`/payments/${id}/receipt.pdf`),
 
-  // Créer un paiement manuel (propriétaire/gestionnaire)
-  createManualPayment: (dto: Record<string, string | number>, file?: File) => {
+  // Créer un paiement manuel (propriétaire/gestionnaire) — toujours PAID
+  // immédiatement, source MANUAL_OWNER
+  createManualPayment: (dto: CreateManualPaymentDto, file?: File) => {
     const formData = new FormData();
-    Object.entries(dto).forEach(([key, value]) => {
-      formData.append(key, String(value));
-    });
+    formData.append("scheduleEntryId", dto.scheduleEntryId);
+    formData.append("paidAmount", String(dto.paidAmount));
+    formData.append("paidAt", dto.paidAt);
+    formData.append("paymentMethod", dto.paymentMethod);
+    if (dto.note) formData.append("note", dto.note);
     if (file) formData.append("proof", file);
     return api.post<Payment>("/payments/manual", formData);
   },

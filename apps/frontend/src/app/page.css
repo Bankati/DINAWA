@@ -456,6 +456,12 @@ img { max-width: 100%; }
 @media (max-width: 900px) {
   .faq-split { grid-template-columns: 1fr; min-height: 0; }
   .faq-photo { min-height: 280px; }
+  /* Sous ce format, le panneau n'a plus de hauteur imposée par la photo —
+     le défilement interne (flex:1 + overflow-y:auto) se retrouve alors sans
+     espace disponible et les items se chevauchent (AOS ne détecte jamais
+     leur entrée dans le viewport puisqu'ils ne bougent qu'au scroll interne,
+     pas au scroll de la page). On repasse en flux normal de page. */
+  .faq-panel-scroll { flex: none; overflow-y: visible; margin-right: 0; padding-right: 0; max-height: none; }
 }
 @media (max-width: 640px) {
   .faq-panel { padding: 32px 22px 24px; }

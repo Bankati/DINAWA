@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { paymentsApi, type CreatePaymentDeclarationDto } from '@/lib/payments';
+import { ApiError } from '@/lib/auth-context';
 import '../../locataire.css';
 
 const PAYMENT_METHODS = [
@@ -51,8 +52,8 @@ export default function PaymentDeclarationPage() {
       setFormData(EMPTY_FORM);
       setSelectedFile(null);
       setTimeout(() => setSuccess(''), 7000);
-    } catch (err: any) {
-      setError(err.message || 'Erreur lors de la déclaration');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Erreur lors de la déclaration');
     } finally {
       setIsLoading(false);
     }

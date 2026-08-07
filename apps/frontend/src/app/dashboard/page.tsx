@@ -8,12 +8,17 @@ import {
   type DashboardKPI, type RevenuMensuel, type Alerte, type DernierPaiement, type DernierBien,
 } from '@/lib/dashboard';
 import { initiales } from '@/lib/format';
+import { Dropdown } from '@/components/ui/dropdown';
+import { NotificationsBell } from '@/components/notifications-bell';
 import './page.css';
 
 const CHART_W = 540;
 const CHART_H = 160;
 const PAD_T = 12;
 const PAD_B = 8;
+
+const MOIS_LABELS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+const MOIS_OPTIONS = MOIS_LABELS.map((label, i) => ({ value: String(i + 1), label }));
 
 const EMPTY_KPI: DashboardKPI = { totalBiens: 0, biensOccupes: 0, biensVacants: 0, totalLocataires: 0, revenusMensuels: 0, revenusAnnuels: 0, impayes: 0, tauxOccupation: 0 };
 
@@ -95,11 +100,24 @@ export default function DashboardPage() {
 
   const [dateCourante] = useState(() => new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
   const anneeEnCours = new Date().getFullYear();
+  const moisEnCours = new Date().getMonth() + 1;
+
+  const [selectedYear, setSelectedYear] = useState(anneeEnCours);
+  const [periodMode, setPeriodMode] = useState<'annee' | 'mois' | 'personnalise'>('annee');
+  const [selectedMonth, setSelectedMonth] = useState(moisEnCours);
+  const [customFrom, setCustomFrom] = useState(1);
+  const [customTo, setCustomTo] = useState(moisEnCours);
 
   useEffect(() => {
     const onError = () => setError(true);
-    getKPIs().then((d) => { setKpis(d); setLoadingKPIs(false); }).catch(() => { setLoadingKPIs(false); onError(); });
-    getRevenusMensuels().then((d) => { setRevenus(d); setLoadingRevenus(false); }).catch(() => { setLoadingRevenus(false); onError(); });
+    setLoadingKPIs(true);
+    setLoadingRevenus(true);
+    getKPIs(selectedYear).then((d) => { setKpis(d); setLoadingKPIs(false); }).catch(() => { setLoadingKPIs(false); onError(); });
+    getRevenusMensuels(selectedYear).then((d) => { setRevenus(d); setLoadingRevenus(false); }).catch(() => { setLoadingRevenus(false); onError(); });
+  }, [selectedYear]);
+
+  useEffect(() => {
+    const onError = () => setError(true);
     getAlertes().then((d) => { setAlertes(d); setLoadingAlertes(false); }).catch(() => { setLoadingAlertes(false); onError(); });
     getDerniersPaiements().then((d) => { setDerniersPaiements(d); setLoadingPaiements(false); }).catch(() => { setLoadingPaiements(false); onError(); });
     getDerniersBiens().then((d) => { setDerniersBiens(d); setLoadingBiens(false); }).catch(() => { setLoadingBiens(false); onError(); });
@@ -108,13 +126,26 @@ export default function DashboardPage() {
   const utilisateurPrenom = user?.firstName || 'Propriétaire';
   const userInitiales = user ? initiales(user.firstName, user.lastName, 'P') : 'P';
 
-  const maxRevenu = revenus.length ? Math.max(...revenus.map((r) => r.montant)) : 1000000;
-  const totalRevenus = revenus.reduce((s, r) => s + r.montant, 0);
-  const moyenneRevenu = revenus.length ? totalRevenus / revenus.length : 0;
-  const meilleurMois = revenus.length ? formatMoisLong(revenus.reduce((best, r) => (r.montant > best.montant ? r : best)).mois) : '—';
+  // Les 12 mois de l'année sélectionnée sont toujours chargés — le filtre
+  // de période ne fait que restreindre la fenêtre affichée dans le
+  // graphique et les statistiques, sans appel réseau supplémentaire.
+  const revenusAffiches =
+    periodMode === 'annee' ? revenus
+    : periodMode === 'mois' ? revenus.filter((_, i) => i + 1 === selectedMonth)
+    : revenus.filter((_, i) => i + 1 >= Math.min(customFrom, customTo) && i + 1 <= Math.max(customFrom, customTo));
+
+  const periodeLabel =
+    periodMode === 'annee' ? `Année ${selectedYear}`
+    : periodMode === 'mois' ? formatMoisLong(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`)
+    : `${formatMoisCourt(`${selectedYear}-${String(Math.min(customFrom, customTo)).padStart(2, '0')}`)} – ${formatMoisCourt(`${selectedYear}-${String(Math.max(customFrom, customTo)).padStart(2, '0')}`)} ${selectedYear}`;
+
+  const maxRevenu = revenusAffiches.length ? Math.max(...revenusAffiches.map((r) => r.montant)) : 1000000;
+  const totalRevenus = revenusAffiches.reduce((s, r) => s + r.montant, 0);
+  const moyenneRevenu = revenusAffiches.length ? totalRevenus / revenusAffiches.length : 0;
+  const meilleurMois = revenusAffiches.length ? formatMoisLong(revenusAffiches.reduce((best, r) => (r.montant > best.montant ? r : best)).mois) : '—';
   const hasRevenusData = totalRevenus > 0;
 
-  const chartPoints = buildChartPoints(revenus, maxRevenu || 1);
+  const chartPoints = buildChartPoints(revenusAffiches, maxRevenu || 1);
   const activePoint = activePointIndex !== null ? chartPoints[activePointIndex] ?? null : null;
   const linePath = svgLinePath(chartPoints);
   const bottomY = CHART_H - PAD_B;
@@ -125,23 +156,35 @@ export default function DashboardPage() {
 
   return (
     <div className="dash-page">
-      {/* ── Hero banner FACAM ── */}
-      <div className="dash-hero">
-        <div className="hero-meta">
-          <span className="hero-date-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            {dateCourante}
-          </span>
-          <span className="hero-role-badge">Propriétaire</span>
-        </div>
-        <h1 className="hero-greeting">Bonjour, {utilisateurPrenom} !</h1>
-        <p className="hero-subtitle">Voici un aperçu de votre portefeuille immobilier</p>
-        <div className="hero-actions">
-          <Link href="/dashboard/notifications" className={`hero-notif-btn${alertes.length > 0 ? ' has-alertes' : ''}`}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            {alertes.length > 0 && <span className="hero-notif-badge">{alertes.length}</span>}
-          </Link>
-          <div className="hero-avatar">{userInitiales}</div>
+      {/* ── Hero banner (photo + voile navy, même traitement que la
+          bannière "Passons à l'action" des annonces) ── */}
+      <div className="dash-hero-wrap">
+        <div className="dash-hero">
+          <img src="/bridge-with-city.jpg" alt="" className="hero-bg" />
+          <div className="hero-scrim" />
+          <div className="hero-dots" aria-hidden="true">
+            <span className="pd pd-1" /><span className="pd pd-2" /><span className="pd pd-3" />
+          </div>
+          <div className="hero-icon">
+            <svg viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="26" fill="rgba(255,255,255,0.06)" />
+              <circle cx="32" cy="32" r="19" stroke="rgba(201,152,46,0.35)" strokeWidth="1.5" />
+              <path d="M32 16L48 28v20a2 2 0 01-2 2h-9v-12h-10v12h-9a2 2 0 01-2-2V28z" fill="#C9982E" />
+            </svg>
+          </div>
+          <div className="hero-meta">
+            <span className="hero-date-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              {dateCourante}
+            </span>
+            <span className="hero-role-badge">Propriétaire</span>
+          </div>
+          <h1 className="hero-greeting">Bonjour, {utilisateurPrenom} !</h1>
+          <p className="hero-subtitle">Voici un aperçu de votre portefeuille immobilier</p>
+          <div className="hero-actions">
+            <NotificationsBell notificationsHref="/dashboard/notifications" />
+            <div className="hero-avatar">{userInitiales}</div>
+          </div>
         </div>
       </div>
 
@@ -212,24 +255,41 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Actions rapides ── */}
-        <div className="quickactions-strip">
-          <Link href="/dashboard/biens" className="qa-btn qa-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Ajouter un bien
-          </Link>
-          <Link href="/dashboard/paiements" className="qa-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-            Paiement
-          </Link>
-          <Link href="/dashboard/locataires" className="qa-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-            Nouveau locataire
-          </Link>
-          <Link href="/dashboard/annonces" className="qa-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            Publier une annonce
-          </Link>
+        {/* ── Filtres de période ── */}
+        <div className="period-filter-bar">
+          <div className="period-mode-tabs">
+            <button type="button" className={`period-tab${periodMode === 'annee' ? ' active' : ''}`} onClick={() => setPeriodMode('annee')}>Année</button>
+            <button type="button" className={`period-tab${periodMode === 'mois' ? ' active' : ''}`} onClick={() => setPeriodMode('mois')}>Mois</button>
+            <button type="button" className={`period-tab${periodMode === 'personnalise' ? ' active' : ''}`} onClick={() => setPeriodMode('personnalise')}>Personnalisé</button>
+          </div>
+
+          <div className="period-controls">
+            <div className="period-field">
+              <Dropdown
+                value={String(selectedYear)}
+                onChange={(v) => setSelectedYear(Number(v))}
+                options={Array.from({ length: 5 }, (_, i) => anneeEnCours - i).map((y) => ({ value: String(y), label: String(y) }))}
+              />
+            </div>
+
+            {periodMode === 'mois' && (
+              <div className="period-field">
+                <Dropdown value={String(selectedMonth)} onChange={(v) => setSelectedMonth(Number(v))} options={MOIS_OPTIONS} />
+              </div>
+            )}
+
+            {periodMode === 'personnalise' && (
+              <>
+                <div className="period-field">
+                  <Dropdown value={String(customFrom)} onChange={(v) => setCustomFrom(Number(v))} options={MOIS_OPTIONS} placeholder="Du mois" />
+                </div>
+                <span className="period-range-sep">→</span>
+                <div className="period-field">
+                  <Dropdown value={String(customTo)} onChange={(v) => setCustomTo(Number(v))} options={MOIS_OPTIONS} placeholder="au mois" />
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── Graphique + Alertes ── */}
@@ -237,13 +297,7 @@ export default function DashboardPage() {
           <div className="section-card chart-card">
             <div className="section-header">
               <h2 className="section-title">Revenus mensuels</h2>
-              <div className="chart-controls">
-                <div className="chart-tabs">
-                  <button className="chart-tab active">Mensuel</button>
-                  <button className="chart-tab">Annuel</button>
-                </div>
-                <span className="section-tag">{anneeEnCours}</span>
-              </div>
+              <span className="section-tag">{periodeLabel}</span>
             </div>
             {loadingRevenus ? (
               <div className="sk-line" />
@@ -294,7 +348,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="x-axis-row">
-                  {revenus.map((r) => <span className="x-label" key={r.mois}>{formatMoisCourt(r.mois)}</span>)}
+                  {revenusAffiches.map((r) => <span className="x-label" key={r.mois}>{formatMoisCourt(r.mois)}</span>)}
                 </div>
                 <div className="chart-stats-row">
                   <div className="chart-stat">

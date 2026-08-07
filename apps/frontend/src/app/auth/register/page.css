@@ -84,25 +84,6 @@
 .field input:focus, .field select:focus { border-bottom-color: #0A2650; }
 .error { color: #D64545; font-size: .78rem; }
 
-/* Upload CNI */
-.cni-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .875rem; }
-.upload-zone {
-  border: 1.5px dashed #D1D5DB; border-radius: 8px; padding: 1.25rem 1rem;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: .4rem; cursor: pointer; transition: border-color .15s; text-align: center; min-height: 130px;
-  background: none; font-family: inherit; width: 100%;
-}
-.upload-ic { display: flex; margin-bottom: 2px; }
-.upload-zone svg { width: 22px; height: 22px; color: #9CA3AF; }
-.upload-zone strong { font-size: .88rem; color: #374151; }
-.upload-zone span { font-size: .76rem; color: #9ca3af; }
-.upload-zone:hover { border-color: #0A2650; }
-.upload-zone.has-file { border-color: #1F7A5C; border-style: solid; }
-.file-preview { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
-.file-preview-ic { display: flex; }
-.file-preview svg { width: 22px; height: 22px; color: #1F7A5C; }
-.file-preview span { font-size: .76rem; color: #374151; word-break: break-all; }
-
 /* Bouton principal */
 .btn-primary {
   background: #0A2650; color: white; border: none; border-radius: 6px;
