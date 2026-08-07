@@ -80,6 +80,11 @@ export type LoginResponse = {
   user: User;
 };
 
+export type RefreshResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -172,6 +177,19 @@ export class AuthService {
       accessToken: data.session.access_token,
       refreshToken: data.session.refresh_token,
       user: resetUser,
+    };
+  }
+
+  async refreshSession(refreshToken: string): Promise<RefreshResponse> {
+    const { data, error } = await this.supabaseAdmin.withRetry(() =>
+      this.supabaseAdmin.anonAuth.refreshSession({ refresh_token: refreshToken }),
+    );
+    if (error || !data.session) {
+      throw new UnauthorizedException('Session expirée — veuillez vous reconnecter');
+    }
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
     };
   }
 
@@ -282,11 +300,12 @@ export class AuthService {
         }),
     });
 
-    await this.emailService.sendEmail({
+    // Fire-and-forget — ne bloque pas la réponse si l'email est lent ou échoue
+    this.emailService.sendEmail({
       to: dto.email,
       template: 'signup-confirmation',
       variables: { firstName: dto.firstName, confirmationUrl },
-    });
+    }).catch(err => this.logger.error(`Email signup-confirmation échoué pour ${dto.email}`, err));
 
     return { user };
   }
@@ -303,11 +322,12 @@ export class AuthService {
       createProfile: (tx, created) => tx.managerProfile.create({ data: { userId: created.id } }),
     });
 
-    await this.emailService.sendEmail({
+    // Fire-and-forget — ne bloque pas la réponse si l'email est lent ou échoue
+    this.emailService.sendEmail({
       to: dto.email,
       template: 'signup-confirmation',
       variables: { firstName: dto.firstName, confirmationUrl },
-    });
+    }).catch(err => this.logger.error(`Email signup-confirmation échoué pour ${dto.email}`, err));
 
     return { user };
   }
@@ -357,6 +377,9 @@ export class AuthService {
 
     const startDate = new Date(dto.startDate);
     const endDate = dto.endDate ? new Date(dto.endDate) : null;
+    if (endDate && endDate <= startDate) {
+      throw new BadRequestException('La date de fin doit être postérieure à la date de début');
+    }
     const scheduleEndDate = endDate ?? addMonths(startDate, ROLLING_WINDOW_MONTHS);
 
     let user: User;
@@ -440,34 +463,14 @@ export class AuthService {
 
       const secret = this.config.getOrThrow<string>('INVITATION_TOKEN_SECRET');
       const token = createInvitationToken(user.id, secret);
-      invitationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/activate-account?token=${token}`;
+      invitationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/auth/activate?token=${token}`;
 
-      // Événement métier, jamais un email direct (voir architecture.md,
-      // invariant #7 — seuls signup-confirmation et password-reset-otp sont
-      // exemptés). Une notification manquée ne doit jamais faire échouer
-      // l'invitation elle-même — même réflexe que lease-created ci-dessous.
-      try {
-        await this.notify.notifyUser({
-          userId: user.id,
-          event: 'tenant-invitation',
-          variables: {
-            inviterName: `${inviter.firstName} ${inviter.lastName}`,
-            propertyAddress: property.address,
-            invitationUrl,
-          },
-        });
-      } catch (notifyError) {
-        this.logger.error(
-          `[tenant-invitation] notification échouée pour tenant=${user.id}`,
-          notifyError,
-        );
-      }
     }
 
-    // Événement métier, jamais un email direct (voir architecture.md,
-    // invariant #7). Une notification manquée ne doit jamais faire échouer
-    // la création du bail elle-même — même réflexe que l'ancien
-    // LeasesService.create() (voir /review unité 15).
+    // Un seul email pour le nouveau locataire : infos du bail + lien d'activation
+    // quand c'est une première invitation (invitationUrl != null). Pour un
+    // locataire déjà connu (bail précédent), invitationUrl est null et le template
+    // n'affiche pas de bouton "Créer mon compte".
     try {
       await this.notify.notifyUser({
         userId: user.id,
@@ -477,6 +480,7 @@ export class AuthService {
           ownerName: `${inviter.firstName} ${inviter.lastName}`,
           startDate: format(startDate, 'dd/MM/yyyy'),
           monthlyAmount: dto.monthlyRent + dto.monthlyCharges,
+          ...(invitationUrl ? { invitationUrl } : {}),
         },
       });
     } catch (notifyError) {
@@ -575,19 +579,17 @@ export class AuthService {
     city: string;
     createProfile: (tx: Prisma.TransactionClient, user: User) => Promise<unknown>;
   }): Promise<{ user: User; confirmationUrl: string }> {
-    // `generateLink({ type: 'signup' })` crée le compte Supabase Auth ET
-    // renvoie le lien de confirmation en un seul appel — pas besoin d'un
-    // `admin.createUser()` séparé (voir library-docs.md, section Supabase
-    // Auth, et la doc du SDK : generateLink gère la création pour 'signup').
+    // email_confirm: true → compte immédiatement confirmé, connexion possible
+    // sans clic dans un email de confirmation. Choix assumé : la fiabilité
+    // de la messagerie au Togo est variable ; bloquer la connexion sur un
+    // email non reçu crée plus de friction qu'elle n'apporte de sécurité
+    // pour ce contexte B2B (propriétaire/gestionnaire connus de l'admin).
     const { data, error } = await this.supabaseAdmin.withRetry(() =>
-      this.supabaseAdmin.auth.admin.generateLink({
-        type: 'signup',
+      this.supabaseAdmin.auth.admin.createUser({
         email: params.email,
         password: params.password,
-        options: {
-          data: { role: params.role },
-          redirectTo: this.config.getOrThrow<string>('FRONTEND_URL'),
-        },
+        email_confirm: true,
+        user_metadata: { role: params.role },
       }),
     );
 
@@ -599,6 +601,8 @@ export class AuthService {
     }
 
     const supabaseUserId = data.user.id;
+    // URL de connexion directe envoyée dans l'email de bienvenue
+    const confirmationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/auth/login`;
 
     let user: User;
     try {
@@ -626,7 +630,7 @@ export class AuthService {
       throw this.mapDuplicateError(dbError);
     }
 
-    return { user, confirmationUrl: data.properties.action_link };
+    return { user, confirmationUrl };
   }
 
   private mapDuplicateError(dbError: unknown): unknown {

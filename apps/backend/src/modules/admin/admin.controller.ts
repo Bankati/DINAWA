@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -10,6 +10,12 @@ import { AdminService } from './admin.service';
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Statistiques globales plateforme (super admin)' })
+  getStats() {
+    return this.adminService.getStats();
+  }
 
   @Get('users')
   @ApiOperation({ summary: 'Liste tous les comptes (super admin)' })
@@ -26,5 +32,11 @@ export class AdminController {
   @ApiOperation({ summary: "Détail d'un compte (super admin)" })
   getUserDetail(@Param('id') id: string) {
     return this.adminService.getUserDetail(id);
+  }
+
+  @Delete('users/:id')
+  @ApiOperation({ summary: 'Supprimer (anonymiser) un compte (super admin)' })
+  deleteUser(@Param('id') id: string) {
+    return this.adminService.deleteUser(id);
   }
 }

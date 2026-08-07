@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -32,6 +32,16 @@ export class TenantsController {
     @Param('tenantUserId') tenantUserId: string,
   ): Promise<TenantSummary> {
     return this.tenantsService.getTenantById(user, tenantUserId);
+  }
+
+  @Delete(':tenantUserId')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Supprime un locataire (propriétaire/gestionnaire courant uniquement)' })
+  removeTenant(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('tenantUserId') tenantUserId: string,
+  ) {
+    return this.tenantsService.removeTenant(user, tenantUserId);
   }
 
   @Get(':tenantUserId/leases/history')

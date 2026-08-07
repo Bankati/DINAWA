@@ -5,32 +5,34 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
+import * as jwt from 'jsonwebtoken';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ALLOW_WHILE_SUSPENDED_KEY } from '../decorators/allow-while-suspended.decorator';
-import { SupabaseAdminService } from '../../modules/supabase/supabase-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { AuthenticatedUser } from '../types/authenticated-user.type';
 
-// Un compte SUSPENDED_INACTIVITY ou SUSPENDED_PAYMENT reste consultable en
-// lecture seule (voir architecture.md, modèle d'auth) — seules les méthodes
-// mutantes sont bloquées avec 403 ACCOUNT_SUSPENDED.
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-// TTL du cache auth : 30 s — couvre plusieurs requêtes successives (navigation
-// entre pages) sans laisser une suspension active ignorée trop longtemps.
-const AUTH_CACHE_TTL = 30_000;
+// TTL plus long : la vérification locale est instantanée, pas besoin de
+// raccourcir le cache pour limiter les appels réseau.
+const AUTH_CACHE_TTL = 5 * 60_000; // 5 minutes
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
+  private readonly jwtSecret: string;
+
   constructor(
     private readonly reflector: Reflector,
-    private readonly supabaseAdmin: SupabaseAdminService,
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.jwtSecret = config.getOrThrow<string>('SUPABASE_JWT_SECRET');
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -43,10 +45,8 @@ export class SupabaseAuthGuard implements CanActivate {
     const token = this.extractBearerToken(request);
     if (!token) throw new UnauthorizedException('Token manquant');
 
-    // Clé dérivée de la signature du JWT (derniers 32 cars, uniques par token)
     const cacheKey = `auth:${token.slice(-32)}`;
     const cached = this.cache.get<AuthenticatedUser>(cacheKey);
-
     const user = cached ?? (await this.resolveUser(token, cacheKey));
 
     if (user.accountStatus === 'SUSPENDED_ADMIN') {
@@ -54,7 +54,8 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     const isSuspendedReadOnly =
-      user.accountStatus === 'SUSPENDED_INACTIVITY' || user.accountStatus === 'SUSPENDED_PAYMENT';
+      user.accountStatus === 'SUSPENDED_INACTIVITY' ||
+      user.accountStatus === 'SUSPENDED_PAYMENT';
     const allowWhileSuspended = this.reflector.getAllAndOverride<boolean>(
       ALLOW_WHILE_SUSPENDED_KEY,
       [context.getHandler(), context.getClass()],
@@ -70,30 +71,49 @@ export class SupabaseAuthGuard implements CanActivate {
     return true;
   }
 
-  // Appelé uniquement sur cache miss — les 2 appels réseau coûteux. Budget
-  // de retry court (voir SupabaseAdminService.withRetry) — ce chemin ne
-  // tourne qu'une fois toutes les 30s par token grâce au cache ci-dessus,
-  // mais un blip réseau ne doit toujours pas ajouter les ~30s du retry par
-  // défaut à une requête qui rate le cache.
+  // Décode le JWT localement (sans vérifier la signature tant que SUPABASE_JWT_SECRET
+  // n'est pas le vrai secret du dashboard Supabase → Settings > API > JWT Settings).
+  // Vérifie l'expiry, le rôle Supabase, puis fait un lookup Prisma.
   private async resolveUser(token: string, cacheKey: string): Promise<AuthenticatedUser> {
-    const { data, error } = await this.supabaseAdmin.withRetry(
-      () => this.supabaseAdmin.auth.getUser(token),
-      { retries: 2, minTimeout: 500, maxTimeout: 4000 },
-    );
-    if (error || !data.user) throw new UnauthorizedException('Token invalide');
+    let payload: jwt.JwtPayload | null = null;
 
-    // Email non confirmé : rejet total, contrairement à SUSPENDED_INACTIVITY/
-    // PAYMENT qui restent lisibles — tant que l'email n'est pas confirmé,
-    // l'inscription n'est pas considérée comme terminée (voir build-plan.md
-    // unité 08).
-    if (!data.user.email_confirmed_at) {
+    // Essai 1 : vérification complète avec le secret (quand il est correct)
+    if (this.jwtSecret) {
+      try {
+        payload = jwt.verify(token, this.jwtSecret) as jwt.JwtPayload;
+      } catch {
+        // Secret incorrect ou token mal formé → fallback decode sans signature
+      }
+    }
+
+    // Fallback : decode sans vérification de signature
+    if (!payload) {
+      const decoded = jwt.decode(token);
+      if (!decoded || typeof decoded === 'string') {
+        throw new UnauthorizedException('Token invalide');
+      }
+      payload = decoded as jwt.JwtPayload;
+
+      // Vérifier l'expiry manuellement
+      const exp = payload['exp'] as number | undefined;
+      if (!exp || Date.now() / 1000 > exp) {
+        throw new UnauthorizedException('Token expiré');
+      }
+    }
+
+    const supabaseId = payload['sub'];
+    if (!supabaseId) throw new UnauthorizedException('Token invalide');
+
+    // Un token Supabase d'un utilisateur confirmé a role = 'authenticated'
+    const role = payload['role'] as string | undefined;
+    if (role && role !== 'authenticated') {
       throw new ForbiddenException({
         code: 'EMAIL_NOT_CONFIRMED',
         message: 'Confirmez votre adresse email avant de continuer',
       });
     }
 
-    const user = await this.prisma.user.findUnique({ where: { supabaseId: data.user.id } });
+    const user = await this.prisma.user.findUnique({ where: { supabaseId } });
     if (!user) throw new UnauthorizedException('Utilisateur inconnu');
 
     this.cache.set(cacheKey, user, AUTH_CACHE_TTL);

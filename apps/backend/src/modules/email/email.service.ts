@@ -1,15 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import { EmailTemplate, renderTemplate, subjectFor } from './templates/template-registry';
 import { TemplateVariables } from './templates/types';
-import { withTimeout } from '../../common/utils/with-timeout';
-
-const SEND_TIMEOUT_MS = 10_000;
-
-// Signal interne déclenchant un retry pRetry — jamais une exception HTTP,
-// toujours capté avant d'atteindre un controller (voir sendEmail()).
-class ResendSendError extends Error {}
 
 export type EmailAttachment = { filename: string; content: Buffer };
 
@@ -20,21 +13,26 @@ export type SendEmailParams = {
   attachments?: EmailAttachment[];
 };
 
-// Point d'entrée unique pour tout envoi d'email transactionnel — jamais
-// d'appel direct au SDK Resend depuis un autre module. Un échec d'envoi ne
-// doit jamais faire échouer l'action métier appelante : toute erreur est
-// loggée puis avalée ici.
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly resend: Resend;
+  private readonly transporter: nodemailer.Transporter;
   private readonly fromEmail: string;
   private readonly fromName: string;
 
   constructor(config: ConfigService) {
-    this.resend = new Resend(config.getOrThrow<string>('RESEND_API_KEY'));
-    this.fromEmail = config.getOrThrow<string>('RESEND_FROM_EMAIL');
+    this.fromEmail = config.getOrThrow<string>('GMAIL_USER');
     this.fromName = config.get<string>('RESEND_FROM_NAME') ?? 'WARAH';
+
+    this.transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: this.fromEmail,
+        pass: config.getOrThrow<string>('GMAIL_APP_PASSWORD'),
+      },
+    });
   }
 
   async sendEmail(params: SendEmailParams): Promise<boolean> {
@@ -51,22 +49,17 @@ export class EmailService {
     const { default: pRetry } = await import('p-retry');
 
     await pRetry(
-      async () => {
-        const { error } = await withTimeout(
-          this.resend.emails.send({
-            from: `${this.fromName} <${this.fromEmail}>`,
-            to: params.to,
-            subject: subjectFor(params.template, params.variables),
-            html: renderTemplate(params.template, params.variables),
-            attachments: params.attachments?.map((attachment) => ({
-              filename: attachment.filename,
-              content: attachment.content,
-            })),
-          }),
-          SEND_TIMEOUT_MS,
-        );
-        if (error) throw new ResendSendError(`Resend: ${error.message}`);
-      },
+      () =>
+        this.transporter.sendMail({
+          from: `${this.fromName} <${this.fromEmail}>`,
+          to: params.to,
+          subject: subjectFor(params.template, params.variables),
+          html: renderTemplate(params.template, params.variables),
+          attachments: params.attachments?.map((a) => ({
+            filename: a.filename,
+            content: a.content,
+          })),
+        }),
       { retries: 3, minTimeout: 1000, maxTimeout: 16000 },
     );
   }

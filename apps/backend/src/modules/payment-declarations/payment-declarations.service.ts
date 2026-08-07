@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -47,6 +48,9 @@ export class PaymentDeclarationsService {
     }
     if (user.role !== 'TENANT' || user.id !== scheduleEntry.lease.tenantUserId) {
       throw new ForbiddenException('Vous ne pouvez déclarer un paiement que sur votre propre bail');
+    }
+    if (!proof) {
+      throw new BadRequestException('Une preuve de paiement (reçu, capture d\'écran) est obligatoire');
     }
 
     let proofStoragePath: string | undefined;
@@ -165,6 +169,33 @@ export class PaymentDeclarationsService {
     }
 
     return updated;
+  }
+
+  async getProofUrl(user: AuthenticatedUser, paymentId: string): Promise<{ url: string }> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { declaration: true, lease: { include: { property: true } } },
+    });
+    if (!payment || !payment.declaration) {
+      throw new NotFoundException('Déclaration introuvable');
+    }
+    if (!payment.proofStoragePath) {
+      throw new NotFoundException('Aucune preuve jointe à cette déclaration');
+    }
+
+    // Locataire : seulement son propre paiement
+    // Propriétaire / gestionnaire : seulement les biens dont il est responsable
+    // Admin : tout
+    const isTenant = user.role === 'TENANT' && payment.lease.tenantUserId === user.id;
+    const isOwner = (user.role === 'OWNER' || user.role === 'MANAGER') &&
+      payment.lease.property.ownerId === user.id;
+    const isAdmin = user.role === 'ADMIN';
+    if (!isTenant && !isOwner && !isAdmin) {
+      throw new ForbiddenException('Accès refusé à cette preuve');
+    }
+
+    const url = await this.storage.getSignedUrl('payment-proofs', payment.proofStoragePath);
+    return { url };
   }
 
   async cancel(user: AuthenticatedUser, paymentId: string): Promise<{ message: string }> {

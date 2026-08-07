@@ -3,13 +3,14 @@ import { PrismaClient } from '@prisma/client';
 
 const MAX_RETRIES = 10;
 const RETRY_DELAY_MS = 8000;
+// Ping DB toutes les 45s pour garder la connexion PgBouncer chaude et éviter
+// les 2-3s de reconnexion sur les premières requêtes après inactivité.
+const KEEPALIVE_INTERVAL_MS = 45_000;
 
-// Supabase free tier se met en veille automatiquement. On commence par un
-// ping HTTP pour réveiller le projet, puis on retente la connexion Prisma
-// jusqu'à MAX_RETRIES fois (80 s max) le temps que PostgreSQL soit disponible.
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+  private keepaliveTimer?: ReturnType<typeof setInterval>;
 
   async onModuleInit(): Promise<void> {
     await this.wakeupSupabase();
@@ -19,15 +20,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         if (attempt > 1) {
           console.log(`[Prisma] Connexion établie (tentative ${attempt})`);
         }
+        this.startKeepalive();
         return;
       } catch (error) {
-        if (attempt === MAX_RETRIES) {
-          throw error;
-        }
+        if (attempt === MAX_RETRIES) throw error;
         console.warn(`[Prisma] Tentative ${attempt}/${MAX_RETRIES} échouée. Nouvel essai dans ${RETRY_DELAY_MS / 1000}s…`);
         await new Promise(res => setTimeout(res, RETRY_DELAY_MS));
       }
     }
+  }
+
+  // Maintient la connexion PgBouncer chaude — évite les cold reconnects coûteux
+  private startKeepalive(): void {
+    this.keepaliveTimer = setInterval(async () => {
+      try {
+        await this.$queryRaw`SELECT 1`;
+      } catch {
+        // Silencieux — la reconnexion se fera automatiquement sur la prochaine requête
+      }
+    }, KEEPALIVE_INTERVAL_MS);
   }
 
   // Ping HTTP Supabase pour sortir le projet de veille avant la connexion PG
@@ -47,6 +58,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
     await this['$disconnect']();
   }
 }

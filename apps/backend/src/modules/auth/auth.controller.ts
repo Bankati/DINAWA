@@ -12,6 +12,7 @@ import {
   SignupManagerResponse,
   InviteTenantResponse,
   LoginResponse,
+  RefreshResponse,
 } from './auth.service';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
@@ -93,6 +94,17 @@ export class AuthController {
   })
   async login(@Body() dto: LoginDto): Promise<LoginResponse> {
     return this.authService.login(dto);
+  }
+
+  @Post('refresh')
+  @Public()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Renouvelle la session avec le refresh token',
+    description: 'Renvoie un nouveau access token et refresh token sans re-saisir le mot de passe.',
+  })
+  async refresh(@Body() body: { refreshToken: string }): Promise<RefreshResponse> {
+    return this.authService.refreshSession(body.refreshToken);
   }
 
   @Post('password-reset/request')

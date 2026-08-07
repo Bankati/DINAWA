@@ -33,6 +33,10 @@ async function bootstrap(): Promise<void> {
   // Headers de sécurité HTTP
   app.use(helmet());
 
+  // Compression gzip — réduit les payloads JSON de ~70%
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  app.use(require('compression')());
+
   // Body parser avec limite à 1 MB (évite les attaques par payload volumineux)
   app.use(bodyParser.json({ limit: '1mb' }));
   app.use(bodyParser.urlencoded({ extended: true, limit: '1mb' }));
@@ -81,7 +85,7 @@ async function bootstrap(): Promise<void> {
     Logger.log('Swagger disponible sur /api/docs', 'Bootstrap');
   }
 
-  const port = parseInt(process.env['PORT'] ?? '3000', 10);
+  const port = Number.parseInt(process.env['PORT'] ?? '3000', 10);
   await app.listen(port, '0.0.0.0');
 
   Logger.log(`Application démarrée sur le port ${port} (${process.env['NODE_ENV']})`, 'Bootstrap');

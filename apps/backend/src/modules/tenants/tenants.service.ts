@@ -13,6 +13,7 @@ import {
   TenantPropertyBlock,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { canActOnProperty } from '../../common/permissions/property-access';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { BlockTenantDto } from './dto/block-tenant.dto';
@@ -59,12 +60,15 @@ export type TenantSummary = {
   accountStatus: AccountStatus;
   createdAt: Date;
   updatedAt: Date;
-  activeLease: { propertyId: string; address: string } | null;
+  activeLease: { propertyId: string; address: string; neighborhood: string; city: string } | null;
 };
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+  ) {}
 
   // Blocage scopé à (propertyId, tenantUserId) — voir /architect unité 14.
   // Jamais global au compte, jamais à l'échelle du propriétaire. Refusé si
@@ -152,7 +156,7 @@ export class TenantsService {
         updatedAt: true,
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
-          select: { propertyId: true, property: { select: { address: true } } },
+          select: { propertyId: true, property: { select: { address: true, neighborhood: true, city: true } } },
           take: 1,
         },
       },
@@ -174,6 +178,8 @@ export class TenantsService {
         ? {
             propertyId: tenant.leasesAsTenant[0].propertyId,
             address: tenant.leasesAsTenant[0].property.address,
+            neighborhood: tenant.leasesAsTenant[0].property.neighborhood,
+            city: tenant.leasesAsTenant[0].property.city,
           }
         : null,
     };
@@ -203,6 +209,7 @@ export class TenantsService {
       where: {
         role: 'TENANT',
         tenantProfile: { invitedByUserId: user.id },
+        anonymizedAt: null,
       },
       take: 100,
       select: {
@@ -216,7 +223,7 @@ export class TenantsService {
         updatedAt: true,
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
-          select: { propertyId: true, property: { select: { address: true } } },
+          select: { propertyId: true, property: { select: { address: true, neighborhood: true, city: true } } },
           take: 1,
         },
       },
@@ -237,6 +244,8 @@ export class TenantsService {
         ? {
             propertyId: t.leasesAsTenant[0].propertyId,
             address: t.leasesAsTenant[0].property.address,
+            neighborhood: t.leasesAsTenant[0].property.neighborhood,
+            city: t.leasesAsTenant[0].property.city,
           }
         : null,
     }));
@@ -325,6 +334,53 @@ export class TenantsService {
     }));
 
     return { data, page, limit, total };
+  }
+
+  async removeTenant(owner: AuthenticatedUser, tenantId: string): Promise<{ message: string }> {
+    // Vérifier que ce locataire appartient bien au propriétaire courant
+    const tenant = await this.prisma.user.findFirst({
+      where: { id: tenantId, role: 'TENANT', tenantProfile: { invitedByUserId: owner.id } },
+      select: { id: true, supabaseId: true, email: true },
+    });
+
+    if (!tenant) throw new ForbiddenException('Locataire introuvable ou non autorisé');
+
+    // Résilier tous les baux actifs sur les biens du propriétaire
+    await this.prisma.lease.updateMany({
+      where: { tenantUserId: tenantId, status: 'ACTIVE', property: { ownerId: owner.id } },
+      data: { status: 'TERMINATED', terminatedAt: new Date(), terminationReason: 'Compte supprimé par le propriétaire' },
+    });
+
+    // Supprimer de Supabase Auth
+    if (tenant.supabaseId) {
+      await this.supabaseAdmin.withRetry(() =>
+        this.supabaseAdmin.auth.admin.deleteUser(tenant.supabaseId!),
+      );
+    } else if (tenant.email) {
+      const { data } = await this.supabaseAdmin.auth.admin.listUsers();
+      const match = data?.users?.find((u) => u.email === tenant.email);
+      if (match) {
+        await this.supabaseAdmin.withRetry(() =>
+          this.supabaseAdmin.auth.admin.deleteUser(match.id),
+        );
+      }
+    }
+
+    // Anonymiser en base
+    await this.prisma.user.update({
+      where: { id: tenantId },
+      data: {
+        email: null,
+        phone: null,
+        firstName: 'Compte',
+        lastName: 'Supprimé',
+        profilePhotoPath: null,
+        supabaseId: null,
+        anonymizedAt: new Date(),
+      },
+    });
+
+    return { message: 'Locataire supprimé' };
   }
 
   private async getPropertyOrThrow(id: string): Promise<Property> {

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   Patch,
   Post,
@@ -40,6 +41,16 @@ export class PaymentDeclarationsController {
     @UploadedFile() proof?: Express.Multer.File,
   ): Promise<Payment> {
     return this.declarationsService.create(user, dto, proof);
+  }
+
+  @Get(':id/proof')
+  @Roles(UserRole.TENANT, UserRole.OWNER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Retourne une URL signée pour consulter la preuve de paiement' })
+  getProofUrl(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<{ url: string }> {
+    return this.declarationsService.getProofUrl(user, id);
   }
 
   @Patch(':id')

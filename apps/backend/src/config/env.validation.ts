@@ -50,12 +50,12 @@ class EnvironmentVariables {
   @IsOptional()
   SUPABASE_JWT_SECRET?: string;
 
-  // Resend
-  @IsString()
-  RESEND_API_KEY!: string;
-
+  // Gmail SMTP
   @IsEmail()
-  RESEND_FROM_EMAIL!: string;
+  GMAIL_USER!: string;
+
+  @IsString()
+  GMAIL_APP_PASSWORD!: string;
 
   @IsString()
   @IsOptional()

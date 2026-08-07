@@ -1,17 +1,21 @@
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import * as jwt from 'jsonwebtoken';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ALLOW_WHILE_SUSPENDED_KEY } from '../decorators/allow-while-suspended.decorator';
 
+jest.mock('jsonwebtoken');
+const jwtVerify = jwt.verify as jest.Mock;
+
 describe('SupabaseAuthGuard', () => {
   let guard: SupabaseAuthGuard;
   let reflector: { getAllAndOverride: jest.Mock };
-  let supabaseAdmin: { auth: { getUser: jest.Mock }; withRetry: jest.Mock };
   let prisma: { user: { findUnique: jest.Mock } };
   let cache: { get: jest.Mock; set: jest.Mock };
+  let config: { getOrThrow: jest.Mock };
 
-  const confirmedSupabaseUser = {
-    id: 'supabase-uid-1',
+  const validPayload = {
+    sub: 'supabase-uid-1',
     email_confirmed_at: '2026-07-01T00:00:00.000Z',
   };
 
@@ -42,26 +46,22 @@ describe('SupabaseAuthGuard', () => {
 
   beforeEach(() => {
     reflector = { getAllAndOverride: jest.fn() };
-    supabaseAdmin = {
-      auth: {
-        getUser: jest
-          .fn()
-          .mockResolvedValue({ data: { user: confirmedSupabaseUser }, error: null }),
-      },
-      withRetry: jest.fn((fn: () => unknown) => fn()),
-    };
     prisma = {
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1', accountStatus: 'ACTIVE' }),
       },
     };
-    // Cache toujours miss dans les tests (on vérifie le chemin réseau normal)
     cache = { get: jest.fn().mockReturnValue(null), set: jest.fn() };
+    config = { getOrThrow: jest.fn().mockReturnValue('fake-jwt-secret') };
+
+    // JWT valide par défaut — les tests qui nécessitent un échec le surchargent
+    jwtVerify.mockReturnValue(validPayload);
+
     guard = new SupabaseAuthGuard(
       reflector as never,
-      supabaseAdmin as never,
       prisma as never,
       cache as never,
+      config as never,
     );
   });
 
@@ -75,27 +75,24 @@ describe('SupabaseAuthGuard', () => {
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejette avec 401 si le token Supabase est invalide', async () => {
-    supabaseAdmin.auth.getUser.mockResolvedValue({
-      data: { user: null },
-      error: { message: 'invalid' },
+  it('rejette avec 401 si le token JWT est invalide ou expiré', async () => {
+    jwtVerify.mockImplementation(() => {
+      throw new Error('invalid signature');
     });
     const { context } = buildContext({ authorization: 'Bearer x' });
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("rejette avec 403 EMAIL_NOT_CONFIRMED si l'email Supabase n'est pas confirmé", async () => {
-    supabaseAdmin.auth.getUser.mockResolvedValue({
-      data: { user: { ...confirmedSupabaseUser, email_confirmed_at: null } },
-      error: null,
-    });
+  it("rejette avec 403 EMAIL_NOT_CONFIRMED si l'email n'est pas confirmé dans le payload JWT", async () => {
+    jwtVerify.mockReturnValue({ sub: 'supabase-uid-1', email_confirmed_at: undefined });
     const { context } = buildContext({ authorization: 'Bearer x' });
 
     await expect(guard.canActivate(context)).rejects.toThrow(ForbiddenException);
+    // La vérification Prisma ne doit pas être atteinte avant la confirmation email
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it('rejette avec 401 si aucun User Prisma ne correspond', async () => {
+  it('rejette avec 401 si aucun User Prisma ne correspond au supabaseId', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     const { context } = buildContext({ authorization: 'Bearer x' });
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);

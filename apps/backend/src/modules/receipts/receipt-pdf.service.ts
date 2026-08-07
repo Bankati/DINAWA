@@ -1,304 +1,259 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { PaymentWithAccess } from '../payments/payments.service';
 
-const BRAND_NAVY = '#13284A';
-const MUTED = '#6B7280';
+const NAVY   = '#0F4C81';
+const NAVY_D = '#0A2650';
+const GOLD   = '#C9982E';
+const MUTED  = '#6B7280';
+const LIGHT  = '#F0F4FF';
+const BORDER = '#E5E7EB';
+const TEXT   = '#111827';
 
 const METHOD_LABELS: Record<string, string> = {
-  TMONEY: 'T-Money',
-  FLOOZ: 'Flooz',
-  CASH: 'Espèces',
+  CASH:          'Espèces',
   BANK_TRANSFER: 'Virement bancaire',
+  TMONEY:        'T-Money',
+  FLOOZ:         'Flooz',
 };
 
 function fcfa(amount: number): string {
-  // toLocaleString('fr-FR') produit une espace fine U+202F que WinAnsiEncoding
-  // ne supporte pas (rendu en '/') — on normalise en espace ordinaire.
-  return `${amount.toLocaleString('fr-FR').replace(/\u202f/g, ' ')} FCFA`;
+  return `${amount.toLocaleString('fr-FR').replace(/ /g, ' ')} FCFA`;
 }
 
-// Convertit un montant en toutes lettres (français) - version simplifiée
-function amountInWords(amount: number): string {
-  return `${amount} francs CFA`;
+function capitalizeFirst(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// Génère la quittance à la volée — jamais persistée, ni en base ni en
-// Storage (voir build-plan.md unité 21). Format WARAH officiel avec
-// tableau structuré, mention légale et QR code de vérification.
 @Injectable()
 export class ReceiptPdfService {
   async generate(data: PaymentWithAccess): Promise<Buffer> {
-    const doc = new PDFDocument({ size: 'A4', margin: 50, compress: false });
+    const doc = new PDFDocument({ size: 'A4', margin: 0, compress: true });
     const chunks: Buffer[] = [];
-
     const done = new Promise<Buffer>((resolve, reject) => {
-      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end',  () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
     });
 
-    this.renderWarahFormat(doc, data);
+    this.render(doc, data);
     doc.end();
-
     return done;
   }
 
-  private renderWarahFormat(doc: PDFKit.PDFDocument, data: PaymentWithAccess): void {
+  private render(doc: PDFKit.PDFDocument, data: PaymentWithAccess): void {
     const { lease, scheduleEntry } = data;
-    const ownerName = lease.owner
-      ? `${lease.owner.firstName} ${lease.owner.lastName}`
-      : 'Non renseigné';
-    const tenantName = lease.tenant
-      ? `${lease.tenant.firstName} ${lease.tenant.lastName}`
-      : 'Non renseigné';
-    const receiptNumber = data.id.substring(0, 8).toUpperCase();
-    const period = format(scheduleEntry.periodStart, 'MMMM yyyy');
-    const totalAmount = data.paidAmount;
-    const chargesAmount = 0;
-    const rentAmount = totalAmount - chargesAmount;
+    const W = 595.28; // A4 width
+    const M = 48;     // left/right margin
+    const CW = W - M * 2;
 
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(18)
-      .font('Helvetica-Bold')
-      .text('WARAH – Gestion locative simplifiée', 50, 50);
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(14)
-      .font('Helvetica-Bold')
-      .text('QUITTANCE DE LOYER', 50, 80);
-    doc.fillColor(MUTED).fontSize(10).font('Helvetica').text(`N° ${receiptNumber}`, 50, 100);
-    doc.fillColor(MUTED).fontSize(10).font('Helvetica').text(`Période : ${period}`, 50, 115);
+    const ownerName  = lease.owner  ? `${lease.owner.firstName} ${lease.owner.lastName}`   : '—';
+    const tenantName = lease.tenant ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : '—';
+    const refNum     = data.id.substring(0, 8).toUpperCase();
+    const period     = capitalizeFirst(format(scheduleEntry.periodStart, 'MMMM yyyy', { locale: fr }));
+    const paidDate   = data.paidAt ? format(data.paidAt, 'dd/MM/yyyy') : '—';
+    const method     = METHOD_LABELS[data.paymentMethod ?? ''] ?? data.paymentMethod ?? '—';
+    const total      = data.paidAmount;
+    const property   = lease.property;
+    const propAddress = [property?.address, property?.neighborhood, property?.city].filter(Boolean).join(', ') || '—';
 
-    let y = 140;
-    doc.fillColor(BRAND_NAVY).fontSize(11).font('Helvetica-Bold').text('BIEN LOUÉ', 50, y);
-    y += 15;
-    doc
-      .fillColor(MUTED)
-      .fontSize(10)
-      .font('Helvetica')
-      .text(`Adresse du bien : ${lease.property?.address || 'Non renseignée'}`, 50, y);
-    y += 12;
-    doc
-      .fillColor(MUTED)
-      .fontSize(10)
-      .font('Helvetica')
-      .text(`Type : ${lease.property?.type || 'Appartement'}`, 50, y);
+    // ─────────────────────────────────────────────────────────
+    // HEADER BAND
+    // ─────────────────────────────────────────────────────────
+    doc.rect(0, 0, W, 88).fill(NAVY_D);
+    // Gold accent line at bottom of header
+    doc.rect(0, 84, W, 4).fill(GOLD);
 
-    y += 25;
-    const tableTop = y;
-    const colWidth = 245;
-    const rowHeight = 80;
+    // "WARAH" — left
+    doc.fillColor('#FFFFFF').fontSize(24).font('Helvetica-Bold').text('WARAH', M, 22, { lineBreak: false });
+    doc.fillColor(GOLD).fontSize(8).font('Helvetica').text('GESTION LOCATIVE', M, 52, { lineBreak: false, characterSpacing: 1.5 });
 
-    doc.strokeColor('#E5E7EB').lineWidth(0.5);
-    doc.rect(50, tableTop, colWidth * 2 + 10, rowHeight).stroke();
-    doc
-      .moveTo(50 + colWidth + 5, tableTop)
-      .lineTo(50 + colWidth + 5, tableTop + rowHeight)
-      .stroke();
+    // "QUITTANCE DE LOYER" — right
+    doc.fillColor('#FFFFFF').fontSize(15).font('Helvetica-Bold')
+       .text('QUITTANCE DE LOYER', 0, 24, { align: 'right', width: W - M, lineBreak: false });
+    doc.fillColor('#FFFFFF', 0.55).fontSize(8).font('Helvetica')
+       .text(`N° ${refNum}  ·  ${period}`, 0, 48, { align: 'right', width: W - M, lineBreak: false });
 
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text('BAILLEUR', 55, tableTop + 8);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Nom / Raison sociale : ${ownerName}`, 55, tableTop + 25);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Adresse : ${lease.owner?.city || 'Lomé'}`, 55, tableTop + 38);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Téléphone : ${lease.owner?.phone || '—'}`, 55, tableTop + 51);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`E-mail : ${lease.owner?.email || '—'}`, 55, tableTop + 64);
+    // ─────────────────────────────────────────────────────────
+    // MONTANT MIS EN AVANT
+    // ─────────────────────────────────────────────────────────
+    let y = 104;
+    doc.rect(M, y, CW, 58).fill(LIGHT);
+    // Gold left bar
+    doc.rect(M, y, 4, 58).fill(GOLD);
 
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text('LOCATAIRE', 55 + colWidth + 10, tableTop + 8);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Nom et prénom(s) : ${tenantName}`, 55 + colWidth + 10, tableTop + 25);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Téléphone : ${lease.tenant?.phone || '—'}`, 55 + colWidth + 10, tableTop + 38);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`E-mail : ${lease.tenant?.email || '—'}`, 55 + colWidth + 10, tableTop + 51);
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(
-        `N° de contrat de bail : ${lease.id.substring(0, 8).toUpperCase()}`,
-        55 + colWidth + 10,
-        tableTop + 64,
-      );
+    doc.fillColor(MUTED).fontSize(7.5).font('Helvetica')
+       .text('MONTANT TOTAL RÉGLÉ', M + 18, y + 10, { characterSpacing: 0.8 });
+    doc.fillColor(NAVY_D).fontSize(24).font('Helvetica-Bold')
+       .text(fcfa(total), M + 18, y + 22, { lineBreak: false });
 
-    y = tableTop + rowHeight + 20;
-    doc.fillColor(BRAND_NAVY).fontSize(11).font('Helvetica-Bold').text('DÉTAIL DU PAIEMENT', 50, y);
+    // Mode & date — droite
+    doc.fillColor(MUTED).fontSize(8).font('Helvetica')
+       .text(`Mode  ${method}`, 0, y + 12, { align: 'right', width: W - M - 8, lineBreak: false });
+    doc.fillColor(MUTED).fontSize(8).font('Helvetica')
+       .text(`Payé le  ${paidDate}`, 0, y + 27, { align: 'right', width: W - M - 8, lineBreak: false });
 
-    y += 20;
-    const paymentTableTop = y;
-    const paymentRowHeight = 20;
-    const paymentRows = 6;
+    // ─────────────────────────────────────────────────────────
+    // BAILLEUR / LOCATAIRE
+    // ─────────────────────────────────────────────────────────
+    y += 74;
+    const HALF = (CW - 10) / 2;
 
-    doc.strokeColor('#E5E7EB').lineWidth(0.5);
-    doc.rect(50, paymentTableTop, colWidth * 2 + 10, paymentRowHeight * paymentRows).stroke();
-    doc
-      .moveTo(50, paymentTableTop + paymentRowHeight)
-      .lineTo(50 + colWidth * 2 + 10, paymentTableTop + paymentRowHeight)
-      .stroke();
-    doc
-      .moveTo(50, paymentTableTop + paymentRowHeight * 2)
-      .lineTo(50 + colWidth * 2 + 10, paymentTableTop + paymentRowHeight * 2)
-      .stroke();
-    doc
-      .moveTo(50, paymentTableTop + paymentRowHeight * 3)
-      .lineTo(50 + colWidth * 2 + 10, paymentTableTop + paymentRowHeight * 3)
-      .stroke();
-    doc
-      .moveTo(50, paymentTableTop + paymentRowHeight * 4)
-      .lineTo(50 + colWidth * 2 + 10, paymentTableTop + paymentRowHeight * 4)
-      .stroke();
-    doc
-      .moveTo(50, paymentTableTop + paymentRowHeight * 5)
-      .lineTo(50 + colWidth * 2 + 10, paymentTableTop + paymentRowHeight * 5)
-      .stroke();
-    doc
-      .moveTo(50 + colWidth + 5, paymentTableTop)
-      .lineTo(50 + colWidth + 5, paymentTableTop + paymentRowHeight * paymentRows)
-      .stroke();
-
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(9)
-      .font('Helvetica-Bold')
-      .text('Libellé', 55, paymentTableTop + 6);
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(9)
-      .font('Helvetica-Bold')
-      .text('Montant', 55 + colWidth + 10, paymentTableTop + 6);
-
-    const paymentRowsData: [string, string][] = [
-      ['Montant du loyer', fcfa(rentAmount)],
-      ['Charges (le cas échéant)', fcfa(chargesAmount)],
-      ['MONTANT TOTAL RÉGLÉ', fcfa(totalAmount)],
-      ['Montant en toutes lettres', `${amountInWords(totalAmount)} francs CFA`],
+    this.partyCard(doc, M,          y, HALF, 'BAILLEUR',   ownerName,
       [
-        'Mode de paiement',
-        data.paymentMethod ? METHOD_LABELS[data.paymentMethod] || data.paymentMethod : '—',
-      ],
-      ['Date de paiement', data.paidAt ? format(data.paidAt, 'dd/MM/yyyy') : '—'],
+        `Tél : ${lease.owner?.phone  || '—'}`,
+        `Email : ${lease.owner?.email || '—'}`,
+      ]);
+    this.partyCard(doc, M + HALF + 10, y, HALF, 'LOCATAIRE', tenantName,
+      [
+        `Tél : ${lease.tenant?.phone  || '—'}`,
+        `Email : ${lease.tenant?.email || '—'}`,
+        `Réf. contrat : ${lease.id.substring(0, 8).toUpperCase()}`,
+      ]);
+
+    // ─────────────────────────────────────────────────────────
+    // BIEN LOUÉ
+    // ─────────────────────────────────────────────────────────
+    y += 100;
+    this.sectionTitle(doc, M, y, CW, 'BIEN LOUÉ');
+    y += 18;
+    doc.fillColor(TEXT).fontSize(9).font('Helvetica-Bold').text(propAddress, M + 6, y);
+    if (property?.type) {
+      doc.fillColor(MUTED).fontSize(8).font('Helvetica').text(`Type : ${property.type}`, M + 6, y + 13);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // TABLEAU DÉTAIL
+    // ─────────────────────────────────────────────────────────
+    y += 38;
+    this.sectionTitle(doc, M, y, CW, 'DÉTAIL DU PAIEMENT');
+    y += 18;
+
+    const COL1 = CW * 0.62;
+    const COL2 = CW - COL1;
+    const RH   = 22;
+
+    // Header row
+    doc.rect(M, y, CW, RH).fill(NAVY);
+    doc.fillColor('#FFFFFF').fontSize(8).font('Helvetica-Bold')
+       .text('Libellé', M + 10, y + 7, { lineBreak: false });
+    doc.fillColor('#FFFFFF').fontSize(8).font('Helvetica-Bold')
+       .text('Montant', M + COL1 + 8, y + 7, { lineBreak: false });
+    y += RH;
+
+    const rows: Array<{ label: string; value: string; bold?: boolean }> = [
+      { label: 'Loyer (hors charges)', value: fcfa(total) },
+      { label: 'Provisions sur charges',  value: fcfa(0) },
+      { label: 'TOTAL RÉGLÉ',             value: fcfa(total), bold: true },
+      { label: 'Mode de règlement',        value: method },
+      { label: 'Date effective',           value: paidDate },
+      { label: 'Référence WARAH',          value: refNum },
     ];
 
-    paymentRowsData.forEach((row, index) => {
-      const rowY = paymentTableTop + paymentRowHeight * (index + 1) + 6;
-      if (index === 2) {
-        doc.fillColor(BRAND_NAVY).fontSize(9).font('Helvetica-Bold').text(row[0], 55, rowY);
-        doc
-          .fillColor(BRAND_NAVY)
-          .fontSize(9)
-          .font('Helvetica-Bold')
-          .text(row[1], 55 + colWidth + 10, rowY);
-      } else {
-        doc.fillColor('#1A1A1A').fontSize(9).font('Helvetica').text(row[0], 55, rowY);
-        doc
-          .fillColor('#1A1A1A')
-          .fontSize(9)
-          .font('Helvetica')
-          .text(row[1], 55 + colWidth + 10, rowY);
-      }
+    rows.forEach((row, i) => {
+      const bg = row.bold ? LIGHT : (i % 2 === 0 ? '#FFFFFF' : '#F9FAFB');
+      doc.rect(M, y, CW, RH).fill(bg);
+      // Vertical divider
+      doc.strokeColor(BORDER).lineWidth(0.5)
+         .moveTo(M + COL1, y).lineTo(M + COL1, y + RH).stroke();
+
+      const font   = row.bold ? 'Helvetica-Bold' : 'Helvetica';
+      const color  = row.bold ? NAVY_D : TEXT;
+      const color2 = row.bold ? NAVY_D : '#374151';
+
+      doc.fillColor(color).fontSize(8.5).font(font)
+         .text(row.label, M + 10, y + 7, { lineBreak: false });
+      doc.fillColor(color2).fontSize(8.5).font(font)
+         .text(row.value, M + COL1 + 8, y + 7, { lineBreak: false });
+
+      // Bottom separator
+      doc.strokeColor(BORDER).lineWidth(0.3)
+         .moveTo(M, y + RH).lineTo(M + CW, y + RH).stroke();
+      y += RH;
     });
 
-    y = paymentTableTop + paymentRowHeight * paymentRows + 15;
-    const transactionRef = data.transactionId || data.id;
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Référence de transaction : ${transactionRef}`, 50, y);
+    // Table outer border
+    const tableH = RH * (rows.length + 1);
+    doc.strokeColor(BORDER).lineWidth(0.6)
+       .rect(M, y - tableH, CW, tableH).stroke();
 
-    y += 25;
-    doc.fillColor(BRAND_NAVY).fontSize(10).font('Helvetica-Bold').text('MENTION LÉGALE', 50, y);
-    y += 15;
-    const legalText =
-      'Le bailleur soussigné reconnaît avoir reçu du locataire susnommé la somme totale indiquée ci-dessus, au titre du loyer et des charges pour la période mentionnée, et lui en donne quittance, sous réserve de tous ses droits.';
-    doc.fillColor(MUTED).fontSize(8).font('Helvetica').text(legalText, 50, y, { width: 495 });
-    y += 20;
-    const legalText2 =
-      'Cette quittance annule tout reçu provisoire établi précédemment pour le même règlement. Elle ne vaut quittance que pour la période indiquée et ne préjuge pas du paiement des loyers antérieurs ou postérieurs.';
-    doc.fillColor(MUTED).fontSize(8).font('Helvetica').text(legalText2, 50, y, { width: 495 });
+    // ─────────────────────────────────────────────────────────
+    // MENTION LÉGALE
+    // ─────────────────────────────────────────────────────────
+    y += 16;
+    const LEGAL_H = 48;
+    doc.rect(M, y, CW, LEGAL_H).fill('#F9FAFB');
+    doc.rect(M, y, 3, LEGAL_H).fill(GOLD);
+    const legal = 'Le bailleur soussigné reconnaît avoir reçu du locataire susnommé la somme indiquée ci-dessus au titre du loyer et des charges pour la période mentionnée, et lui en donne quittance sous réserve de tous ses droits. Cette quittance annule tout reçu provisoire antérieur pour la même période et ne préjuge pas du paiement des loyers à venir.';
+    doc.fillColor(MUTED).fontSize(7.5).font('Helvetica').text(legal, M + 12, y + 8, { width: CW - 20 });
 
-    y += 70;
-    const footerTop = y;
-    const footerHeight = 100;
+    // ─────────────────────────────────────────────────────────
+    // FOOTER BAND
+    // ─────────────────────────────────────────────────────────
+    const FY = 756;
+    doc.rect(0, FY, W, 86).fill(NAVY_D);
 
-    doc.strokeColor('#E5E7EB').lineWidth(0.5);
-    doc.rect(50, footerTop, colWidth * 2 + 10, footerHeight).stroke();
+    // QR placeholder (left)
+    const QX = M;
+    const QY = FY + 14;
+    doc.save().rect(QX, QY, 52, 52).clip();
+    doc.rect(QX, QY, 52, 52).fill('#1A3C6B');
+    // Mini grid to suggest QR
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if ((r + c) % 2 === 0 || (r === 0 && c === 0) || (r === 0 && c === 4) || (r === 4 && c === 0)) {
+          doc.rect(QX + 4 + c * 9, QY + 4 + r * 9, 7, 7).fill('#FFFFFF');
+        }
+      }
+    }
+    doc.restore();
+    doc.fillColor('#FFFFFF', 0.45).fontSize(5.5).font('Helvetica')
+       .text(`warah.tg/verif/${refNum}`, QX, QY + 56, { width: 80, align: 'center' });
 
-    doc
-      .fillColor(MUTED)
-      .fontSize(8)
-      .font('Helvetica')
-      .text('[QR CODE]', 70, footerTop + 10);
-    doc
-      .fillColor(MUTED)
-      .fontSize(7)
-      .font('Helvetica')
-      .text("Vérification d'authenticité", 55, footerTop + 50);
-    doc
-      .fillColor(MUTED)
-      .fontSize(6)
-      .font('Helvetica')
-      .text('Scannez ce code pour vérifier', 55, footerTop + 62);
-    doc
-      .fillColor(MUTED)
-      .fontSize(6)
-      .font('Helvetica')
-      .text('cette quittance en ligne :', 55, footerTop + 72);
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(6)
-      .font('Helvetica')
-      .text(`www.warah.tg/verif/${receiptNumber}`, 55, footerTop + 82);
+    // Center: date + authenticité
+    doc.fillColor('#FFFFFF', 0.75).fontSize(8).font('Helvetica')
+       .text(`Émis le ${format(new Date(), 'dd MMMM yyyy', { locale: fr })}`, 0, FY + 24, { align: 'center', width: W });
+    doc.fillColor(GOLD).fontSize(7).font('Helvetica')
+       .text('Document officiel · Plateforme WARAH', 0, FY + 40, { align: 'center', width: W, characterSpacing: 0.5 });
 
-    const signatureX = 50 + colWidth + 50;
-    doc
-      .fillColor(MUTED)
-      .fontSize(9)
-      .font('Helvetica')
-      .text(`Fait à Lomé, le ${format(new Date(), 'dd/MM/yyyy')}`, signatureX, footerTop + 20);
-    doc
-      .fillColor(BRAND_NAVY)
-      .fontSize(9)
-      .font('Helvetica-Bold')
-      .text('Le bailleur', signatureX, footerTop + 50);
-    doc.strokeColor(BRAND_NAVY).lineWidth(1);
-    doc
-      .moveTo(signatureX, footerTop + 75)
-      .lineTo(signatureX + 150, footerTop + 75)
-      .stroke();
+    // Signature — right
+    const SX = W - M - 140;
+    doc.strokeColor('#FFFFFF', 0.35).lineWidth(0.5)
+       .moveTo(SX, FY + 54).lineTo(SX + 140, FY + 54).stroke();
+    doc.fillColor('#FFFFFF', 0.5).fontSize(7).font('Helvetica')
+       .text('Signature du bailleur', SX, FY + 58, { width: 140, align: 'center' });
+  }
+
+  private sectionTitle(doc: PDFKit.PDFDocument, x: number, y: number, w: number, title: string): void {
+    doc.fillColor(NAVY_D).fontSize(8.5).font('Helvetica-Bold')
+       .text(title, x, y, { characterSpacing: 0.8, lineBreak: false });
+    doc.strokeColor(GOLD).lineWidth(1)
+       .moveTo(x, y + 13).lineTo(x + w, y + 13).stroke();
+  }
+
+  private partyCard(
+    doc: PDFKit.PDFDocument,
+    x: number, y: number, w: number,
+    role: string, name: string, lines: string[],
+  ): void {
+    const H = 96;
+    doc.rect(x, y, w, H).fill('#F9FAFB');
+    // Top color bar
+    doc.rect(x, y, w, 6).fill(NAVY);
+    // Role label on the bar
+    doc.fillColor('#FFFFFF').fontSize(7).font('Helvetica-Bold')
+       .text(role, x + 10, y + 10, { lineBreak: false, characterSpacing: 0.8 });
+    // Name
+    doc.fillColor(NAVY_D).fontSize(10).font('Helvetica-Bold')
+       .text(name, x + 10, y + 24);
+    // Detail lines
+    lines.forEach((line, i) => {
+      doc.fillColor(MUTED).fontSize(8).font('Helvetica')
+         .text(line, x + 10, y + 42 + i * 14, { lineBreak: false });
+    });
+    // Border
+    doc.strokeColor(BORDER).lineWidth(0.5).rect(x, y, w, H).stroke();
   }
 }

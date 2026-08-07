@@ -31,6 +31,7 @@ import {
   PropertyWithPhotos,
   PropertyPhotoResponse,
   PropertyDocumentResponse,
+  ActiveListing,
 } from './properties.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -93,6 +94,27 @@ export class PropertiesController {
   @ApiOperation({ summary: 'Archiver un bien (jamais de suppression physique)' })
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<Property> {
     return this.propertiesService.remove(user, id);
+  }
+
+  @Post(':id/listing')
+  @HttpCode(201)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @ApiOperation({ summary: "Publie une annonce publique pour ce bien (désactive l'ancienne si existante)" })
+  publishListing(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<ActiveListing> {
+    return this.propertiesService.publishListing(user, id);
+  }
+
+  @Delete(':id/listing')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @ApiOperation({ summary: "Retire l'annonce publique active de ce bien" })
+  unpublishListing(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.propertiesService.unpublishListing(user, id);
   }
 
   @Post(':id/photos')
