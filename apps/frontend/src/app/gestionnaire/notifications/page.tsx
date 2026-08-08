@@ -26,15 +26,11 @@ function fmtDate(s: string) {
 }
 
 const EVENT_ICONS: Record<string, string> = {
-  payment_received: '💳',
-  payment_overdue: '⚠️',
-  lease_expiring: '📋',
-  declaration_submitted: '📩',
-  declaration_confirmed: '✅',
-  declaration_rejected: '❌',
+  payment_received: '💳', payment_overdue: '⚠️', lease_expiring: '📋',
+  declaration_submitted: '📩', declaration_confirmed: '✅', declaration_rejected: '❌', mandate_received: '🤝',
 };
 
-export default function NotificationsPage() {
+export default function GestionnaireNotificationsPage() {
   const { data: notifications, loading } = useApi<Notification[]>('/notifications?limit=50', TTL.LIST);
   const list = notifications ?? [];
 
@@ -42,18 +38,14 @@ export default function NotificationsPage() {
     <div style={{ padding: '24px 28px' }}>
       <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}`}</style>
 
-      {/* Hero */}
       <div style={HERO}>
         <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
         <div>
           <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Notifications</h1>
-          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
-            Vos 50 dernières alertes et mises à jour
-          </p>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>Vos 50 dernières alertes et mises à jour</p>
         </div>
       </div>
 
-      {/* Liste */}
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 8 }}>{[1,2,3,4].map(i => <div key={i} style={SK} />)}</div>
@@ -63,39 +55,27 @@ export default function NotificationsPage() {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
             <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucune notification</div>
-            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Vos alertes et mises à jour apparaîtront ici.</div>
+            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Vos alertes apparaîtront ici.</div>
           </div>
         ) : (
-          <div>
-            {list.map((n, i) => {
-              const icon = EVENT_ICONS[n.event] ?? '🔔';
-              const isSent = n.status === 'SENT';
-              return (
-                <div key={n.id} style={{ padding: '16px 20px', borderBottom: i < list.length - 1 ? '1px solid #F9FAFB' : undefined, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 12, background: '#F0F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-                    {icon}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', marginBottom: 2 }}>
-                      {n.titre ?? n.event.replace(/_/g, ' ')}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-                      {fmtDate(n.createdAt)}
-                      <span style={{ margin: '0 8px', color: '#E5E7EB' }}>·</span>
-                      <span style={{ background: n.channel === 'EMAIL' ? '#EFF6FF' : '#F0FDF4', color: n.channel === 'EMAIL' ? '#1D4ED8' : '#15803D', borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>
-                        {n.channel}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ flexShrink: 0 }}>
-                    <span style={{ background: isSent ? '#DCFCE7' : '#FEE2E2', color: isSent ? '#15803D' : '#DC2626', borderRadius: 20, padding: '3px 10px', fontSize: 11.5, fontWeight: 700 }}>
-                      {isSent ? 'Envoyé' : 'Échec'}
-                    </span>
-                  </div>
+          list.map((n, i) => (
+            <div key={n.id} style={{ padding: '16px 20px', borderBottom: i < list.length - 1 ? '1px solid #F9FAFB' : undefined, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: '#F0F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                {EVENT_ICONS[n.event] ?? '🔔'}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', marginBottom: 2 }}>{n.titre ?? n.event.replace(/_/g, ' ')}</div>
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                  {fmtDate(n.createdAt)}
+                  <span style={{ margin: '0 8px', color: '#E5E7EB' }}>·</span>
+                  <span style={{ background: n.channel === 'EMAIL' ? '#EFF6FF' : '#F0FDF4', color: n.channel === 'EMAIL' ? '#1D4ED8' : '#15803D', borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{n.channel}</span>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+              <span style={{ background: n.status === 'SENT' ? '#DCFCE7' : '#FEE2E2', color: n.status === 'SENT' ? '#15803D' : '#DC2626', borderRadius: 20, padding: '3px 10px', fontSize: 11.5, fontWeight: 700, flexShrink: 0 }}>
+                {n.status === 'SENT' ? 'Envoyé' : 'Échec'}
+              </span>
+            </div>
+          ))
         )}
       </div>
     </div>

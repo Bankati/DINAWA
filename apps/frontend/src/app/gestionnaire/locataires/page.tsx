@@ -32,7 +32,7 @@ function formatDate(s: string) {
   return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function LocatairesPage() {
+export default function GestionnaireLocatairesPage() {
   const { data: tenants, loading } = useApi<TenantSummary[]>('/tenants', TTL.LIST);
   const list = tenants ?? [];
 
@@ -44,15 +44,14 @@ export default function LocatairesPage() {
       <div style={HERO}>
         <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
         <div>
-          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Mes locataires</h1>
+          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Locataires</h1>
           <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
-            Suivi de vos locataires actifs
+            Locataires des biens sous votre mandat
             {list.length > 0 && <span style={{ marginLeft: 10, background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '2px 10px', fontSize: 12 }}>{list.length} locataire{list.length > 1 ? 's' : ''}</span>}
           </p>
         </div>
       </div>
 
-      {/* Liste */}
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 8 }}>{[1,2,3].map(i => <div key={i} style={SK} />)}</div>
@@ -60,10 +59,9 @@ export default function LocatairesPage() {
           <div style={{ padding: '48px 32px', textAlign: 'center' }}>
             <svg style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#D1D5DB' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
             <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucun locataire</div>
-            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Invitez un locataire via Paramètres → Inviter un locataire.</div>
+            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Les locataires des biens que vous gérez apparaîtront ici.</div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
