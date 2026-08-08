@@ -76,6 +76,42 @@ export interface RejectPaymentDto {
   rejectionReason: string;
 }
 
+export type PaymentStatus = 'PENDING' | 'PENDING_CONFIRMATION' | 'PAID' | 'LATE' | 'REJECTED' | 'CANCELLED';
+
+export const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING:              'En attente',
+  PENDING_CONFIRMATION: 'À confirmer',
+  PAID:                 'Payé',
+  LATE:                 'En retard',
+  REJECTED:             'Rejeté',
+  CANCELLED:            'Annulé',
+};
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH:          'Espèces',
+  BANK_TRANSFER: 'Virement',
+  TMONEY:        'T-Money',
+  FLOOZ:         'Flooz',
+};
+
+export const PAYMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
+  PENDING:              'badge-warning',
+  PENDING_CONFIRMATION: 'badge-info',
+  PAID:                 'badge-success',
+  LATE:                 'badge-danger',
+  REJECTED:             'badge-danger',
+  CANCELLED:            'badge-neutral',
+};
+
+export const PAYMENT_STATUS_DOT_CLASSES: Record<string, string> = {
+  PENDING:              'dot-warning',
+  PENDING_CONFIRMATION: 'dot-info',
+  PAID:                 'dot-success',
+  LATE:                 'dot-danger',
+  REJECTED:             'dot-danger',
+  CANCELLED:            'dot-neutral',
+};
+
 export const paymentsApi = {
   // Créer une déclaration de paiement locataire
   createDeclaration: (dto: CreatePaymentDeclarationDto, file?: File) => {

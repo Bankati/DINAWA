@@ -1,92 +1,23 @@
-'use client';
+const S = {
+  page: { minHeight: '100vh', background: '#F0F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 } as const,
+  card: { background: 'white', borderRadius: 18, padding: '48px 40px', textAlign: 'center' as const, maxWidth: 440, boxShadow: '0 4px 24px rgba(15,76,129,0.08)', border: '1px solid #E5E7EB' },
+  icon: { width: 52, height: 52, margin: '0 auto 20px', display: 'block', color: '#D1D5DB' } as const,
+  label: { display: 'inline-block', background: 'rgba(201,152,46,0.12)', color: '#C9982E', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, padding: '4px 12px', borderRadius: 20, marginBottom: 16 },
+  title: { fontSize: 20, fontWeight: 800, color: '#0A2650', marginBottom: 10, letterSpacing: '-0.01em' },
+  desc: { fontSize: 13.5, color: '#6B7280', lineHeight: 1.6 },
+};
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { propertiesApi, PROPERTY_TYPE_LABELS, type Property } from '@/lib/properties';
-import { ApiError } from '@/lib/api';
-import { fcfa } from '@/lib/dashboard';
-import './page.css';
-
-// Il n'existe plus de CRUD manuel d'annonces côté backend — une annonce se
-// publie/se désactive automatiquement quand un bien passe VACANT/OCCUPIED
-// (voir /architect module Annonces). Cette page est donc une vue lecture
-// seule des biens actuellement en annonce (status === VACANT), avec un lien
-// vers la recherche publique plutôt qu'un deep-link exact (le slug n'est
-// pas exposé par GET /properties).
 export default function AnnoncesPage() {
-  const [biens, setBiens] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  useEffect(() => {
-    propertiesApi
-      .list('VACANT')
-      .then((res) => setBiens(res.data))
-      .catch((err) => setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement des annonces'))
-      .finally(() => setLoading(false));
-  }, []);
-
   return (
-    <div className="ann-page">
-      <div className="ann-header">
-        <h1 className="ann-title">Mes annonces</h1>
-        <p className="ann-subtitle">Les biens vacants sont automatiquement publiés en annonce</p>
+    <div style={S.page}>
+      <div style={S.card}>
+        <svg style={S.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span style={S.label}>Bientôt disponible</span>
+        <h1 style={S.title}>Annonces</h1>
+        <p style={S.desc}>La publication et la gestion de vos annonces immobilières seront disponibles très prochainement.</p>
       </div>
-
-      <div className="ann-info-banner">
-        La publication est automatique : un bien vacant est immédiatement visible sur l&apos;annonce publique, et retiré dès qu&apos;un locataire y est installé.
-      </div>
-
-      {errorMessage && <div className="ann-alert-error">{errorMessage}</div>}
-
-      {loading ? (
-        <div className="ann-grid">
-          {[1, 2, 3].map((i) => <div key={i} className="ann-card ann-skeleton" />)}
-        </div>
-      ) : biens.length === 0 ? (
-        <div className="ann-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
-          <h3>Aucune annonce active</h3>
-          <p>Vos biens vacants apparaîtront automatiquement ici.</p>
-          <Link href="/dashboard/biens" className="ann-btn-primary">Voir mes biens</Link>
-        </div>
-      ) : (
-        <div className="ann-grid">
-          {biens.map((bien) => (
-            <div key={bien.id} className="ann-card">
-              <div className="ann-card-photo">
-                {bien.photos[0] ? (
-                  <img src={bien.photos[0].url} alt="" />
-                ) : (
-                  <div className="ann-card-photo-placeholder">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
-                  </div>
-                )}
-                <span className="ann-card-type-badge">{PROPERTY_TYPE_LABELS[bien.type]}</span>
-                <span className="ann-card-active-badge">Active</span>
-              </div>
-              <div className="ann-card-body">
-                <p className="ann-card-price">{fcfa(bien.monthlyRent)}<span>/mois</span></p>
-                <p className="ann-card-loc">{bien.neighborhood}, {bien.city}</p>
-                <p className="ann-card-meta">
-                  {bien.surfaceArea} m²{bien.roomsCount ? ` · ${bien.roomsCount} pièce${bien.roomsCount > 1 ? 's' : ''}` : ''}
-                </p>
-              </div>
-              <div className="ann-card-actions">
-                <Link href={`/dashboard/biens/${bien.id}`} className="ann-card-btn">Voir le bien</Link>
-                <a
-                  href={`/annonces?type=${bien.type}&ville=${encodeURIComponent(bien.city)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ann-card-btn ann-card-btn-primary"
-                >
-                  Annonce publique
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
