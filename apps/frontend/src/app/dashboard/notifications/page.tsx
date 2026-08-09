@@ -1,126 +1,103 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { notificationsApi, EVENT_LABELS, type NotificationSummary } from '@/lib/notifications';
-import { ApiError } from '@/lib/api';
-import './page.css';
+import { useApi, TTL } from '@/lib/use-api';
 
-type Categorie = 'tous' | 'paiement' | 'systeme';
-
-const PAYMENT_EVENTS = ['receipt', 'payment-reminder', 'overdue-alert', 'payment-declaration-pending', 'payment-rejected', 'monthly-report'];
-
-function categorieOf(event: string): Categorie {
-  return PAYMENT_EVENTS.includes(event) ? 'paiement' : 'systeme';
+interface Notification {
+  id: string;
+  event: string;
+  titre?: string;
+  channel: 'PUSH' | 'EMAIL';
+  status: 'SENT' | 'FAILED';
+  payload?: Record<string, unknown> | null;
+  createdAt: string;
 }
 
-const TABS: { value: Categorie; label: string }[] = [
-  { value: 'tous', label: 'Toutes' },
-  { value: 'paiement', label: 'Paiement' },
-  { value: 'systeme', label: 'Système' },
-];
+const HERO: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
+  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+};
+const SK: React.CSSProperties = {
+  height: 60, background: 'linear-gradient(90deg,#F3F4F6,#E5E7EB,#F3F4F6)',
+  borderRadius: 8, margin: '8px 16px', animation: 'shimmer 1.4s infinite',
+};
+
+function fmtDate(s: string) {
+  return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const EVENT_ICONS: Record<string, string> = {
+  payment_received: '💳',
+  payment_overdue: '⚠️',
+  lease_expiring: '📋',
+  declaration_submitted: '📩',
+  declaration_confirmed: '✅',
+  declaration_rejected: '❌',
+};
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [tab, setTab] = useState<Categorie>('tous');
-
-  const load = () => {
-    setLoading(true);
-    setErrorMessage('');
-    Promise.all([notificationsApi.list(50), notificationsApi.getUnreadCount()])
-      .then(([list, unread]) => {
-        setNotifications(list);
-        setUnreadCount(unread.count);
-      })
-      .catch((err) => setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement des notifications'))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, []);
-
-  const filtered = useMemo(
-    () => (tab === 'tous' ? notifications : notifications.filter((n) => categorieOf(n.event) === tab)),
-    [notifications, tab],
-  );
-
-  const now = Date.now();
-  const ceMois = useMemo(
-    () => notifications.filter((n) => {
-      const d = new Date(n.createdAt);
-      const cur = new Date(now);
-      return d.getMonth() === cur.getMonth() && d.getFullYear() === cur.getFullYear();
-    }).length,
-    [notifications, now],
-  );
+  const { data: notifications, loading } = useApi<Notification[]>('/notifications?limit=50', TTL.LIST);
+  const list = notifications ?? [];
 
   return (
-    <div className="notif-page">
-      <div className="notif-header">
+    <div style={{ padding: '24px 28px' }}>
+      <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}`}</style>
+
+      {/* Hero */}
+      <div style={HERO}>
+        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
         <div>
-          <h1 className="notif-title">Notifications</h1>
-          <p className="notif-subtitle">{unreadCount} récentes (24h) · {notifications.length} au total</p>
-        </div>
-        <button type="button" className="notif-btn-secondary" onClick={load}>Actualiser</button>
-      </div>
-
-      {errorMessage && <div className="notif-alert-error">{errorMessage}</div>}
-
-      <div className="notif-kpi-grid">
-        <div className="notif-kpi-card">
-          <p className="notif-kpi-label">Total</p>
-          <p className="notif-kpi-value">{loading ? '—' : notifications.length}</p>
-        </div>
-        <div className="notif-kpi-card">
-          <p className="notif-kpi-label">Dernières 24h</p>
-          <p className="notif-kpi-value notif-kpi-blue">{loading ? '—' : unreadCount}</p>
-        </div>
-        <div className="notif-kpi-card">
-          <p className="notif-kpi-label">Ce mois</p>
-          <p className="notif-kpi-value notif-kpi-green">{loading ? '—' : ceMois}</p>
+          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Notifications</h1>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
+            Vos 50 dernières alertes et mises à jour
+          </p>
         </div>
       </div>
 
-      <div className="notif-tabs">
-        {TABS.map((t) => (
-          <button key={t.value} type="button" className={`notif-tab${tab === t.value ? ' active' : ''}`} onClick={() => setTab(t.value)}>
-            {t.label}
-          </button>
-        ))}
+      {/* Liste */}
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 8 }}>{[1,2,3,4].map(i => <div key={i} style={SK} />)}</div>
+        ) : list.length === 0 ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
+            <svg style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#D1D5DB' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucune notification</div>
+            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Vos alertes et mises à jour apparaîtront ici.</div>
+          </div>
+        ) : (
+          <div>
+            {list.map((n, i) => {
+              const icon = EVENT_ICONS[n.event] ?? '🔔';
+              const isSent = n.status === 'SENT';
+              return (
+                <div key={n.id} style={{ padding: '16px 20px', borderBottom: i < list.length - 1 ? '1px solid #F9FAFB' : undefined, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: '#F0F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                    {icon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', marginBottom: 2 }}>
+                      {n.titre ?? n.event.replace(/_/g, ' ')}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                      {fmtDate(n.createdAt)}
+                      <span style={{ margin: '0 8px', color: '#E5E7EB' }}>·</span>
+                      <span style={{ background: n.channel === 'EMAIL' ? '#EFF6FF' : '#F0FDF4', color: n.channel === 'EMAIL' ? '#1D4ED8' : '#15803D', borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>
+                        {n.channel}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <span style={{ background: isSent ? '#DCFCE7' : '#FEE2E2', color: isSent ? '#15803D' : '#DC2626', borderRadius: 20, padding: '3px 10px', fontSize: 11.5, fontWeight: 700 }}>
+                      {isSent ? 'Envoyé' : 'Échec'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {loading ? (
-        <div className="notif-list">
-          {[1, 2, 3].map((i) => <div key={i} className="notif-skeleton" />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="notif-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-          <h3>Aucune notification</h3>
-          <p>Vos notifications de paiement et système apparaîtront ici.</p>
-        </div>
-      ) : (
-        <div className="notif-list">
-          {filtered.map((n) => (
-            <div key={n.id} className="notif-row">
-              <div className={`notif-icon notif-icon-${categorieOf(n.event)}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-              </div>
-              <div className="notif-body">
-                <p className="notif-titre">{EVENT_LABELS[n.event] ?? n.titre}</p>
-                <p className="notif-sub">{n.event}</p>
-              </div>
-              <div className="notif-right">
-                <span className={`notif-channel-badge ${n.channel === 'EMAIL' ? 'notif-channel-email' : 'notif-channel-push'}`}>
-                  {n.channel === 'EMAIL' ? 'Email' : 'Push'}
-                </span>
-                <span className="notif-date">{new Date(n.createdAt).toLocaleString('fr-FR')}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -46,13 +46,12 @@ describe('AuthService', () => {
   let supabaseAdmin: {
     auth: {
       admin: {
-        generateLink: jest.Mock;
         createUser: jest.Mock;
         deleteUser: jest.Mock;
         updateUserById: jest.Mock;
       };
     };
-    anonAuth: { signInWithPassword: jest.Mock };
+    anonAuth: { signInWithPassword: jest.Mock; refreshSession: jest.Mock };
     withRetry: jest.Mock;
   };
   let emailService: { sendEmail: jest.Mock };
@@ -117,16 +116,9 @@ describe('AuthService', () => {
     supabaseAdmin = {
       auth: {
         admin: {
-          generateLink: jest.fn().mockResolvedValue({
-            data: {
-              user: { id: 'supabase-uid-1' },
-              properties: { action_link: 'https://supabase.example/auth/v1/verify?token=abc' },
-            },
-            error: null,
-          }),
           createUser: jest
             .fn()
-            .mockResolvedValue({ data: { user: { id: 'supabase-uid-tenant' } }, error: null }),
+            .mockResolvedValue({ data: { user: { id: 'supabase-uid-1' } }, error: null }),
           deleteUser: jest.fn().mockResolvedValue({ error: null }),
           updateUserById: jest.fn().mockResolvedValue({ error: null }),
         },
@@ -134,6 +126,10 @@ describe('AuthService', () => {
       anonAuth: {
         signInWithPassword: jest.fn().mockResolvedValue({
           data: { session: { access_token: 'access-1', refresh_token: 'refresh-1' } },
+          error: null,
+        }),
+        refreshSession: jest.fn().mockResolvedValue({
+          data: { session: { access_token: 'access-2', refresh_token: 'refresh-2' } },
           error: null,
         }),
       },
@@ -300,11 +296,15 @@ describe('AuthService', () => {
     it("crée le compte Supabase, le User+OwnerProfile (avec phone/city), envoie l'email de confirmation", async () => {
       const result = await service.signupOwner(ownerDto);
 
-      expect(supabaseAdmin.auth.admin.generateLink).toHaveBeenCalledWith({
-        type: 'signup',
+      // email_confirm: true — connexion immédiate sans clic dans un email de
+      // confirmation (voir /recover fusion auth.service.ts : fiabilité email
+      // variable au Togo, friction jugée plus coûteuse que le gain sécurité
+      // pour ce contexte B2B).
+      expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
         email: ownerDto.email,
         password: ownerDto.password,
-        options: { data: { role: 'OWNER' }, redirectTo: 'http://localhost:4300' },
+        email_confirm: true,
+        user_metadata: { role: 'OWNER' },
       });
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
@@ -333,14 +333,14 @@ describe('AuthService', () => {
         template: 'signup-confirmation',
         variables: {
           firstName: ownerDto.firstName,
-          confirmationUrl: 'https://supabase.example/auth/v1/verify?token=abc',
+          confirmationUrl: 'http://localhost:4300/auth/login',
         },
       });
       expect(result).toEqual({ user: createdUser });
     });
 
     it('convertit une erreur Supabase email_exists en 409, sans toucher à Prisma', async () => {
-      supabaseAdmin.auth.admin.generateLink.mockResolvedValue({
+      supabaseAdmin.auth.admin.createUser.mockResolvedValue({
         data: null,
         error: { code: 'email_exists', message: 'User already registered' },
       });
@@ -425,7 +425,7 @@ describe('AuthService', () => {
       });
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
-          supabaseId: 'supabase-uid-tenant',
+          supabaseId: 'supabase-uid-1',
           email: inviteDto.email,
           phone: inviteDto.phone,
           role: 'TENANT',
@@ -453,18 +453,10 @@ describe('AuthService', () => {
       // (voir /architect module Annonces, 2026-07-28).
       expect(listings.deactivateForProperty).toHaveBeenCalledWith(tx, 'property-1');
 
-      type NotifyTenantInvitationArgs = {
-        userId: string;
-        event: string;
-        variables: { inviterName: string; propertyAddress: string; invitationUrl: string };
-      };
-      const [invitationArgs] = notify.notifyUser.mock.calls[0] as [NotifyTenantInvitationArgs];
-      expect(invitationArgs.userId).toBe('tenant-1');
-      expect(invitationArgs.event).toBe('tenant-invitation');
-      expect(invitationArgs.variables.inviterName).toBe('Jean Dupont');
-      expect(invitationArgs.variables.propertyAddress).toBe(property.address);
-      expect(invitationArgs.variables.invitationUrl).toContain('/activate-account?token=');
-      expect(result.invitationUrl).toContain('/activate-account?token=');
+      // Un seul email lease-created, avec invitationUrl inclus pour un
+      // nouveau locataire (fusionné avec l'ancien événement tenant-invitation
+      // séparé — voir /recover fusion auth.service.ts).
+      expect(result.invitationUrl).toContain('/auth/activate?token=');
       expect(result.lease).toEqual({
         id: 'lease-1',
         propertyId: 'property-1',
@@ -479,6 +471,7 @@ describe('AuthService', () => {
           ownerName: 'Jean Dupont',
           startDate: '01/01/2026',
           monthlyAmount: 55000,
+          invitationUrl: result.invitationUrl,
         },
       });
     });
@@ -532,7 +525,7 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
         'Ce numéro de téléphone est déjà utilisé(e)',
       );
-      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-tenant');
+      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
 
     // Voir /architect unité 14 : le blocage locataire↔bien est vérifié dès

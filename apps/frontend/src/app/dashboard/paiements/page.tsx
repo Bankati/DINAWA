@@ -1,255 +1,188 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import {
-  paymentsApi,
-  PAYMENT_STATUS_LABELS,
-  PAYMENT_METHOD_LABELS,
-  PAYMENT_STATUS_BADGE_CLASSES,
-  PAYMENT_STATUS_DOT_CLASSES,
-  type Payment,
-  type PaymentStatus,
-} from '@/lib/payments';
-import { ApiError } from '@/lib/api';
-import { fcfa } from '@/lib/dashboard';
-import { exportToCsv } from '@/lib/csv-export';
-import './page.css';
+import { paymentsApi, type Payment } from '@/lib/payments';
+import { useApi, TTL } from '@/lib/use-api';
+import { formatFcfa } from '@/lib/format';
 
-const STATUS_TABS: { value: PaymentStatus | ''; label: string }[] = [
-  { value: '', label: 'Tous' },
-  { value: 'PENDING_CONFIRMATION', label: 'À confirmer' },
-  { value: 'PAID', label: 'Payés' },
-  { value: 'LATE', label: 'En retard' },
-  { value: 'OVERDUE', label: 'Impayés' },
-  { value: 'REJECTED', label: 'Rejetés' },
-];
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente', PENDING_CONFIRMATION: 'À confirmer', PAID: 'Payé',
+  PARTIAL: 'Partiel', LATE: 'En retard', OVERDUE: 'Impayé', REJECTED: 'Rejeté',
+};
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  PAID: { bg: '#DCFCE7', color: '#15803D' },
+  PENDING: { bg: '#FEF3C7', color: '#D97706' },
+  PENDING_CONFIRMATION: { bg: '#DBEAFE', color: '#1D4ED8' },
+  PARTIAL: { bg: '#FEF3C7', color: '#D97706' },
+  LATE: { bg: '#FEF3C7', color: '#D97706' },
+  OVERDUE: { bg: '#FEE2E2', color: '#DC2626' },
+  REJECTED: { bg: '#FEE2E2', color: '#DC2626' },
+};
+const METHOD_LABELS: Record<string, string> = {
+  TMONEY: 'T-Money', FLOOZ: 'Flooz', CASH: 'Espèces', BANK_TRANSFER: 'Virement',
+};
 
-export default function PaiementsListPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<PaymentStatus | ''>('');
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [actioningId, setActioningId] = useState<string | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<Payment | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [exporting, setExporting] = useState(false);
+const HERO: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
+  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+};
+const SK: React.CSSProperties = {
+  height: 52, background: 'linear-gradient(90deg,#F3F4F6,#E5E7EB,#F3F4F6)',
+  borderRadius: 8, margin: '8px 16px', animation: 'shimmer 1.4s infinite',
+};
+const ACT_BTN: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #E5E7EB',
+  borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600,
+  background: '#fff', color: '#374151', cursor: 'pointer', textDecoration: 'none',
+};
 
-  const limit = 20;
+function fmtDate(s: string) {
+  return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setErrorMessage('');
-    paymentsApi
-      .getPayments({ page, limit, status: statusFilter || undefined })
-      .then((res) => {
-        setPayments(res.data);
-        setTotal(res.total);
-      })
-      .catch((err) => setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement des paiements'))
-      .finally(() => setLoading(false));
-  }, [page, statusFilter]);
+export default function PaiementsPage() {
+  const [statusFilter, setStatusFilter] = useState('');
+  const url = statusFilter ? `/payments?status=${statusFilter}&limit=100` : '/payments?limit=100';
+  const { data: res, loading } = useApi<{ data: Payment[]; total: number }>(url, TTL.LIST);
+  const payments = res?.data ?? [];
 
-  useEffect(() => { load(); }, [load]);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [dlError, setDlError] = useState('');
 
-  const changeStatusFilter = (value: PaymentStatus | '') => {
-    setStatusFilter(value);
-    setPage(1);
-  };
-
-  const confirmer = async (payment: Payment) => {
-    setActioningId(payment.id);
-    setErrorMessage('');
+  async function downloadReceipt(id: string) {
+    setDownloading(id); setDlError('');
     try {
-      await paymentsApi.confirmPayment(payment.id);
-      setSuccessMessage('Paiement confirmé');
-      load();
-      setTimeout(() => setSuccessMessage(''), 4000);
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : "Erreur lors de la confirmation");
-    } finally {
-      setActioningId(null);
-    }
-  };
-
-  const rejeter = async () => {
-    if (!rejectTarget || !rejectionReason.trim()) return;
-    setActioningId(rejectTarget.id);
-    setErrorMessage('');
-    try {
-      await paymentsApi.rejectPayment(rejectTarget.id, { rejectionReason: rejectionReason.trim() });
-      setRejectTarget(null);
-      setRejectionReason('');
-      setSuccessMessage('Paiement rejeté');
-      load();
-      setTimeout(() => setSuccessMessage(''), 4000);
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du rejet');
-    } finally {
-      setActioningId(null);
-    }
-  };
-
-  const telechargerQuittance = async (payment: Payment) => {
-    try {
-      const blob = await paymentsApi.downloadReceipt(payment.id);
-      const url = URL.createObjectURL(blob);
+      const blob = await paymentsApi.downloadReceipt(id);
+      const url2 = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `quittance-${payment.id}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du téléchargement de la quittance');
-    }
-  };
+      a.href = url2; a.download = `quittance-${id}.pdf`;
+      document.body.appendChild(a); a.click();
+      URL.revokeObjectURL(url2); document.body.removeChild(a);
+    } catch (err: unknown) {
+      setDlError(err instanceof Error ? err.message : 'Erreur lors du téléchargement');
+    } finally { setDownloading(null); }
+  }
 
-  const exportCsv = async () => {
-    setExporting(true);
-    setErrorMessage('');
-    try {
-      const res = await paymentsApi.getPayments({ status: statusFilter || undefined, limit: 500 });
-      exportToCsv(
-        'paiements',
-        [
-          { key: 'date', label: 'Date', value: (p: Payment) => new Date(p.paidAt ?? p.createdAt).toLocaleDateString('fr-FR') },
-          { key: 'locataire', label: 'Locataire', value: (p: Payment) => p.lease?.tenant ? `${p.lease.tenant.firstName} ${p.lease.tenant.lastName}` : '' },
-          { key: 'bien', label: 'Bien', value: (p: Payment) => p.lease?.property ? `${p.lease.property.neighborhood}, ${p.lease.property.city}` : '' },
-          { key: 'montant', label: 'Montant (FCFA)', value: (p: Payment) => p.paidAmount },
-          { key: 'mode', label: 'Mode', value: (p: Payment) => p.paymentMethod ? PAYMENT_METHOD_LABELS[p.paymentMethod] : '' },
-          { key: 'statut', label: 'Statut', value: (p: Payment) => PAYMENT_STATUS_LABELS[p.status] },
-        ],
-        res.data,
-      );
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : "Erreur lors de l'export");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const TABS = [
+    ['', 'Tous'],
+    ['PENDING_CONFIRMATION', 'À confirmer'],
+    ['PAID', 'Payés'],
+    ['OVERDUE', 'Impayés'],
+    ['REJECTED', 'Rejetés'],
+  ];
 
   return (
-    <div className="pmt-page">
-      <div className="pmt-header">
-        <div>
-          <h1 className="pmt-title">Paiements</h1>
-          <p className="pmt-subtitle">Historique et suivi des paiements de vos locataires</p>
-        </div>
-        <div className="pmt-header-actions">
-          <button type="button" className="pmt-btn-secondary" onClick={exportCsv} disabled={exporting}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            {exporting ? 'Export…' : 'Exporter'}
-          </button>
-          <Link href="/dashboard/paiements/rappels" className="pmt-btn-secondary">Rappels</Link>
-          <Link href="/dashboard/paiements/nouveau" className="pmt-btn-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            Saisir un paiement
-          </Link>
+    <div style={{ padding: '24px 28px' }}>
+      <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}`}</style>
+
+      {/* Hero */}
+      <div style={HERO}>
+        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Paiements</h1>
+            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
+              Suivi des encaissements et déclarations locataires
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Link href="/dashboard/paiements/validation" style={{ ...ACT_BTN, background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}>
+              Valider déclarations
+            </Link>
+            <Link href="/dashboard/paiements/manual" style={{ ...ACT_BTN, background: '#C9982E', color: '#fff', border: 'none' }}>
+              + Paiement manuel
+            </Link>
+          </div>
         </div>
       </div>
 
-      {errorMessage && <div className="pmt-alert-error">{errorMessage}</div>}
-      {successMessage && <div className="pmt-alert-success">{successMessage}</div>}
+      {dlError && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 16px', marginBottom: 16, color: '#DC2626', fontSize: 13 }}>{dlError}</div>}
 
-      <div className="pmt-tabs">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.value || 'ALL'}
-            type="button"
-            className={`pmt-tab${statusFilter === tab.value ? ' active' : ''}`}
-            onClick={() => changeStatusFilter(tab.value)}
-          >
-            {tab.label}
+      {/* Filtres */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {TABS.map(([v, l]) => (
+          <button key={v} onClick={() => setStatusFilter(v)}
+            style={{ background: statusFilter === v ? '#0F4C81' : '#fff', color: statusFilter === v ? '#fff' : '#374151', border: `1px solid ${statusFilter === v ? '#0F4C81' : '#D1D5DB'}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {l}
           </button>
         ))}
       </div>
 
-      {loading ? (
-        <div className="pmt-table-card">
-          {[1, 2, 3].map((i) => <div key={i} className="pmt-row-skeleton" />)}
-        </div>
-      ) : payments.length === 0 ? (
-        <div className="pmt-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
-          <h3>Aucun paiement</h3>
-          <p>Aucun paiement ne correspond à ce filtre.</p>
-        </div>
-      ) : (
-        <>
-          <div className="pmt-table-card">
-            <div className="pmt-table-header-row">
-              <span>Date</span>
-              <span>Locataire</span>
-              <span>Bien</span>
-              <span>Montant</span>
-              <span>Mode</span>
-              <span>Statut</span>
-              <span>Actions</span>
-            </div>
-            {payments.map((p) => (
-              <div key={p.id} className="pmt-table-row">
-                <span className="pmt-row-date">{new Date(p.paidAt ?? p.createdAt).toLocaleDateString('fr-FR')}</span>
-                <span className="pmt-row-tenant">{p.lease?.tenant ? `${p.lease.tenant.firstName} ${p.lease.tenant.lastName}` : '—'}</span>
-                <span className="pmt-row-property">{p.lease?.property ? `${p.lease.property.neighborhood}, ${p.lease.property.city}` : '—'}</span>
-                <span className="pmt-row-amount">{fcfa(p.paidAmount)}</span>
-                <span className="pmt-row-method">{p.paymentMethod ? PAYMENT_METHOD_LABELS[p.paymentMethod] : '—'}</span>
-                <span className={`pmt-badge ${PAYMENT_STATUS_BADGE_CLASSES[p.status]}`}>
-                  <span className={`pmt-badge-dot ${PAYMENT_STATUS_DOT_CLASSES[p.status]}`} />
-                  {PAYMENT_STATUS_LABELS[p.status]}
-                </span>
-                <span className="pmt-row-actions">
-                  {p.status === 'PENDING_CONFIRMATION' && (
-                    <>
-                      <button type="button" className="pmt-action-btn pmt-action-confirm" disabled={actioningId === p.id} onClick={() => confirmer(p)}>Confirmer</button>
-                      <button type="button" className="pmt-action-btn pmt-action-reject" disabled={actioningId === p.id} onClick={() => setRejectTarget(p)}>Rejeter</button>
-                    </>
-                  )}
-                  {p.status === 'PAID' && (
-                    <button type="button" className="pmt-action-btn" onClick={() => telechargerQuittance(p)}>Quittance</button>
-                  )}
-                  {p.status === 'REJECTED' && p.rejectionReason && (
-                    <span className="pmt-reject-reason" title={p.rejectionReason}>{p.rejectionReason}</span>
-                  )}
-                </span>
-              </div>
-            ))}
+      {/* Table */}
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 8 }}>{[1,2,3,4].map(i => <div key={i} style={SK} />)}</div>
+        ) : payments.length === 0 ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
+            <svg style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#D1D5DB' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucun paiement</div>
+            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Les paiements apparaîtront ici dès leur enregistrement.</div>
           </div>
-
-          <div className="pmt-pagination">
-            <button type="button" className="pmt-page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Précédent</button>
-            <span className="pmt-page-info">Page {page} / {totalPages}</span>
-            <button type="button" className="pmt-page-btn" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</button>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  {['Date', 'Locataire', 'Bien', 'Montant', 'Mode', 'Statut', 'Actions'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11.5, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p, i) => {
+                  const sc = STATUS_COLORS[p.status] ?? { bg: '#F3F4F6', color: '#6B7280' };
+                  return (
+                    <tr key={p.id} style={{ borderBottom: i < payments.length - 1 ? '1px solid #F9FAFB' : undefined }}>
+                      <td style={{ padding: '14px 16px', fontSize: 12.5, color: '#6B7280', whiteSpace: 'nowrap' }}>{fmtDate(p.createdAt)}</td>
+                      <td style={{ padding: '14px 16px' }}>
+                        {p.lease?.tenant ? (
+                          <div style={{ fontWeight: 600, fontSize: 13, color: '#111827' }}>
+                            {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+                          </div>
+                        ) : <span style={{ color: '#D1D5DB' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        {p.lease?.property ? (
+                          <div style={{ fontSize: 12.5, color: '#374151' }}>{p.lease.property.address}</div>
+                        ) : <span style={{ color: '#D1D5DB' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '14px 16px', fontWeight: 700, fontSize: 13, color: '#0A2650', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {formatFcfa(p.paidAmount)}
+                      </td>
+                      <td style={{ padding: '14px 16px', fontSize: 12.5, color: '#6B7280' }}>
+                        {p.paymentMethod ? (METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod) : '—'}
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ background: sc.bg, color: sc.color, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
+                          {STATUS_LABELS[p.status] ?? p.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        {p.status === 'PAID' && (
+                          <button onClick={() => downloadReceipt(p.id)} disabled={downloading === p.id}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#EFF6FF', color: '#0F4C81', border: '1px solid #BFDBFE', borderRadius: 7, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: downloading === p.id ? 'not-allowed' : 'pointer' }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 13, height: 13 }}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            {downloading === p.id ? '…' : 'Quittance'}
+                          </button>
+                        )}
+                        {p.status === 'PENDING_CONFIRMATION' && (
+                          <Link href="/dashboard/paiements/validation"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#DBEAFE', color: '#1D4ED8', border: '1px solid #BFDBFE', borderRadius: 7, padding: '5px 10px', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+                            Valider
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </>
-      )}
-
-      {rejectTarget && (
-        <div className="pmt-modal-overlay" onClick={() => setRejectTarget(null)}>
-          <div className="pmt-modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="pmt-modal-title">Rejeter le paiement</h2>
-            <p className="pmt-modal-text">Motif du rejet de ce paiement de {fcfa(rejectTarget.paidAmount)} :</p>
-            <textarea
-              className="pmt-modal-textarea"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              maxLength={2000}
-              rows={3}
-              placeholder="Raison du rejet…"
-            />
-            <div className="pmt-modal-actions">
-              <button type="button" className="pmt-btn-secondary" onClick={() => setRejectTarget(null)}>Annuler</button>
-              <button type="button" className="pmt-btn-danger" disabled={!rejectionReason.trim() || actioningId === rejectTarget.id} onClick={rejeter}>
-                Confirmer le rejet
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

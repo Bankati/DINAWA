@@ -32,6 +32,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ManagerReportsModule } from './modules/manager-reports/manager-reports.module';
 import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { ExportsModule } from './modules/exports/exports.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -124,7 +125,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     // Mandats propriétaire ↔ gestionnaire ↔ bien (voir build-plan.md unité 31)
     MandatesModule,
 
-    // Tableau de bord gestionnaire (voir build-plan.md unité 32)
+    // Tableau de bord gestionnaire scopé mandat (voir build-plan.md unité 32) —
+    // enregistré aux côtés du dashboard KPI générique dans DashboardModule
     DashboardModule,
 
     // Rapports mensuels consolidés par propriétaire mandant, prévisualisation
@@ -140,6 +142,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     // (prélèvement automatique via Cashpay) reportée, agréments T-Money/Flooz
     // pas encore obtenus
     SubscriptionsModule,
+
+    // Exports PDF (paiements, biens, locataires, rapport financier)
+    ExportsModule,
   ],
   providers: [
     {

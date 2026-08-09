@@ -1,8 +1,19 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { paymentsApi, type PaymentDeclaration, type RejectPaymentDto } from '@/lib/payments';
-import { ApiError } from '@/lib/auth-context';
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING_CONFIRMATION: 'En attente',
+  PAID: 'Approuvé',
+  REJECTED: 'Rejeté',
+};
+
+const PAYMENT_STATUS_CLASSES: Record<string, string> = {
+  PENDING_CONFIRMATION: 'bg-yellow-100 text-yellow-800',
+  PAID: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
+};
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   BANK_TRANSFER: 'Virement bancaire',
@@ -20,22 +31,22 @@ export default function PaymentValidationPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
 
-  const loadPendingDeclarations = useCallback(async () => {
+  useEffect(() => {
+    loadPendingDeclarations();
+  }, []);
+
+  const loadPendingDeclarations = async () => {
     setIsLoading(true);
     setErrorMessage('');
     try {
       const data = await paymentsApi.getPendingDeclarations();
       setPendingDeclarations(data);
-    } catch (error) {
-      setErrorMessage(error instanceof ApiError ? error.message : 'Erreur lors du chargement des paiements');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Erreur lors du chargement des paiements');
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadPendingDeclarations();
-  }, [loadPendingDeclarations]);
+  };
 
   const approvePayment = async (payment: PaymentDeclaration) => {
     setIsLoading(true);
@@ -46,8 +57,8 @@ export default function PaymentValidationPage() {
       setSuccessMessage('Paiement approuvé avec succès');
       loadPendingDeclarations();
       setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (error) {
-      setErrorMessage(error instanceof ApiError ? error.message : "Erreur lors de l'approbation");
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Erreur lors de l\'approbation');
     } finally {
       setIsLoading(false);
     }
@@ -78,8 +89,8 @@ export default function PaymentValidationPage() {
       closeRejectDialog();
       loadPendingDeclarations();
       setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (error) {
-      setErrorMessage(error instanceof ApiError ? error.message : 'Erreur lors du rejet');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Erreur lors du rejet');
     } finally {
       setIsLoading(false);
     }

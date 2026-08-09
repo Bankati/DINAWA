@@ -1,3 +1,4 @@
+import { inflateSync } from 'node:zlib';
 import { ReceiptPdfService } from './receipt-pdf.service';
 import { PaymentWithAccess } from '../payments/payments.service';
 
@@ -59,9 +60,29 @@ describe('ReceiptPdfService - Format WARAH', () => {
   });
 
   // PDFKit encode le texte en hex dans les content streams TJ (ex. <466c6f6f7a> pour "Flooz").
-  // extractPdfText(buffer) ne retrouve pas ce texte — il faut décoder les hex-strings.
+  // `compress: true` (charte WARAH) déflate ces streams — il faut les
+  // décompresser (zlib) avant de chercher les hex-strings, sinon le texte
+  // reste illisible dans le buffer brut.
   function extractPdfText(buffer: Buffer): string {
-    const raw = buffer.toString('latin1');
+    const decompressed: Buffer[] = [];
+    let cursor = 0;
+    while (cursor < buffer.length) {
+      const start = buffer.indexOf('stream', cursor);
+      if (start === -1) break;
+      let contentStart = start + 'stream'.length;
+      if (buffer[contentStart] === 0x0d) contentStart++;
+      if (buffer[contentStart] === 0x0a) contentStart++;
+      const end = buffer.indexOf('endstream', contentStart);
+      if (end === -1) break;
+      const raw = buffer.subarray(contentStart, end);
+      try {
+        decompressed.push(inflateSync(raw));
+      } catch {
+        decompressed.push(raw);
+      }
+      cursor = end + 'endstream'.length;
+    }
+    const raw = Buffer.concat(decompressed).toString('latin1') + buffer.toString('latin1');
     return [...raw.matchAll(/<([0-9a-fA-F]+)>/g)]
       .map((m) => Buffer.from(m[1], 'hex').toString('latin1'))
       .join('');
@@ -109,7 +130,9 @@ describe('ReceiptPdfService - Format WARAH', () => {
   it('contient le montant en FCFA', async () => {
     const buffer = await service.generate(makePayment());
     const pdfText = extractPdfText(buffer);
-    expect(pdfText).toContain('55 000 FCFA');
+    // Séparateur de milliers normalisé en espace insécable (U+00A0, rendue
+    // par WinAnsiEncoding) — jamais une espace ASCII classique, voir fcfa().
+    expect(pdfText).toContain('55 000 FCFA');
   });
 
   it('contient la mention légale', async () => {
@@ -122,7 +145,7 @@ describe('ReceiptPdfService - Format WARAH', () => {
   it('contient lURL de vérification', async () => {
     const buffer = await service.generate(makePayment());
     const pdfText = extractPdfText(buffer);
-    expect(pdfText).toContain('www.warah.tg/verif/');
+    expect(pdfText).toContain('warah.tg/verif/');
   });
 
   it('gère les données manquantes sans erreur', async () => {

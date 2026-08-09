@@ -1,90 +1,165 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { propertiesApi, PROPERTY_TYPE_LABELS, type Property } from '@/lib/properties';
-import { ApiError } from '@/lib/api';
-import { fcfa } from '@/lib/dashboard';
-import './page.css';
+import { useState } from 'react';
+import { api } from '@/lib/api';
+import { useApi, TTL } from '@/lib/use-api';
+import { formatFcfa } from '@/lib/format';
 
-// Il n'existe plus de CRUD manuel d'annonces côté backend — une annonce se
-// publie/se désactive automatiquement quand un bien passe VACANT/OCCUPIED
-// (voir /architect module Annonces). Cette page est donc une vue lecture
-// seule des biens actuellement en annonce (status === VACANT), avec un lien
-// vers la recherche publique plutôt qu'un deep-link exact (le slug n'est
-// pas exposé par GET /properties).
+type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
+type PropertyStatus = 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
+
+interface Property {
+  id: string;
+  type: PropertyType;
+  status: PropertyStatus;
+  address: string;
+  neighborhood: string;
+  city: string;
+  monthlyRent: number;
+  description: string | null;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial',
+};
+const STATUS_LABELS: Record<string, string> = {
+  OCCUPIED: 'Occupé', VACANT: 'Vacant', RENOVATION: 'Travaux', ARCHIVED: 'Archivé',
+};
+const HERO: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
+  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+};
+const SK: React.CSSProperties = {
+  height: 64, background: 'linear-gradient(90deg,#F3F4F6,#E5E7EB,#F3F4F6)',
+  borderRadius: 8, margin: '8px 16px', animation: 'shimmer 1.4s infinite',
+};
+
 export default function AnnoncesPage() {
-  const [biens, setBiens] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
+  const { data: res, loading } = useApi<{ data: Property[]; total: number }>('/properties?status=VACANT&limit=100', TTL.LIST);
+  const properties = res?.data ?? [];
 
-  useEffect(() => {
-    propertiesApi
-      .list('VACANT')
-      .then((res) => setBiens(res.data))
-      .catch((err) => setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement des annonces'))
-      .finally(() => setLoading(false));
-  }, []);
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const [unpublishing, setUnpublishing] = useState<string | null>(null);
+  const [published, setPublished] = useState<Set<string>>(new Set());
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [messages, setMessages] = useState<Record<string, string>>({});
+
+  async function publish(id: string) {
+    setPublishing(id);
+    setErrors(e => ({ ...e, [id]: '' }));
+    try {
+      await api.post(`/properties/${id}/listing`, {});
+      setPublished(p => new Set(p).add(id));
+      setMessages(m => ({ ...m, [id]: 'Annonce publiée !' }));
+      setTimeout(() => setMessages(m => ({ ...m, [id]: '' })), 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erreur';
+      if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('existe') || msg.includes('409')) {
+        setPublished(p => new Set(p).add(id));
+        setMessages(m => ({ ...m, [id]: 'Annonce déjà active' }));
+      } else {
+        setErrors(e => ({ ...e, [id]: msg }));
+      }
+    } finally { setPublishing(null); }
+  }
+
+  async function unpublish(id: string) {
+    setUnpublishing(id);
+    setErrors(e => ({ ...e, [id]: '' }));
+    try {
+      await api.delete(`/properties/${id}/listing`);
+      setPublished(p => { const next = new Set(p); next.delete(id); return next; });
+      setMessages(m => ({ ...m, [id]: 'Annonce retirée' }));
+      setTimeout(() => setMessages(m => ({ ...m, [id]: '' })), 4000);
+    } catch (err: unknown) {
+      setErrors(e => ({ ...e, [id]: err instanceof Error ? err.message : 'Erreur' }));
+    } finally { setUnpublishing(null); }
+  }
+
+  const isActive = (id: string) => published.has(id);
+  const isBusy = (id: string) => publishing === id || unpublishing === id;
 
   return (
-    <div className="ann-page">
-      <div className="ann-header">
-        <h1 className="ann-title">Mes annonces</h1>
-        <p className="ann-subtitle">Les biens vacants sont automatiquement publiés en annonce</p>
-      </div>
+    <div style={{ padding: '24px 28px' }}>
+      <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}`}</style>
 
-      <div className="ann-info-banner">
-        La publication est automatique : un bien vacant est immédiatement visible sur l&apos;annonce publique, et retiré dès qu&apos;un locataire y est installé.
-      </div>
-
-      {errorMessage && <div className="ann-alert-error">{errorMessage}</div>}
-
-      {loading ? (
-        <div className="ann-grid">
-          {[1, 2, 3].map((i) => <div key={i} className="ann-card ann-skeleton" />)}
+      {/* Hero */}
+      <div style={HERO}>
+        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
+        <div>
+          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Annonces</h1>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
+            Publiez vos biens vacants sur le portail WARAH
+          </p>
         </div>
-      ) : biens.length === 0 ? (
-        <div className="ann-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
-          <h3>Aucune annonce active</h3>
-          <p>Vos biens vacants apparaîtront automatiquement ici.</p>
-          <Link href="/dashboard/biens" className="ann-btn-primary">Voir mes biens</Link>
+      </div>
+
+      {/* Info */}
+      <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" strokeWidth="2" style={{ width: 18, height: 18, flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div style={{ fontSize: 13, color: '#1D4ED8' }}>
+          Seuls les biens <strong>vacants</strong> peuvent être publiés comme annonces. Pour les biens occupés ou en travaux, changez d'abord leur statut.
+        </div>
+      </div>
+
+      {/* Grille de biens */}
+      {loading ? (
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', padding: 8 }}>
+          {[1,2,3].map(i => <div key={i} style={SK} />)}
+        </div>
+      ) : properties.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '48px 32px', textAlign: 'center' }}>
+          <svg style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#D1D5DB' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucun bien vacant</div>
+          <div style={{ fontSize: 13.5, color: '#6B7280' }}>Vous n'avez pas de biens vacants à publier en annonce.</div>
         </div>
       ) : (
-        <div className="ann-grid">
-          {biens.map((bien) => (
-            <div key={bien.id} className="ann-card">
-              <div className="ann-card-photo">
-                {bien.photos[0] ? (
-                  <img src={bien.photos[0].url} alt="" />
-                ) : (
-                  <div className="ann-card-photo-placeholder">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          {properties.map(p => {
+            const active = isActive(p.id);
+            const busy = isBusy(p.id);
+            return (
+              <div key={p.id} style={{ background: '#fff', border: `1px solid ${active ? '#BFDBFE' : '#E5E7EB'}`, borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, transition: 'border-color 0.2s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: '#F3F4F6', color: '#6B7280', borderRadius: 20, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {TYPE_LABELS[p.type] ?? p.type}
+                    </span>
                   </div>
-                )}
-                <span className="ann-card-type-badge">{PROPERTY_TYPE_LABELS[bien.type]}</span>
-                <span className="ann-card-active-badge">Active</span>
+                  {active && (
+                    <span style={{ fontSize: 11, fontWeight: 700, background: '#DBEAFE', color: '#1D4ED8', borderRadius: 20, padding: '3px 10px' }}>
+                      ● Annonce active
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 3 }}>{p.address}</div>
+                  <div style={{ fontSize: 12.5, color: '#6B7280' }}>{p.neighborhood}, {p.city}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#0A2650', fontVariantNumeric: 'tabular-nums' }}>{formatFcfa(p.monthlyRent)}</span>
+                  <span style={{ fontSize: 12, color: '#9CA3AF' }}>{STATUS_LABELS[p.status] ?? p.status}</span>
+                </div>
+                {messages[p.id] && <div style={{ fontSize: 12, color: '#15803D', background: '#F0FDF4', borderRadius: 7, padding: '5px 10px' }}>{messages[p.id]}</div>}
+                {errors[p.id] && <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', borderRadius: 7, padding: '5px 10px' }}>{errors[p.id]}</div>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {!active ? (
+                    <button onClick={() => publish(p.id)} disabled={busy}
+                      style={{ flex: 1, background: busy ? '#E5E7EB' : '#0F4C81', color: busy ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 9, padding: '9px 0', fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer' }}>
+                      {busy ? 'Publication…' : 'Publier l\'annonce'}
+                    </button>
+                  ) : (
+                    <button onClick={() => unpublish(p.id)} disabled={busy}
+                      style={{ flex: 1, background: busy ? '#F3F4F6' : '#FEF2F2', color: busy ? '#9CA3AF' : '#DC2626', border: `1px solid ${busy ? '#E5E7EB' : '#FECACA'}`, borderRadius: 9, padding: '9px 0', fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer' }}>
+                      {busy ? 'Retrait…' : 'Retirer l\'annonce'}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="ann-card-body">
-                <p className="ann-card-price">{fcfa(bien.monthlyRent)}<span>/mois</span></p>
-                <p className="ann-card-loc">{bien.neighborhood}, {bien.city}</p>
-                <p className="ann-card-meta">
-                  {bien.surfaceArea} m²{bien.roomsCount ? ` · ${bien.roomsCount} pièce${bien.roomsCount > 1 ? 's' : ''}` : ''}
-                </p>
-              </div>
-              <div className="ann-card-actions">
-                <Link href={`/dashboard/biens/${bien.id}`} className="ann-card-btn">Voir le bien</Link>
-                <a
-                  href={`/annonces?type=${bien.type}&ville=${encodeURIComponent(bien.city)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ann-card-btn ann-card-btn-primary"
-                >
-                  Annonce publique
-                </a>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

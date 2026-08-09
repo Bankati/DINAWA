@@ -84,6 +84,7 @@ describe('PropertiesService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       photos: [],
+      listings: [],
       ...overrides,
     };
   }
@@ -286,7 +287,12 @@ describe('PropertiesService', () => {
     it('renvoie le bien si le propriétaire y a accès', async () => {
       const property = makeProperty();
       prisma.property.findUnique.mockResolvedValueOnce(property);
-      await expect(service.findOne(owner, 'prop-1')).resolves.toEqual(property);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { listings, ...expected } = property;
+      await expect(service.findOne(owner, 'prop-1')).resolves.toEqual({
+        ...expected,
+        activeListing: null,
+      });
     });
   });
 

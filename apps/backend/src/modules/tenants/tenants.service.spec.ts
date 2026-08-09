@@ -40,7 +40,8 @@ describe('TenantsService', () => {
       tenantPropertyBlock: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
     };
 
-    service = new TenantsService(prisma as never);
+    const supabaseAdmin = {} as never;
+    service = new TenantsService(prisma as never, supabaseAdmin);
   });
 
   describe('blockTenant', () => {

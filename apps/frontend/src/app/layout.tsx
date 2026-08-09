@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
+import { GlobalProgressBar } from "@/components/global-progress-bar";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "WARAH - Gérez vos biens. Encaissez vos loyers. Dormez tranquille.",
@@ -19,8 +14,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`${inter.variable} h-full antialiased`}>
+    <html lang="fr" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
+        <GlobalProgressBar />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

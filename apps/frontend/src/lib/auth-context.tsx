@@ -30,6 +30,7 @@ export function roleDefaultRoute(role: UserRole): string {
 }
 
 const TOKEN_KEY = 'warah_access_token';
+const REFRESH_KEY = 'warah_refresh_token';
 const USER_KEY = 'warah_user';
 
 interface LoginResponse {
@@ -71,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post<LoginResponse>('/auth/login', { email, password });
     localStorage.setItem(TOKEN_KEY, res.accessToken);
+    localStorage.setItem(REFRESH_KEY, res.refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
     setUser(res.user);
     return res.user;
@@ -78,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
     setUser(null);
     router.push('/auth/login');

@@ -44,6 +44,8 @@ export const adminApi = {
     }>(`/admin/users${qs}`);
   },
   getUser: (id: string) => api.get<AdminUserDetail>(`/admin/users/${id}`),
+  deleteUser: (id: string) =>
+    api.delete<{ message: string }>(`/admin/users/${id}`),
 };
 
 export type RoleUtilisateur =

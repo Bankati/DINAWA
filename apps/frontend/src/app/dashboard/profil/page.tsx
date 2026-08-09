@@ -1,230 +1,160 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { profileApi, type ProfileUser } from '@/lib/profile';
-import { useAuth } from '@/lib/auth-context';
-import { ApiError } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
+import { useApi, TTL } from '@/lib/use-api';
 import { initiales } from '@/lib/format';
-import './page.css';
+
+interface UserProfile {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  firstName: string;
+  lastName: string;
+  role: string;
+  city: string | null;
+  profilePhotoPath: string | null;
+  accountStatus: string;
+  createdAt: string;
+}
+
+const HERO: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
+  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  OWNER: 'Propriétaire', MANAGER: 'Gestionnaire', TENANT: 'Locataire', ADMIN: 'Administrateur',
+};
+const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }> = {
+  ACTIVE: { label: 'Actif', bg: '#DCFCE7', color: '#15803D' },
+  SUSPENDED_INACTIVITY: { label: 'Suspendu (inactivité)', bg: '#FEE2E2', color: '#DC2626' },
+  SUSPENDED_ADMIN: { label: 'Suspendu (admin)', bg: '#FEE2E2', color: '#DC2626' },
+  SUSPENDED_PAYMENT: { label: 'Suspendu (paiement)', bg: '#FEE2E2', color: '#DC2626' },
+};
+
+function ipt(): React.CSSProperties {
+  return { width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '10px 12px', fontSize: 13.5, boxSizing: 'border-box', color: '#111827' };
+}
 
 export default function ProfilPage() {
-  const router = useRouter();
-  const { logout } = useAuth();
-
-  const [profile, setProfile] = useState<ProfileUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [reminderDaysBefore, setReminderDaysBefore] = useState('5');
-  const [overdueGraceDays, setOverdueGraceDays] = useState('3');
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const { data: profile, loading } = useApi<UserProfile>('/profile', TTL.STABLE);
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', city: '' });
   const [saving, setSaving] = useState(false);
-
-  const [pushBusy, setPushBusy] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    profileApi
-      .get()
-      .then((p) => {
-        setProfile(p);
-        setFirstName(p.firstName);
-        setLastName(p.lastName);
-        setReminderDaysBefore(String(p.reminderDaysBefore));
-        setOverdueGraceDays(String(p.overdueGraceDays));
-      })
-      .catch((err) => setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement du profil'))
-      .finally(() => setLoading(false));
-  }, []);
+    if (profile) {
+      setForm({
+        firstName: profile.firstName ?? '',
+        lastName: profile.lastName ?? '',
+        phone: profile.phone ?? '',
+        city: profile.city ?? '',
+      });
+    }
+  }, [profile]);
 
-  const onPhotoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    setPhoto(file);
-    setPhotoPreview(file ? URL.createObjectURL(file) : null);
-  };
-
-  const onSave = async (e: React.FormEvent) => {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setErrorMessage('');
-    setSuccessMessage('');
+    setSaving(true); setError(''); setSuccess('');
     try {
-      const updated = await profileApi.update(
-        {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          reminderDaysBefore: Number(reminderDaysBefore),
-          overdueGraceDays: Number(overdueGraceDays),
-        },
-        photo ?? undefined,
-      );
-      setProfile(updated);
-      setPhoto(null);
-      setSuccessMessage('Profil mis à jour');
-      setTimeout(() => setSuccessMessage(''), 4000);
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors de la mise à jour du profil');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const togglePush = async () => {
-    if (!profile || pushBusy) return;
-    setPushBusy(true);
-    setErrorMessage('');
-    const nextConsent = profile.notificationConsent === 'ACCEPTED' ? 'DECLINED' : 'ACCEPTED';
-    try {
-      const updated = await profileApi.updateNotificationConsent(nextConsent);
-      setProfile(updated);
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors de la mise à jour des notifications');
-    } finally {
-      setPushBusy(false);
-    }
-  };
-
-  const deleteAccount = async () => {
-    setDeleting(true);
-    setErrorMessage('');
-    try {
-      await profileApi.deleteAccount();
-      logout();
-      router.push('/');
-    } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors de la suppression du compte');
-      setDeleting(false);
-      setShowDeleteModal(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="prof-page">
-        <div className="prof-skeleton" />
-      </div>
-    );
+      const fd = new FormData();
+      fd.append('firstName', form.firstName);
+      fd.append('lastName', form.lastName);
+      if (form.phone) fd.append('phone', form.phone);
+      if (form.city) fd.append('city', form.city);
+      await api.patch('/profile', fd);
+      setSuccess('Profil mis à jour avec succès');
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
+    } finally { setSaving(false); }
   }
 
-  if (!profile) {
-    return (
-      <div className="prof-page">
-        <div className="prof-alert-error">{errorMessage || 'Profil introuvable'}</div>
-      </div>
-    );
-  }
+  const st = profile ? (STATUS_LABELS[profile.accountStatus] ?? { label: profile.accountStatus, bg: '#F3F4F6', color: '#6B7280' }) : null;
 
   return (
-    <div className="prof-page">
-      <div className="prof-header">
-        <h1 className="prof-title">Mon profil</h1>
-        <p className="prof-subtitle">Gérez vos informations personnelles et vos préférences</p>
+    <div style={{ padding: '24px 28px' }}>
+      {/* Hero */}
+      <div style={HERO}>
+        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
+        <div>
+          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Mon profil</h1>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>Gérez vos informations personnelles</p>
+        </div>
       </div>
 
-      {errorMessage && <div className="prof-alert-error">{errorMessage}</div>}
-      {successMessage && <div className="prof-alert-success">{successMessage}</div>}
+      {loading ? (
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Chargement…</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 24, alignItems: 'start' }}>
 
-      <form onSubmit={onSave} className="prof-form">
-        <div className="prof-card">
-          <h2 className="prof-card-title">Photo de profil</h2>
-          <div className="prof-photo-row">
-            <div className="prof-avatar">
-              {photoPreview ? <img src={photoPreview} alt="" /> : initiales(firstName, lastName, 'P')}
+          {/* Carte identité */}
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 28, textAlign: 'center' }}>
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #0A2650, #0F4C81)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 28, margin: '0 auto 16px' }}>
+              {initiales(profile?.firstName, profile?.lastName)}
             </div>
-            <label className="prof-btn-secondary prof-upload-label">
-              Changer la photo
-              <input type="file" accept="image/*" hidden onChange={onPhotoSelected} />
-            </label>
+            <div style={{ fontWeight: 700, fontSize: 18, color: '#111827', marginBottom: 4 }}>
+              {profile?.firstName} {profile?.lastName}
+            </div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>{profile?.email}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+              <span style={{ background: '#EFF6FF', color: '#0F4C81', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700 }}>
+                {profile ? (ROLE_LABELS[profile.role] ?? profile.role) : '—'}
+              </span>
+              {st && <span style={{ background: st.bg, color: st.color, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700 }}>{st.label}</span>}
+            </div>
+            {profile?.createdAt && (
+              <div style={{ marginTop: 16, fontSize: 12, color: '#9CA3AF' }}>
+                Membre depuis {new Date(profile.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+              </div>
+            )}
           </div>
-          <p className="prof-hint">JPG, PNG — max 5 Mo</p>
-        </div>
 
-        <div className="prof-card">
-          <h2 className="prof-card-title">Informations personnelles</h2>
-          <div className="prof-row">
-            <div className="prof-field">
-              <label htmlFor="prof-firstname">Prénom</label>
-              <input id="prof-firstname" type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} maxLength={100} />
-            </div>
-            <div className="prof-field">
-              <label htmlFor="prof-lastname">Nom</label>
-              <input id="prof-lastname" type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} maxLength={100} />
-            </div>
-          </div>
-          <div className="prof-row">
-            <div className="prof-field">
-              <label>Email</label>
-              <p className="prof-readonly">{profile.email ?? '—'}</p>
-            </div>
-            <div className="prof-field">
-              <label>Téléphone</label>
-              <p className="prof-readonly">{profile.phone ?? '—'}</p>
-            </div>
-          </div>
-        </div>
+          {/* Formulaire */}
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 28 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: '0 0 20px' }}>Informations personnelles</h2>
 
-        <div className="prof-card">
-          <h2 className="prof-card-title">Préférences de rappel</h2>
-          <div className="prof-row">
-            <div className="prof-field">
-              <label htmlFor="prof-reminder">Rappel avant échéance (jours)</label>
-              <input id="prof-reminder" type="number" min={1} max={30} value={reminderDaysBefore} onChange={(e) => setReminderDaysBefore(e.target.value)} />
-            </div>
-            <div className="prof-field">
-              <label htmlFor="prof-grace">Délai de grâce avant impayé (jours)</label>
-              <input id="prof-grace" type="number" min={0} max={30} value={overdueGraceDays} onChange={(e) => setOverdueGraceDays(e.target.value)} />
-            </div>
-          </div>
-        </div>
+            {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#DC2626', marginBottom: 16 }}>{error}</div>}
+            {success && <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#15803D', fontWeight: 600, marginBottom: 16 }}>✓ {success}</div>}
 
-        <div className="prof-card">
-          <div className="prof-toggle-row">
-            <div>
-              <h2 className="prof-card-title">Notifications push</h2>
-              <p className="prof-hint">Recevez les alertes importantes directement sur votre appareil</p>
-            </div>
-            <button
-              type="button"
-              className={`prof-toggle${profile.notificationConsent === 'ACCEPTED' ? ' on' : ''}`}
-              onClick={togglePush}
-              disabled={pushBusy}
-              role="switch"
-              aria-checked={profile.notificationConsent === 'ACCEPTED'}
-              aria-label="Activer les notifications push"
-            >
-              <span className="prof-toggle-knob" />
-            </button>
-          </div>
-        </div>
+            <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Prénom *</label>
+                  <input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required style={ipt()} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Nom *</label>
+                  <input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required style={ipt()} />
+                </div>
+              </div>
 
-        <div className="prof-form-actions">
-          <button type="submit" className="prof-btn-primary" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
-        </div>
-      </form>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Adresse email</label>
+                <input value={profile?.email ?? ''} disabled style={{ ...ipt(), background: '#F9FAFB', color: '#9CA3AF', cursor: 'not-allowed' }} />
+                <p style={{ fontSize: 11.5, color: '#9CA3AF', margin: '4px 0 0' }}>L'email est géré par Supabase Auth et ne peut pas être modifié ici.</p>
+              </div>
 
-      <div className="prof-card prof-danger-card">
-        <h2 className="prof-card-title">Zone dangereuse</h2>
-        <p className="prof-hint">La suppression de votre compte est définitive et anonymise vos données personnelles.</p>
-        <button type="button" className="prof-btn-danger" onClick={() => setShowDeleteModal(true)}>Supprimer mon compte</button>
-      </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Téléphone</label>
+                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" style={ipt()} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Ville</label>
+                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" style={ipt()} />
+                </div>
+              </div>
 
-      {showDeleteModal && (
-        <div className="prof-modal-overlay" onClick={() => setShowDeleteModal(false)}>
-          <div className="prof-modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="prof-modal-title">Supprimer votre compte ?</h2>
-            <p className="prof-modal-text">Cette action est irréversible. Vos données personnelles seront anonymisées et vous serez déconnecté.</p>
-            <div className="prof-modal-actions">
-              <button type="button" className="prof-btn-secondary" onClick={() => setShowDeleteModal(false)} disabled={deleting}>Annuler</button>
-              <button type="button" className="prof-btn-danger" onClick={deleteAccount} disabled={deleting}>
-                {deleting ? 'Suppression…' : 'Supprimer définitivement'}
-              </button>
-            </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
+                <button type="submit" disabled={saving}
+                  style={{ background: saving ? '#93C5FD' : '#0F4C81', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 28px', fontWeight: 700, fontSize: 13.5, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,199 +1,119 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { tenantsApi, ACCOUNT_STATUS_LABELS, type TenantSummary, type AccountStatus } from '@/lib/tenants';
-import { ApiError } from '@/lib/api';
+import { useApi, TTL } from '@/lib/use-api';
 import { initiales } from '@/lib/format';
-import { exportToCsv } from '@/lib/csv-export';
-import './page.css';
 
-const STATUS_TABS: { value: 'ALL' | 'ACTIVE' | 'SUSPENDED'; label: string }[] = [
-  { value: 'ALL', label: 'Tous' },
-  { value: 'ACTIVE', label: 'Actifs' },
-  { value: 'SUSPENDED', label: 'Suspendus' },
-];
-
-function matchesStatusTab(status: AccountStatus, tab: 'ALL' | 'ACTIVE' | 'SUSPENDED'): boolean {
-  if (tab === 'ALL') return true;
-  if (tab === 'ACTIVE') return status === 'ACTIVE';
-  return status !== 'ACTIVE';
+interface TenantSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  createdAt: string;
+  activeLease?: {
+    id: string;
+    property?: { address: string; neighborhood: string; city: string };
+    monthlyRent: number;
+    startDate: string;
+  } | null;
 }
 
-export default function LocatairesListPage() {
-  const [locataires, setLocataires] = useState<TenantSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [search, setSearch] = useState('');
-  const [statusTab, setStatusTab] = useState<'ALL' | 'ACTIVE' | 'SUSPENDED'>('ALL');
+const HERO: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
+  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+};
+const SK: React.CSSProperties = {
+  height: 64, background: 'linear-gradient(90deg,#F3F4F6,#E5E7EB,#F3F4F6)',
+  borderRadius: 8, margin: '8px 16px', animation: 'shimmer 1.4s infinite',
+};
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setErrorMessage('');
-    tenantsApi
-      .list()
-      .then((data) => {
-        if (!cancelled) setLocataires(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement des locataires');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+function formatDate(s: string) {
+  return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
-  const statistiques = useMemo(
-    () => ({
-      total: locataires.length,
-      actifs: locataires.filter((l) => l.accountStatus === 'ACTIVE').length,
-      avecBail: locataires.filter((l) => l.activeLease !== null).length,
-      suspendus: locataires.filter((l) => l.accountStatus !== 'ACTIVE').length,
-    }),
-    [locataires],
-  );
-
-  const locatairesFiltres = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return locataires.filter((l) => {
-      if (!matchesStatusTab(l.accountStatus, statusTab)) return false;
-      if (q) {
-        const haystack = `${l.firstName} ${l.lastName} ${l.email ?? ''} ${l.phone ?? ''}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [locataires, search, statusTab]);
-
-  const exportCsv = () => {
-    exportToCsv(
-      'locataires',
-      [
-        { key: 'nom', label: 'Nom', value: (l: TenantSummary) => `${l.firstName} ${l.lastName}` },
-        { key: 'email', label: 'Email', value: (l: TenantSummary) => l.email ?? '' },
-        { key: 'telephone', label: 'Téléphone', value: (l: TenantSummary) => l.phone ?? '' },
-        { key: 'bien', label: 'Bien', value: (l: TenantSummary) => l.activeLease?.address ?? '' },
-        { key: 'statut', label: 'Statut', value: (l: TenantSummary) => ACCOUNT_STATUS_LABELS[l.accountStatus] },
-      ],
-      locatairesFiltres,
-    );
-  };
+export default function LocatairesPage() {
+  const { data: tenants, loading } = useApi<TenantSummary[]>('/tenants', TTL.LIST);
+  const list = tenants ?? [];
 
   return (
-    <div className="loc-page">
-      <div className="loc-header">
+    <div style={{ padding: '24px 28px' }}>
+      <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}`}</style>
+
+      {/* Hero */}
+      <div style={HERO}>
+        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
         <div>
-          <h1 className="loc-title">Locataires</h1>
-          <p className="loc-subtitle">Gérez vos locataires et leurs baux</p>
-        </div>
-        <div className="loc-header-actions">
-          <button type="button" className="loc-btn-secondary" onClick={exportCsv} disabled={locatairesFiltres.length === 0}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            Exporter
-          </button>
-          <Link href="/dashboard/locataires/nouveau" className="loc-btn-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            Nouveau locataire
-          </Link>
-        </div>
-      </div>
-
-      {errorMessage && <div className="loc-alert-error">{errorMessage}</div>}
-
-      <div className="loc-kpi-grid">
-        <div className="loc-kpi-card">
-          <p className="loc-kpi-label">Total</p>
-          <p className="loc-kpi-value">{loading ? '—' : statistiques.total}</p>
-        </div>
-        <div className="loc-kpi-card">
-          <p className="loc-kpi-label">Actifs</p>
-          <p className="loc-kpi-value loc-kpi-green">{loading ? '—' : statistiques.actifs}</p>
-        </div>
-        <div className="loc-kpi-card">
-          <p className="loc-kpi-label">Avec bail actif</p>
-          <p className="loc-kpi-value loc-kpi-blue">{loading ? '—' : statistiques.avecBail}</p>
-        </div>
-        <div className="loc-kpi-card">
-          <p className="loc-kpi-label">Suspendus</p>
-          <p className="loc-kpi-value loc-kpi-red">{loading ? '—' : statistiques.suspendus}</p>
-        </div>
-      </div>
-
-      <div className="loc-filter-bar">
-        <div className="loc-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-          <input
-            type="text"
-            placeholder="Rechercher par nom, email, téléphone…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="loc-tabs">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              className={`loc-tab${statusTab === tab.value ? ' active' : ''}`}
-              onClick={() => setStatusTab(tab.value)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="loc-table-card">
-          {[1, 2, 3].map((i) => <div key={i} className="loc-row-skeleton" />)}
-        </div>
-      ) : locatairesFiltres.length === 0 ? (
-        <div className="loc-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-          <h3>{locataires.length === 0 ? 'Aucun locataire' : 'Aucun locataire ne correspond à ces filtres'}</h3>
-          <p>
-            {locataires.length === 0
-              ? 'Invitez votre premier locataire pour lui associer un bail.'
-              : 'Essayez de modifier ou d’effacer les filtres.'}
+          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Mes locataires</h1>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
+            Suivi de vos locataires actifs
+            {list.length > 0 && <span style={{ marginLeft: 10, background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '2px 10px', fontSize: 12 }}>{list.length} locataire{list.length > 1 ? 's' : ''}</span>}
           </p>
-          {locataires.length === 0 && (
-            <Link href="/dashboard/locataires/nouveau" className="loc-btn-primary">Nouveau locataire</Link>
-          )}
         </div>
-      ) : (
-        <div className="loc-table-card">
-          <div className="loc-table-header-row">
-            <span>Locataire</span>
-            <span>Téléphone</span>
-            <span>Bien</span>
-            <span>Statut</span>
-            <span />
+      </div>
+
+      {/* Liste */}
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 8 }}>{[1,2,3].map(i => <div key={i} style={SK} />)}</div>
+        ) : list.length === 0 ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
+            <svg style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#D1D5DB' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucun locataire</div>
+            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Invitez un locataire via Paramètres → Inviter un locataire.</div>
           </div>
-          {locatairesFiltres.map((l) => (
-            <Link key={l.id} href={`/dashboard/locataires/${l.id}`} className="loc-table-row">
-              <div className="loc-row-name">
-                <div className="loc-avatar">{initiales(l.firstName, l.lastName, 'L')}</div>
-                <div>
-                  <p className="loc-row-fullname">{l.firstName} {l.lastName}</p>
-                  <p className="loc-row-email">{l.email ?? '—'}</p>
-                </div>
-              </div>
-              <span className="loc-row-phone">{l.phone ?? '—'}</span>
-              <span className="loc-row-bien">{l.activeLease?.address ?? 'Aucun bail actif'}</span>
-              <span className={`loc-status-badge ${l.accountStatus === 'ACTIVE' ? 'loc-status-active' : 'loc-status-suspended'}`}>
-                {ACCOUNT_STATUS_LABELS[l.accountStatus]}
-              </span>
-              <span className="loc-row-arrow">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" /></svg>
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  {['Locataire', 'Contact', 'Bien loué', 'Depuis le', 'Loyer'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11.5, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((t, i) => (
+                  <tr key={t.id} style={{ borderBottom: i < list.length - 1 ? '1px solid #F9FAFB' : undefined }}>
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #0A2650, #0F4C81)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                          {initiales(t.firstName, t.lastName)}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13.5, color: '#111827' }}>{t.firstName} {t.lastName}</div>
+                          {t.city && <div style={{ fontSize: 12, color: '#9CA3AF' }}>{t.city}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      {t.email && <div style={{ fontSize: 13, color: '#374151' }}>{t.email}</div>}
+                      {t.phone && <div style={{ fontSize: 12, color: '#9CA3AF' }}>{t.phone}</div>}
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      {t.activeLease?.property ? (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{t.activeLease.property.address}</div>
+                          <div style={{ fontSize: 12, color: '#9CA3AF' }}>{t.activeLease.property.neighborhood}, {t.activeLease.property.city}</div>
+                        </>
+                      ) : <span style={{ fontSize: 13, color: '#D1D5DB' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '14px 16px', fontSize: 13, color: '#6B7280', whiteSpace: 'nowrap' }}>
+                      {t.activeLease?.startDate ? formatDate(t.activeLease.startDate) : <span style={{ color: '#D1D5DB' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 700, color: '#0A2650', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {t.activeLease ? `${t.activeLease.monthlyRent.toLocaleString('fr-FR')} FCFA` : <span style={{ color: '#D1D5DB', fontWeight: 400 }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

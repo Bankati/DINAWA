@@ -32,9 +32,16 @@ function LoginForm() {
     if (auth.isLoggedIn()) {
       // Lu directement depuis localStorage : le contexte React n'a pas
       // forcément fini d'hydrater son state `user` à ce stade du montage.
-      const raw = localStorage.getItem('warah_user');
-      const role = raw ? JSON.parse(raw).role : undefined;
-      router.replace(role ? roleDefaultRoute(role) : '/');
+      try {
+        const raw = localStorage.getItem('warah_user');
+        const role = raw ? JSON.parse(raw).role : undefined;
+        router.replace(roleDefaultRoute(role ?? 'OWNER'));
+      } catch {
+        // JSON corrompu → on efface et on laisse la page de login s'afficher
+        localStorage.removeItem('warah_access_token');
+        localStorage.removeItem('warah_refresh_token');
+        localStorage.removeItem('warah_user');
+      }
       return;
     }
     // /health/ready est exclu du préfixe /api (sonde Railway) → URL directe

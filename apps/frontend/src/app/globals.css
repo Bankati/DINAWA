@@ -127,6 +127,18 @@ body {
   background-color: var(--color-border);
 }
 
+/* ── Skeleton shimmer ── */
+@keyframes warah-sk {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.sk {
+  background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+  background-size: 400% 100%;
+  animation: warah-sk 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
 .btn-accent {
   background-color: var(--color-accent);
   color: var(--color-text);

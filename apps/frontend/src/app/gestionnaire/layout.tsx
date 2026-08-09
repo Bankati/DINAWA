@@ -6,7 +6,9 @@ import AppShell from '@/components/app-shell';
 export default function GestionnaireLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireRole roles={['MANAGER']}>
-      <AppShell>{children}</AppShell>
+      <AppShell>
+        {children}
+      </AppShell>
     </RequireRole>
   );
 }

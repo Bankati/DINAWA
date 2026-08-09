@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { adminApi, type AdminUser } from '@/lib/admin';
+import type { AdminUser } from '@/lib/admin';
+import { useApi, TTL } from '@/lib/use-api';
 import { initiales } from '@/lib/format';
 import './page.css';
 
@@ -35,21 +36,25 @@ const TABS = [
 ];
 
 export default function ComptesPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tous');
   const [search, setSearch] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
-    const tab = TABS.find((t) => t.key === activeTab);
-    setLoading(true);
-    adminApi.listUsers({ role: tab?.role, search: search.trim() || undefined, limit: 100 })
-      .then((res) => { setUsers(res.data); setTotal(res.total); })
-      .catch(() => setError('Impossible de charger les comptes.'))
-      .finally(() => setLoading(false));
-  }, [activeTab, search]);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const tab = TABS.find((t) => t.key === activeTab);
+  const qs: Record<string, string> = {};
+  if (tab?.role) qs.role = tab.role;
+  if (debouncedSearch.trim()) qs.search = debouncedSearch.trim();
+  qs.limit = '100';
+  const cacheKey = `/admin/users?${new URLSearchParams(qs).toString()}`;
+
+  const { data: res, loading, error } = useApi<{ data: AdminUser[]; total: number; page: number; limit: number }>(cacheKey, TTL.LIST);
+  const users = res?.data ?? [];
+  const total = res?.total ?? 0;
 
   const totalActifs = useMemo(() => users.filter((u) => u.accountStatus === 'ACTIVE').length, [users]);
 

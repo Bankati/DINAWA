@@ -1,246 +1,262 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import {
-  propertiesApi,
-  PROPERTY_TYPE_LABELS,
-  PROPERTY_STATUS_LABELS,
-  type Property,
-  type PropertyStatus,
-} from '@/lib/properties';
-import { ApiError } from '@/lib/api';
-import { fcfa } from '@/lib/dashboard';
-import { Dropdown } from '@/components/ui/dropdown';
-import { exportToCsv } from '@/lib/csv-export';
-import './page.css';
+import { useState } from 'react';
+import { api } from '@/lib/api';
+import { useApi, TTL } from '@/lib/use-api';
+import { cacheInvalidate } from '@/lib/cache';
+import { formatFcfa } from '@/lib/format';
 
-const STATUS_TABS: { value: PropertyStatus | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: 'Tous' },
-  { value: 'VACANT', label: 'Vacant' },
-  { value: 'OCCUPIED', label: 'Occupé' },
-  { value: 'RENOVATION', label: 'En travaux' },
-  { value: 'ARCHIVED', label: 'Archivé' },
-];
+type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
+type PropertyStatus = 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
 
-const STATUS_BADGE_CLASSES: Record<PropertyStatus, string> = {
-  OCCUPIED: 'bg-green-100 text-green-800',
-  VACANT: 'bg-blue-100 text-blue-800',
-  RENOVATION: 'bg-orange-100 text-orange-800',
-  ARCHIVED: 'bg-gray-100 text-gray-600',
+interface Property {
+  id: string;
+  type: PropertyType;
+  status: PropertyStatus;
+  address: string;
+  neighborhood: string;
+  city: string;
+  surfaceArea: number;
+  roomsCount: number | null;
+  monthlyRent: number;
+  monthlyCharges: number;
+  description: string | null;
+  createdAt: string;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial',
+};
+const STATUS_LABELS: Record<string, string> = {
+  OCCUPIED: 'Occupé', VACANT: 'Vacant', RENOVATION: 'Travaux', ARCHIVED: 'Archivé',
+};
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  OCCUPIED: { bg: '#DCFCE7', color: '#15803D' },
+  VACANT: { bg: '#FEF3C7', color: '#D97706' },
+  RENOVATION: { bg: '#EDE9FE', color: '#7C3AED' },
+  ARCHIVED: { bg: '#F3F4F6', color: '#6B7280' },
 };
 
-export default function BiensListPage() {
-  const [biens, setBiens] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
+const HERO: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
+  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+};
+const CARD: React.CSSProperties = { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' };
+const ADD_BTN: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, background: '#C9982E', color: '#fff',
+  border: 'none', borderRadius: 10, padding: '10px 18px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+};
+const SK: React.CSSProperties = {
+  height: 44, background: 'linear-gradient(90deg,#F3F4F6,#E5E7EB,#F3F4F6)',
+  borderRadius: 8, margin: '8px 16px', animation: 'shimmer 1.4s infinite',
+};
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PropertyStatus | 'ALL'>('ALL');
-  const [cityFilter, setCityFilter] = useState('');
+const EMPTY_FORM = {
+  type: 'APARTMENT', address: '', neighborhood: '', city: '',
+  surfaceArea: '', roomsCount: '', monthlyRent: '', monthlyCharges: '0', description: '',
+};
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setErrorMessage('');
-    propertiesApi
-      .list()
-      .then((res) => {
-        if (!cancelled) setBiens(res.data);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setErrorMessage(err instanceof ApiError ? err.message : 'Erreur lors du chargement des biens');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+function ipt(style?: React.CSSProperties): React.CSSProperties {
+  return { width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13, boxSizing: 'border-box', ...style };
+}
 
-  const villes = useMemo(
-    () => Array.from(new Set(biens.map((b) => b.city))).sort(),
-    [biens],
-  );
+export default function BiensPage() {
+  const [filter, setFilter] = useState('');
+  const url = filter ? `/properties?status=${filter}&limit=100` : '/properties?limit=100';
+  const { data: res, loading, reload } = useApi<{ data: Property[]; total: number }>(url, TTL.LIST);
+  const biens = res?.data ?? [];
 
-  const statistiques = useMemo(() => {
-    const actifs = biens.filter((b) => b.status !== 'ARCHIVED');
-    return {
-      total: actifs.length,
-      occupes: actifs.filter((b) => b.status === 'OCCUPIED').length,
-      vacants: actifs.filter((b) => b.status === 'VACANT').length,
-      enTravaux: actifs.filter((b) => b.status === 'RENOVATION').length,
-    };
-  }, [biens]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState('');
+  const [success, setSuccess] = useState('');
+  const [archiving, setArchiving] = useState<string | null>(null);
 
-  const biensFiltres = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return biens.filter((b) => {
-      if (statusFilter !== 'ALL' && b.status !== statusFilter) return false;
-      if (cityFilter && b.city !== cityFilter) return false;
-      if (q) {
-        const haystack = `${b.neighborhood} ${b.city} ${b.address} ${b.description ?? ''}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [biens, search, statusFilter, cityFilter]);
-
-  const hasActiveFilters = search.trim() !== '' || statusFilter !== 'ALL' || cityFilter !== '';
-
-  const clearFilters = () => {
-    setSearch('');
-    setStatusFilter('ALL');
-    setCityFilter('');
-  };
-
-  const exportCsv = () => {
-    exportToCsv(
-      'mes-biens',
-      [
-        { key: 'type', label: 'Type', value: (b: Property) => PROPERTY_TYPE_LABELS[b.type] },
-        { key: 'statut', label: 'Statut', value: (b: Property) => PROPERTY_STATUS_LABELS[b.status] },
-        { key: 'quartier', label: 'Quartier', value: (b: Property) => b.neighborhood },
-        { key: 'ville', label: 'Ville', value: (b: Property) => b.city },
-        { key: 'surface', label: 'Surface (m²)', value: (b: Property) => b.surfaceArea },
-        { key: 'loyer', label: 'Loyer mensuel (FCFA)', value: (b: Property) => b.monthlyRent },
-        { key: 'charges', label: 'Charges (FCFA)', value: (b: Property) => b.monthlyCharges },
-      ],
-      biensFiltres,
+  function field(label: string, key: keyof typeof form, props: React.InputHTMLAttributes<HTMLInputElement> = {}) {
+    return (
+      <div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>{label}</label>
+        <input value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} style={ipt()} {...props} />
+      </div>
     );
-  };
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setFormErr('');
+    try {
+      await api.post('/properties', {
+        type: form.type,
+        address: form.address,
+        neighborhood: form.neighborhood,
+        city: form.city,
+        surfaceArea: parseFloat(form.surfaceArea),
+        ...(form.roomsCount ? { roomsCount: parseInt(form.roomsCount) } : {}),
+        monthlyRent: parseInt(form.monthlyRent),
+        monthlyCharges: parseInt(form.monthlyCharges || '0'),
+        ...(form.description ? { description: form.description } : {}),
+      });
+      cacheInvalidate(url);
+      reload();
+      setShowForm(false);
+      setSuccess('Bien ajouté avec succès');
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err: unknown) {
+      setFormErr(err instanceof Error ? err.message : 'Erreur lors de la création');
+    } finally { setSaving(false); }
+  }
+
+  async function archive(id: string) {
+    if (!confirm('Archiver ce bien ?')) return;
+    setArchiving(id);
+    try {
+      await api.delete(`/properties/${id}`);
+      cacheInvalidate(url);
+      reload();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erreur');
+    } finally { setArchiving(null); }
+  }
 
   return (
-    <div className="biens-page">
-      <div className="biens-header">
-        <div>
-          <h1 className="biens-title">Mes biens</h1>
-          <p className="biens-subtitle">Gérez votre portefeuille immobilier</p>
-        </div>
-        <div className="biens-header-actions">
-          <button type="button" className="biens-btn-secondary" onClick={exportCsv} disabled={biensFiltres.length === 0}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            Exporter
-          </button>
-          <Link href="/dashboard/biens/nouveau" className="biens-btn-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+    <div style={{ padding: '24px 28px' }}>
+      <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}`}</style>
+
+      {/* Hero */}
+      <div style={HERO}>
+        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Mes biens</h1>
+            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
+              Gérez votre portefeuille immobilier
+              {res && <span style={{ marginLeft: 10, background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '2px 10px', fontSize: 12 }}>{res.total} bien{res.total > 1 ? 's' : ''}</span>}
+            </p>
+          </div>
+          <button onClick={() => { setForm({ ...EMPTY_FORM }); setFormErr(''); setShowForm(true); }} style={ADD_BTN}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 15, height: 15 }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Ajouter un bien
-          </Link>
-        </div>
-      </div>
-
-      {errorMessage && <div className="biens-alert-error">{errorMessage}</div>}
-
-      <div className="biens-kpi-grid">
-        <div className="biens-kpi-card">
-          <p className="biens-kpi-label">Total</p>
-          <p className="biens-kpi-value">{loading ? '—' : statistiques.total}</p>
-        </div>
-        <div className="biens-kpi-card">
-          <p className="biens-kpi-label">Occupés</p>
-          <p className="biens-kpi-value biens-kpi-green">{loading ? '—' : statistiques.occupes}</p>
-        </div>
-        <div className="biens-kpi-card">
-          <p className="biens-kpi-label">Vacants</p>
-          <p className="biens-kpi-value biens-kpi-blue">{loading ? '—' : statistiques.vacants}</p>
-        </div>
-        <div className="biens-kpi-card">
-          <p className="biens-kpi-label">En travaux</p>
-          <p className="biens-kpi-value biens-kpi-amber">{loading ? '—' : statistiques.enTravaux}</p>
-        </div>
-      </div>
-
-      <div className="biens-filter-bar">
-        <div className="biens-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-          <input
-            type="text"
-            placeholder="Rechercher par quartier, ville, adresse…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="biens-tabs">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              className={`biens-tab${statusFilter === tab.value ? ' active' : ''}`}
-              onClick={() => setStatusFilter(tab.value)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="biens-city-select">
-          <Dropdown
-            value={cityFilter}
-            onChange={setCityFilter}
-            placeholder="Toutes les villes"
-            options={[{ value: '', label: 'Toutes les villes' }, ...villes.map((ville) => ({ value: ville, label: ville }))]}
-          />
-        </div>
-
-        {hasActiveFilters && (
-          <button type="button" className="biens-clear-filters" onClick={clearFilters}>
-            Effacer les filtres
           </button>
+        </div>
+      </div>
+
+      {success && <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 16px', marginBottom: 16, color: '#15803D', fontSize: 13, fontWeight: 600 }}>✓ {success}</div>}
+
+      {/* Filtres statut */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[['', 'Tous'], ['OCCUPIED', 'Occupés'], ['VACANT', 'Vacants'], ['RENOVATION', 'Travaux'], ['ARCHIVED', 'Archivés']].map(([v, l]) => (
+          <button key={v} onClick={() => setFilter(v)}
+            style={{ background: filter === v ? '#0F4C81' : '#fff', color: filter === v ? '#fff' : '#374151', border: `1px solid ${filter === v ? '#0F4C81' : '#D1D5DB'}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div style={CARD}>
+        {loading ? (
+          <div style={{ padding: 8 }}>{[1,2,3].map(i => <div key={i} style={SK} />)}</div>
+        ) : biens.length === 0 ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
+            <svg style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#D1D5DB' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucun bien trouvé</div>
+            <div style={{ fontSize: 13.5, color: '#6B7280' }}>Ajoutez votre premier bien pour commencer.</div>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                  {['Type', 'Adresse', 'Ville', 'Surface', 'Loyer mensuel', 'Statut', 'Actions'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11.5, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {biens.map((b, i) => {
+                  const sc = STATUS_COLORS[b.status] ?? { bg: '#F3F4F6', color: '#6B7280' };
+                  return (
+                    <tr key={b.id} style={{ borderBottom: i < biens.length - 1 ? '1px solid #F9FAFB' : undefined, transition: 'background 0.1s' }}>
+                      <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 600, color: '#374151' }}>{TYPE_LABELS[b.type] ?? b.type}</td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: '#111827' }}>{b.address}</div>
+                        <div style={{ fontSize: 12, color: '#9CA3AF' }}>{b.neighborhood}</div>
+                      </td>
+                      <td style={{ padding: '14px 16px', fontSize: 13, color: '#374151' }}>{b.city}</td>
+                      <td style={{ padding: '14px 16px', fontSize: 13, color: '#6B7280' }}>{b.surfaceArea} m²</td>
+                      <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 700, color: '#0A2650', fontVariantNumeric: 'tabular-nums' }}>{formatFcfa(b.monthlyRent)}</td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ background: sc.bg, color: sc.color, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>{STATUS_LABELS[b.status] ?? b.status}</span>
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        {b.status !== 'ARCHIVED' && (
+                          <button onClick={() => archive(b.id)} disabled={archiving === b.id}
+                            style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 7, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: archiving === b.id ? 'not-allowed' : 'pointer' }}>
+                            {archiving === b.id ? '…' : 'Archiver'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {loading ? (
-        <div className="biens-grid">
-          {[1, 2, 3, 4].map((i) => <div key={i} className="biens-card biens-skeleton" />)}
-        </div>
-      ) : biensFiltres.length === 0 ? (
-        <div className="biens-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-          <h3>{biens.length === 0 ? 'Aucun bien ajouté' : 'Aucun bien ne correspond à ces filtres'}</h3>
-          <p>
-            {biens.length === 0
-              ? 'Ajoutez votre premier bien pour commencer à gérer votre portefeuille.'
-              : 'Essayez de modifier ou d’effacer les filtres.'}
-          </p>
-          {biens.length === 0 && (
-            <Link href="/dashboard/biens/nouveau" className="biens-btn-primary">Ajouter un bien</Link>
-          )}
-        </div>
-      ) : (
-        <div className="biens-grid">
-          {biensFiltres.map((bien) => (
-            <article key={bien.id} className="biens-card">
-              <Link href={`/dashboard/biens/${bien.id}`} className="biens-card-link">
-                <div className="biens-card-photo">
-                  {bien.photos[0] ? (
-                    <img src={bien.photos[0].url} alt="" />
-                  ) : (
-                    <div className="biens-card-photo-placeholder">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
-                    </div>
-                  )}
-                  <span className="biens-card-type-badge">{PROPERTY_TYPE_LABELS[bien.type]}</span>
-                  <span className={`biens-card-status-badge ${STATUS_BADGE_CLASSES[bien.status]}`}>{PROPERTY_STATUS_LABELS[bien.status]}</span>
-                </div>
-                <div className="biens-card-body">
-                  <p className="biens-card-price">{fcfa(bien.monthlyRent)}<span>/mois</span></p>
-                  <p className="biens-card-loc">{bien.neighborhood}, {bien.city}</p>
-                  <p className="biens-card-meta">
-                    {bien.surfaceArea} m²{bien.roomsCount ? ` · ${bien.roomsCount} pièce${bien.roomsCount > 1 ? 's' : ''}` : ''}
-                  </p>
-                  {bien.description && <p className="biens-card-desc">{bien.description}</p>}
-                </div>
-              </Link>
-              <div className="biens-card-actions">
-                <Link href={`/dashboard/biens/${bien.id}/edit`} className="biens-card-btn">Modifier</Link>
-                <Link href={`/dashboard/biens/${bien.id}`} className="biens-card-btn biens-card-btn-primary">Voir le détail</Link>
+      {/* Modal ajout */}
+      {showForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }} onClick={() => setShowForm(false)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: 0 }}>Ajouter un bien</h2>
+              <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9CA3AF' }}>×</button>
+            </div>
+            <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Type <span style={{ color: '#DC2626' }}>*</span></label>
+                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13 }}>
+                  <option value="VILLA">Villa</option>
+                  <option value="APARTMENT">Appartement</option>
+                  <option value="STUDIO">Studio</option>
+                  <option value="COMMERCIAL">Commercial</option>
+                </select>
               </div>
-            </article>
-          ))}
+              {field('Adresse *', 'address', { required: true, placeholder: 'Ex: Rue des Cocotiers, lot 42' })}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {field('Quartier *', 'neighborhood', { required: true, placeholder: 'Ex: Agbalépédogan' })}
+                {field('Ville *', 'city', { required: true, placeholder: 'Ex: Lomé' })}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {field('Surface (m²) *', 'surfaceArea', { required: true, type: 'number', min: '1', placeholder: '75' })}
+                {field('Nombre de pièces', 'roomsCount', { type: 'number', min: '1', placeholder: '3' })}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {field('Loyer mensuel (FCFA) *', 'monthlyRent', { required: true, type: 'number', min: '0', placeholder: '150000' })}
+                {field('Charges mensuelles (FCFA)', 'monthlyCharges', { type: 'number', min: '0', placeholder: '10000' })}
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Description</label>
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3}
+                  placeholder="Description optionnelle du bien..."
+                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
+              </div>
+              {formErr && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#DC2626' }}>{formErr}</div>}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowForm(false)}
+                  style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 9, padding: '10px 20px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+                <button type="submit" disabled={saving}
+                  style={{ background: saving ? '#93C5FD' : '#0F4C81', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 24px', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  {saving ? 'Enregistrement…' : 'Ajouter le bien'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

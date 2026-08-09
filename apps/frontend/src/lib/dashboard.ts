@@ -105,13 +105,47 @@ const MAX_PAGES = 5; // plafond 500 paiements/an — largement suffisant pour un
 
 let cache: { annee: number; promise: Promise<DashboardData> } | null = null;
 
+const LS_KEY = "warah_dashboard_cache";
+
+export function getDashboardStale(annee: number): DashboardData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.annee !== annee) return null;
+    return parsed.data as DashboardData;
+  } catch {
+    return null;
+  }
+}
+
+function saveDashboardCache(annee: number, data: DashboardData): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ annee, data }));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function invalidateDashboardCache(): void {
   cache = null;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function getData(annee: number): Promise<DashboardData> {
   if (cache && cache.annee === annee) return cache.promise;
-  const promise = buildDashboard(annee);
+  const promise = buildDashboard(annee).then((data) => {
+    saveDashboardCache(annee, data);
+    return data;
+  });
   cache = { annee, promise };
   return promise;
 }

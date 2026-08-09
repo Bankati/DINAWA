@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PaymentDeclarationsService } from './payment-declarations.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CreatePaymentDeclarationDto } from './dto/create-payment-declaration.dto';
@@ -84,6 +89,10 @@ describe('PaymentDeclarationsService', () => {
       declaredAt: '2026-01-01',
       declaredMethod: 'CASH',
     };
+    // Preuve obligatoire depuis la fusion avec l'autre session — réutilisée
+    // par tous les tests de create() qui ne testent pas spécifiquement son
+    // absence.
+    const proof = { buffer: Buffer.from('x'), mimetype: 'image/png' } as Express.Multer.File;
 
     beforeEach(() => {
       prisma.paymentScheduleEntry.findUnique.mockResolvedValue(makeScheduleEntry());
@@ -91,15 +100,20 @@ describe('PaymentDeclarationsService', () => {
 
     it("lève NotFoundException si l'échéance est introuvable", async () => {
       prisma.paymentScheduleEntry.findUnique.mockResolvedValue(null);
-      await expect(service.create(tenant, dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(tenant, dto, proof)).rejects.toThrow(NotFoundException);
     });
 
     it("lève ForbiddenException si l'appelant n'est pas le locataire de ce bail", async () => {
-      await expect(service.create(otherTenant, dto)).rejects.toThrow(ForbiddenException);
+      await expect(service.create(otherTenant, dto, proof)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lève BadRequestException si aucune preuve de paiement n’est fournie', async () => {
+      await expect(service.create(tenant, dto)).rejects.toThrow(BadRequestException);
+      expect(tx.payment.create).not.toHaveBeenCalled();
     });
 
     it('crée un Payment PENDING_CONFIRMATION avec source TENANT_DECLARATION et une PaymentDeclaration liée', async () => {
-      await service.create(tenant, dto);
+      await service.create(tenant, dto, proof);
 
       const [paymentArgs] = tx.payment.create.mock.calls[0] as [
         { data: { source: string; status: string; paidAmount: number } },
@@ -112,7 +126,7 @@ describe('PaymentDeclarationsService', () => {
     });
 
     it('notifie le propriétaire (celui qui peut agir sur le bien)', async () => {
-      await service.create(tenant, dto);
+      await service.create(tenant, dto, proof);
 
       expect(notify.notifyUser).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 'owner-1', event: 'payment-declaration-pending' }),
@@ -121,15 +135,14 @@ describe('PaymentDeclarationsService', () => {
 
     it('notifie le gestionnaire mandaté plutôt que le propriétaire si un mandat actif existe', async () => {
       prisma.mandate.findFirst.mockResolvedValue({ managerId: 'manager-1', status: 'ACTIVE' });
-      await service.create(tenant, dto);
+      await service.create(tenant, dto, proof);
 
       expect(notify.notifyUser).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 'manager-1' }),
       );
     });
 
-    it('upload le justificatif si fourni', async () => {
-      const proof = { buffer: Buffer.from('x'), mimetype: 'image/png' } as Express.Multer.File;
+    it('upload le justificatif fourni', async () => {
       await service.create(tenant, dto, proof);
       expect(storage.upload).toHaveBeenCalledWith(
         'payment-proofs',

@@ -1,89 +1,45 @@
-import { api, getBlob } from "./api";
+import { api, API_URL } from "./api";
 
-export type PaymentStatus =
-  | "PENDING"
-  | "PENDING_CONFIRMATION"
-  | "PAID"
-  | "PARTIAL"
-  | "LATE"
-  | "OVERDUE"
-  | "REJECTED";
-export type PaymentSource =
-  "CASHPAY_API" | "MANUAL_OWNER" | "TENANT_DECLARATION";
-export type PaymentMethod = "TMONEY" | "FLOOZ" | "CASH" | "BANK_TRANSFER";
-// Le formulaire de saisie manuelle (propriétaire/gestionnaire) n'accepte que
-// ces deux modes — T-Money/Flooz dépendent de Cashpay (webhook non construit).
-export type ManualPaymentMethod = "CASH" | "BANK_TRANSFER";
-
-export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  PENDING: "En attente",
-  PENDING_CONFIRMATION: "À confirmer",
-  PAID: "Payé",
-  PARTIAL: "Partiel",
-  LATE: "En retard",
-  OVERDUE: "Impayé",
-  REJECTED: "Rejeté",
-};
-
-export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  TMONEY: "T-Money",
-  FLOOZ: "Flooz",
-  CASH: "Espèces",
-  BANK_TRANSFER: "Virement bancaire",
-};
-
-export const PAYMENT_STATUS_BADGE_CLASSES: Record<PaymentStatus, string> = {
-  PAID: "bg-green-100 text-green-800",
-  PARTIAL: "bg-yellow-100 text-yellow-800",
-  LATE: "bg-orange-100 text-orange-800",
-  OVERDUE: "bg-red-100 text-red-800",
-  REJECTED: "bg-red-100 text-red-800",
-  PENDING_CONFIRMATION: "bg-blue-50 text-blue-700",
-  PENDING: "bg-gray-100 text-gray-800",
-};
-
-export const PAYMENT_STATUS_DOT_CLASSES: Record<PaymentStatus, string> = {
-  PAID: "bg-green-500",
-  PARTIAL: "bg-yellow-500",
-  LATE: "bg-orange-500",
-  OVERDUE: "bg-red-500",
-  REJECTED: "bg-red-500",
-  PENDING_CONFIRMATION: "bg-blue-400",
-  PENDING: "bg-gray-500",
-};
-
-interface PersonSummary {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
+// Télécharge un fichier binaire authentifié (PDF, image) — api.get() ne retourne que du JSON.
+async function fetchBlob(path: string): Promise<Blob> {
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("warah_access_token")
+      : null;
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res
+      .json()
+      .catch(() => ({ message: `Erreur ${res.status}` }));
+    throw new Error(err.message ?? `Erreur ${res.status}`);
+  }
+  return res.blob();
 }
 
 export interface Payment {
   id: string;
   leaseId: string;
   scheduleEntryId: string | null;
-  source: PaymentSource;
-  status: PaymentStatus;
-  paymentMethod: PaymentMethod | null;
+  status: string;
   paidAmount: number;
-  paidAt: string | null;
-  transactionId: string | null;
+  paymentMethod: string;
   note: string | null;
   proofStoragePath: string | null;
-  recordedByUserId: string | null;
-  confirmedByUserId: string | null;
-  confirmedAt: string | null;
-  rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
   lease?: {
     id: string;
-    tenant?: PersonSummary;
+    tenant?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
     property?: {
       id: string;
       address: string;
-      neighborhood: string;
       city: string;
     };
   };
@@ -114,10 +70,10 @@ export interface PaymentDeclaration {
 }
 
 export interface CreatePaymentDeclarationDto {
-  leaseId: string;
   scheduleEntryId: string;
   declaredAmount: number;
-  paymentMethod: string;
+  declaredAt: string;
+  declaredMethod: "CASH" | "BANK_TRANSFER";
   note?: string;
 }
 
@@ -125,40 +81,56 @@ export interface RejectPaymentDto {
   rejectionReason: string;
 }
 
-export interface CreateManualPaymentDto {
-  scheduleEntryId: string;
-  paidAmount: number;
-  paidAt: string;
-  paymentMethod: ManualPaymentMethod;
-  note?: string;
-}
+export type PaymentStatus =
+  | "PENDING"
+  | "PENDING_CONFIRMATION"
+  | "PAID"
+  | "LATE"
+  | "REJECTED"
+  | "CANCELLED";
 
-export interface ListPaymentsQuery {
-  page?: number;
-  limit?: number;
-  propertyId?: string;
-  tenantUserId?: string;
-  status?: PaymentStatus;
-  source?: PaymentSource;
-  from?: string;
-  to?: string;
-}
+export const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "En attente",
+  PENDING_CONFIRMATION: "À confirmer",
+  PAID: "Payé",
+  LATE: "En retard",
+  REJECTED: "Rejeté",
+  CANCELLED: "Annulé",
+};
 
-export interface PaginatedPayments {
-  data: Payment[];
-  page: number;
-  limit: number;
-  total: number;
-}
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: "Espèces",
+  BANK_TRANSFER: "Virement",
+  TMONEY: "T-Money",
+  FLOOZ: "Flooz",
+};
+
+export const PAYMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
+  PENDING: "badge-warning",
+  PENDING_CONFIRMATION: "badge-info",
+  PAID: "badge-success",
+  LATE: "badge-danger",
+  REJECTED: "badge-danger",
+  CANCELLED: "badge-neutral",
+};
+
+export const PAYMENT_STATUS_DOT_CLASSES: Record<string, string> = {
+  PENDING: "dot-warning",
+  PENDING_CONFIRMATION: "dot-info",
+  PAID: "dot-success",
+  LATE: "dot-danger",
+  REJECTED: "dot-danger",
+  CANCELLED: "dot-neutral",
+};
 
 export const paymentsApi = {
   // Créer une déclaration de paiement locataire
   createDeclaration: (dto: CreatePaymentDeclarationDto, file?: File) => {
     const formData = new FormData();
-    formData.append("leaseId", dto.leaseId);
     formData.append("scheduleEntryId", dto.scheduleEntryId);
     formData.append("declaredAmount", dto.declaredAmount.toString());
-    formData.append("paymentMethod", dto.paymentMethod);
+    formData.append("declaredAt", dto.declaredAt);
+    formData.append("declaredMethod", dto.declaredMethod);
     if (dto.note) formData.append("note", dto.note);
     if (file) formData.append("proof", file);
     return api.post<PaymentDeclaration>("/payment-declarations", formData);
@@ -188,31 +160,37 @@ export const paymentsApi = {
   rejectPayment: (id: string, dto: RejectPaymentDto) =>
     api.post<Payment>(`/payments/${id}/reject`, dto),
 
-  // Récupérer l'historique des paiements (propriétaire/gestionnaire/locataire)
-  getPayments: (query?: ListPaymentsQuery): Promise<PaginatedPayments> => {
+  // Récupérer l'historique des paiements
+  getPayments: (query?: {
+    leaseId?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) => {
     const params = query
       ? "?" +
         new URLSearchParams(
           Object.entries(query)
-            .filter(([, v]) => v != null && v !== "")
+            .filter(([, v]) => v != null)
             .map(([k, v]) => [k, String(v)]),
         ).toString()
       : "";
-    return api.get<PaginatedPayments>(`/payments${params}`);
+    return api.get<{ data: Payment[]; total: number }>(`/payments${params}`);
   },
 
-  // Télécharger la quittance PDF — réponse binaire, jamais du JSON
-  downloadReceipt: (id: string) => getBlob(`/payments/${id}/receipt.pdf`),
+  // Télécharger la quittance PDF
+  downloadReceipt: (id: string) => fetchBlob(`/payments/${id}/receipt.pdf`),
 
-  // Créer un paiement manuel (propriétaire/gestionnaire) — toujours PAID
-  // immédiatement, source MANUAL_OWNER
-  createManualPayment: (dto: CreateManualPaymentDto, file?: File) => {
+  // URL signée pour consulter la preuve d'une déclaration
+  getProofUrl: (id: string) =>
+    api.get<{ url: string }>(`/payment-declarations/${id}/proof`),
+
+  // Créer un paiement manuel (propriétaire/gestionnaire)
+  createManualPayment: (dto: Record<string, string | number>, file?: File) => {
     const formData = new FormData();
-    formData.append("scheduleEntryId", dto.scheduleEntryId);
-    formData.append("paidAmount", String(dto.paidAmount));
-    formData.append("paidAt", dto.paidAt);
-    formData.append("paymentMethod", dto.paymentMethod);
-    if (dto.note) formData.append("note", dto.note);
+    Object.entries(dto).forEach(([key, value]) => {
+      formData.append(key, String(value));
+    });
     if (file) formData.append("proof", file);
     return api.post<Payment>("/payments/manual", formData);
   },
