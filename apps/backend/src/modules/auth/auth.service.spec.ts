@@ -37,6 +37,7 @@ describe('AuthService', () => {
     ownerProfile: { create: jest.Mock };
     managerProfile: { create: jest.Mock };
     tenantProfile: { create: jest.Mock };
+    subscription: { create: jest.Mock };
     lease: { create: jest.Mock };
     paymentScheduleEntry: { createMany: jest.Mock };
     property: { update: jest.Mock };
@@ -89,6 +90,7 @@ describe('AuthService', () => {
       ownerProfile: { create: jest.fn().mockResolvedValue({}) },
       managerProfile: { create: jest.fn().mockResolvedValue({}) },
       tenantProfile: { create: jest.fn().mockResolvedValue({}) },
+      subscription: { create: jest.fn().mockResolvedValue({}) },
       lease: { create: jest.fn().mockResolvedValue(createdLease) },
       paymentScheduleEntry: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       property: { update: jest.fn().mockResolvedValue({}) },
@@ -318,6 +320,14 @@ describe('AuthService', () => {
       expect(tx.ownerProfile.create).toHaveBeenCalledWith({
         data: { userId: createdUser.id, residenceCountry: ownerDto.residenceCountry },
       });
+      // Abonnement créé systématiquement à l'inscription (voir /architect
+      // unité 35) — Starter + bêta gratuite immédiate.
+      const [subscriptionArgs] = tx.subscription.create.mock.calls[0] as [
+        { data: { userId: string; tier: string; betaUntil: Date } },
+      ];
+      expect(subscriptionArgs.data.userId).toBe(createdUser.id);
+      expect(subscriptionArgs.data.tier).toBe('STARTER');
+      expect(subscriptionArgs.data.betaUntil).toBeInstanceOf(Date);
       expect(emailService.sendEmail).toHaveBeenCalledWith({
         to: ownerDto.email,
         template: 'signup-confirmation',

@@ -36,3 +36,19 @@ export const CRON_OVERDUE_ALERTS = '30 * * * *';
 // Supabase free tier met le projet en veille après ~5 min d'inactivité — ce
 // ping maintient la connexion PostgreSQL active (voir supabase-keepalive.task.ts).
 export const CRON_SUPABASE_KEEPALIVE = '0 */4 * * * *';
+
+// Rapports mensuels automatiques (voir build-plan.md unité 33) — le 1er de
+// chaque mois à 8h Lomé (UTC+0). Premier cron mensuel du projet.
+export const CRON_MONTHLY_REPORTS = '0 8 1 * *';
+
+// Forfaits d'abonnement (voir build-plan.md/code-standards.md unité 35) —
+// `managedPropertiesQuota: null` = illimité (Premium).
+export const SUBSCRIPTION_TIERS = {
+  STARTER: { priceFcfa: 2_000, managedPropertiesQuota: 5 },
+  PRO: { priceFcfa: 5_000, managedPropertiesQuota: 15 },
+  PREMIUM: { priceFcfa: 10_000, managedPropertiesQuota: null },
+} as const;
+
+// Période bêta — 3 mois gratuits à l'inscription (voir /architect unité 35),
+// y compris pour les comptes rétro-remplis lors de la sortie de cette unité.
+export const BETA_FREE_MONTHS = 3;

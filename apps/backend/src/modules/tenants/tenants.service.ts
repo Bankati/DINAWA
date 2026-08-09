@@ -264,7 +264,10 @@ export class TenantsService {
     const isSelf = user.id === tenantUserId;
 
     const relationFilter: Prisma.LeaseWhereInput = {
-      OR: [{ ownerId: user.id }, { property: { mandates: { some: { managerId: user.id } } } }],
+      OR: [
+        { ownerId: user.id },
+        { property: { mandates: { some: { managerId: user.id, status: 'ACTIVE' } } } },
+      ],
     };
 
     if (!isAdmin && !isSelf) {

@@ -40,7 +40,7 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
   },
   'monthly-report': {
     title: 'Rapport mensuel disponible',
-    body: 'Votre rapport pour {period} est prêt.',
+    body: 'Votre rapport pour {periodLabel} est prêt.',
     url: '/dashboard/reports',
   },
   'inactivity-warning': {
@@ -67,6 +67,11 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     title: 'Nouveau bail',
     body: 'Vous avez un nouveau bail pour {propertyAddress}.',
     url: '/dashboard/leases',
+  },
+  'mandate-created': {
+    title: 'Proposition de mandat',
+    body: '{ownerName} vous propose un mandat de gestion pour {propertySummary}.',
+    url: '/gestionnaire/mandats',
   },
 };
 

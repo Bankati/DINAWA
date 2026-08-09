@@ -27,6 +27,11 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { PaymentDeclarationsModule } from './modules/payment-declarations/payment-declarations.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { MandatesModule } from './modules/mandates/mandates.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ManagerReportsModule } from './modules/manager-reports/manager-reports.module';
+import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -115,6 +120,26 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     // Panneau super admin — gestion des comptes
     AdminModule,
+
+    // Mandats propriétaire ↔ gestionnaire ↔ bien (voir build-plan.md unité 31)
+    MandatesModule,
+
+    // Tableau de bord gestionnaire (voir build-plan.md unité 32)
+    DashboardModule,
+
+    // Rapports mensuels consolidés par propriétaire mandant, prévisualisation
+    // PDF (voir build-plan.md unité 33) — l'envoi automatique lui-même vit
+    // dans SchedulingModule (monthly-reports.task.ts)
+    ManagerReportsModule,
+
+    // Annuaire public des gestionnaires + avis (voir build-plan.md unité 34)
+    // — la modération admin vit dans AdminModule, qui importe ce module
+    ManagerReviewsModule,
+
+    // Forfaits et quotas (voir build-plan.md unité 35) — unité 36
+    // (prélèvement automatique via Cashpay) reportée, agréments T-Money/Flooz
+    // pas encore obtenus
+    SubscriptionsModule,
   ],
   providers: [
     {

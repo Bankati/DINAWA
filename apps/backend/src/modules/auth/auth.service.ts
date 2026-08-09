@@ -21,6 +21,7 @@ import { EmailService } from '../email/email.service';
 import { NotifyService } from '../notify/notify.service';
 import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
 import { ListingsService } from '../listings/listings.service';
+import { BETA_FREE_MONTHS } from '../../common/constants';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
@@ -615,6 +616,16 @@ export class AuthService {
           },
         });
         await params.createProfile(tx, created);
+        // Abonnement créé systématiquement à l'inscription — jamais de cas
+        // "pas d'abonnement" à gérer ailleurs (voir /architect unité 35).
+        // Starter + bêta gratuite immédiate, pour OWNER et MANAGER.
+        await tx.subscription.create({
+          data: {
+            userId: created.id,
+            tier: 'STARTER',
+            betaUntil: addMonths(new Date(), BETA_FREE_MONTHS),
+          },
+        });
         return created;
       });
     } catch (dbError) {

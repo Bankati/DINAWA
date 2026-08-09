@@ -238,9 +238,27 @@ describe('TenantsService', () => {
         tenantUserId: 'tenant-1',
         OR: [
           { ownerId: 'owner-1' },
-          { property: { mandates: { some: { managerId: 'owner-1' } } } },
+          { property: { mandates: { some: { managerId: 'owner-1', status: 'ACTIVE' } } } },
         ],
       });
+    });
+
+    // Un mandat PENDING ou REVOKED ne donne aucun droit — seul un mandat
+    // ACTIVE ouvre l'accès à l'historique (voir /review unité 32 : ce
+    // filtre ne vérifiait pas le statut avant correction, faille invisible
+    // tant qu'aucune ligne Mandate réelle n'existait en production).
+    it("un gestionnaire dont le mandat n'est pas ACTIVE (refusé ou révoqué) n'a aucun accès", async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(makeTenant());
+      prisma.lease.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.getTenantLeasesHistory(manager, 'tenant-1', {})).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      const [findFirstArgs] = prisma.lease.findFirst.mock.calls[0] as [
+        { where: { OR: [unknown, { property: { mandates: { some: { status: string } } } }] } },
+      ];
+      expect(findFirstArgs.where.OR[1].property.mandates.some.status).toBe('ACTIVE');
     });
 
     it('un ADMIN voit tous les baux du locataire, sans filtre de relation', async () => {

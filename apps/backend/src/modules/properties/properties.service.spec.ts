@@ -59,6 +59,7 @@ describe('PropertiesService', () => {
     remove: jest.Mock;
   };
   let listings: { publishForProperty: jest.Mock; deactivateForProperty: jest.Mock };
+  let subscriptions: { assertQuotaAvailable: jest.Mock };
 
   const owner = { id: 'owner-1', role: 'OWNER' } as AuthenticatedUser;
   const manager = { id: 'manager-1', role: 'MANAGER' } as AuthenticatedUser;
@@ -135,16 +136,38 @@ describe('PropertiesService', () => {
       publishForProperty: jest.fn().mockResolvedValue({ id: 'listing-1' }),
       deactivateForProperty: jest.fn().mockResolvedValue(undefined),
     };
+    subscriptions = { assertQuotaAvailable: jest.fn().mockResolvedValue(undefined) };
 
     service = new PropertiesService(
       prisma as never,
       accountActivation as never,
       storage as never,
       listings as never,
+      subscriptions as never,
     );
   });
 
   describe('create', () => {
+    it('vérifie le quota avant toute écriture — propage le rejet si dépassé (voir /architect unité 35)', async () => {
+      subscriptions.assertQuotaAvailable.mockRejectedValueOnce(
+        new ConflictException('Quota atteint'),
+      );
+
+      await expect(
+        service.create(owner, {
+          type: 'APARTMENT',
+          address: '1 Rue Test',
+          neighborhood: 'Bè',
+          city: 'Lomé',
+          surfaceArea: 40,
+          monthlyRent: 30000,
+        } as never),
+      ).rejects.toThrow(ConflictException);
+
+      expect(subscriptions.assertQuotaAvailable).toHaveBeenCalledWith(prisma, 'owner-1');
+      expect(prisma.property.create).not.toHaveBeenCalled();
+    });
+
     it('force ownerId=utilisateur courant, status=VACANT, et ignore toute valeur cliente pour ces champs', async () => {
       prisma.property.create.mockResolvedValueOnce(makeProperty());
 

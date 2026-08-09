@@ -18,6 +18,7 @@ import { compressPhoto } from '../storage/image-processor';
 import { MAX_DOCUMENTS_PER_PROPERTY, MAX_PHOTOS_PER_PROPERTY } from '../../common/constants';
 import { AccountActivationService } from '../account/account-activation.service';
 import { ListingsService } from '../listings/listings.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { ListPropertiesQueryDto } from './dto/list-properties-query.dto';
@@ -51,6 +52,7 @@ export class PropertiesService {
     private readonly accountActivation: AccountActivationService,
     private readonly storage: StorageService,
     private readonly listings: ListingsService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   // `status` et `ownerId` ne viennent jamais du DTO — voir /architect unité
@@ -60,8 +62,21 @@ export class PropertiesService {
   // Transaction étendue (voir /architect module Annonces, 2026-07-28) : un
   // bien VACANT doit toujours avoir une annonce publiée en conséquence —
   // jamais l'un sans l'autre.
+  //
+  // Garde de quota (voir /architect + /review unité 35) : posée à l'intérieur
+  // de la transaction d'insertion (jamais avant) — c'est le seul point du
+  // cycle de vie où le nombre de biens facturables peut réellement augmenter
+  // (un bien est auto-publié dès sa création, donc immédiatement facturable ;
+  // créer un bail ou repasser en RENOVATION ne fait qu'échanger la raison
+  // d'être facturable d'un bien déjà compté). Vérifier puis insérer dans la
+  // même transaction (verrouillée par owner par assertQuotaAvailable) ferme
+  // la fenêtre de course où deux créations concurrentes du même owner
+  // passeraient toutes les deux la vérification avant que l'une des deux
+  // insertions ne soit visible à l'autre.
   async create(user: AuthenticatedUser, dto: CreatePropertyDto): Promise<Property> {
     const property = await this.prisma.$transaction(async (tx) => {
+      await this.subscriptions.assertQuotaAvailable(tx, user.id);
+
       const created = await tx.property.create({
         data: {
           ownerId: user.id,
