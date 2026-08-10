@@ -3,11 +3,13 @@ import { TemplateVariables } from '../email/templates/types';
 import { PushPayload } from '../push/web-push.service';
 
 // Même vocabulaire que les templates email (Unité 04) — un seul identifiant
-// partout, sauf les 2 emails d'authentification qui ne passent jamais par
-// NotifyService (voir architecture.md, invariant #7).
+// partout, sauf les 2 emails d'authentification et le message de contact qui
+// ne passent jamais par NotifyService (voir architecture.md, invariant #7 ;
+// contact-message est envoyé en direct par ContactService, jamais à un
+// utilisateur WARAH via notifyUser()).
 export type NotificationEvent = Exclude<
   EmailTemplate,
-  'signup-confirmation' | 'password-reset-otp'
+  'signup-confirmation' | 'password-reset-otp' | 'contact-message'
 >;
 
 type PushContentTemplate = { title: string; body: string; url: string };
@@ -33,15 +35,15 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{tenantName} a déclaré un paiement pour {propertyAddress}.',
     url: '/dashboard/payments',
   },
+  'payment-rejected': {
+    title: 'Déclaration rejetée',
+    body: 'Votre déclaration de paiement pour {propertyAddress} a été rejetée.',
+    url: '/dashboard/payments',
+  },
   'monthly-report': {
     title: 'Rapport mensuel disponible',
-    body: 'Votre rapport pour {period} est prêt.',
+    body: 'Votre rapport pour {periodLabel} est prêt.',
     url: '/dashboard/reports',
-  },
-  'listing-contact': {
-    title: 'Nouveau contact annonce',
-    body: '{candidateName} est intéressé(e) par {listingAddress}.',
-    url: '/dashboard/listings',
   },
   'inactivity-warning': {
     title: 'Compte bientôt suspendu',
@@ -53,10 +55,25 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: 'Votre compte a été suspendu : {reason}.',
     url: '/dashboard/account',
   },
+  'account-reactivated': {
+    title: 'Compte réactivé',
+    body: 'Votre compte WARAH est de nouveau pleinement actif.',
+    url: '/dashboard/account',
+  },
   'tenant-invitation': {
     title: 'Invitation WARAH',
     body: '{inviterName} vous invite à rejoindre WARAH.',
     url: '/dashboard',
+  },
+  'lease-created': {
+    title: 'Nouveau bail',
+    body: 'Vous avez un nouveau bail pour {propertyAddress}.',
+    url: '/dashboard/leases',
+  },
+  'mandate-created': {
+    title: 'Proposition de mandat',
+    body: '{ownerName} vous propose un mandat de gestion pour {propertySummary}.',
+    url: '/gestionnaire/mandats',
   },
 };
 

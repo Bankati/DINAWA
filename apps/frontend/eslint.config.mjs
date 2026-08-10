@@ -1,40 +1,29 @@
-// @ts-check
-import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import angular from 'angular-eslint';
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 
-export default tseslint.config(
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
-  },
-  {
-    files: ['**/*.ts'],
-    extends: [
-      eslint.configs.recommended,
-      ...tseslint.configs.recommendedTypeChecked,
-      ...angular.configs.tsRecommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: './tsconfig.app.json',
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
-    processor: angular.processInlineTemplates,
     rules: {
-      '@angular-eslint/directive-selector': [
-        'error',
-        { type: 'attribute', prefix: 'app', style: 'camelCase' },
-      ],
-      '@angular-eslint/component-selector': [
-        'error',
-        { type: 'element', prefix: 'app', style: 'kebab-case' },
-      ],
+      // Pattern volontaire et récurrent dans ce projet : synchroniser un
+      // formulaire éditable avec des données chargées de manière
+      // asynchrone (ex. profil via useApi) — il n'y a pas d'alternative
+      // sans effet ici, la donnée n'existe pas encore au premier rendu.
+      // Abaissé en warning plutôt que désactivé : reste visible, ne
+      // bloque pas `npm run lint` en CI.
+      "react-hooks/set-state-in-effect": "warn",
     },
   },
-  {
-    files: ['**/*.html'],
-    extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
-    rules: {},
-  },
-);
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;

@@ -25,28 +25,27 @@ Comptes déjà créés :
 
 - [x] **GitHub** — dépôt du code source
 - [x] **Railway** — hébergement du backend NestJS
-- [x] **Vercel** — hébergement du frontend Angular
+- [x] **Vercel** — hébergement du frontend Next.js
 - [x] **Supabase** — PostgreSQL + Auth + Storage
 - [x] **Resend** — emails transactionnels
 
 Comptes à créer (voir section 2) :
 
-- [ ] **Sentry** — monitoring d'erreurs
+- [x] **Sentry** — monitoring d'erreurs (câblé et actif des deux côtés depuis le 2026-08-10, organisation `athena-ju` — backend via `@sentry/nestjs`, frontend projet `javascript-nextjs`, voir 2a)
 - [ ] **Cashpay / Semoa** — paiements mobile money
 
 ---
 
 ## 2. Créer les comptes manquants
 
-### 2a. Sentry
+### 2a. Sentry — déjà fait (2026-08-10)
 
-1. Aller sur [sentry.io](https://sentry.io) → Sign Up
-2. Créer une **Organisation** (ex. `warah`)
-3. Créer **deux projets** :
-   - Projet `warah-backend` (plateforme : Node.js)
-   - Projet `warah-frontend` (plateforme : Angular)
-4. Pour chaque projet, copier le **DSN** (Settings → Client Keys → DSN)
-5. Configurer les alertes recommandées (voir section 9)
+Organisation Sentry : `athena-ju`. Deux projets créés :
+
+- Backend — `SENTRY_DSN` dans `apps/backend/.env` (câblé via `@sentry/nestjs`, voir `src/instrument.ts`)
+- Frontend — projet `javascript-nextjs`, `NEXT_PUBLIC_SENTRY_DSN` dans `apps/frontend/.env.local` (câblé via `@sentry/nextjs`, voir `instrumentation-client.ts`/`instrumentation.ts`)
+
+Les deux DSN sont à reporter dans Railway/Vercel lors du déploiement (section 4b/5b) — ne jamais les committer en clair ailleurs que dans les fichiers `.env*` locaux (gitignorés). Reste à faire : configurer les alertes recommandées (voir section 9a).
 
 ### 2b. Cashpay / Semoa (Mobile Money)
 
@@ -172,24 +171,25 @@ Si le health check échoue, le déploiement est marqué en erreur.
 
 1. Vercel Dashboard → Add New → Project → Import GitHub repo
 2. Sélectionner le dépôt WARAH
-3. **Framework Preset** : Angular
-4. **Root Directory** : `apps/frontend`
-5. **Build Command** : `npm run build:prod`
-6. **Output Directory** : `dist/warah-frontend/browser`
+3. **Framework Preset** : Next.js
+4. **Root Directory** : laisser la racine du dépôt (ne **pas** mettre `apps/frontend`)
 
-> Vercel détecte automatiquement le `vercel.json` dans `apps/frontend/`.
+> Le `vercel.json` à la racine du dépôt gère lui-même le `cd apps/frontend` pour l'install/le build (monorepo sans workspaces npm) — `buildCommand`/`installCommand`/`outputDirectory` y sont déjà configurés, rien à répéter ici dans le dashboard.
 
 ### 5b. Variables d'environnement Vercel
 
 Dans Vercel → Project → Settings → Environment Variables :
 
-| Variable                  | Valeur                                       |
-| ------------------------- | -------------------------------------------- |
-| `NG_APP_API_URL`          | `https://votre-service.up.railway.app/api`   |
-| `NG_APP_SENTRY_DSN`       | DSN du projet `warah-frontend` Sentry        |
-| `NG_APP_VAPID_PUBLIC_KEY` | Clé publique VAPID (même valeur que Railway) |
+| Variable                 | Valeur                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`    | `https://votre-service.up.railway.app/api`                                                              |
+| `NEXT_PUBLIC_SENTRY_DSN` | DSN du projet Sentry `javascript-nextjs` (voir 2a, déjà créé) — optionnel, Sentry reste inactif si vide |
 
-Ces variables sont injectées **à la compilation** par Angular.
+VAPID (notifications push) reste à ajouter ici si/quand cette clé devient nécessaire côté frontend — non utilisée actuellement (la clé publique est servie dynamiquement par le backend via `GET /push/vapid-public-key`).
+
+**Sentry câblé et actif côté frontend** (`instrumentation-client.ts`, `instrumentation.ts`, `app/global-error.tsx`) — capture les erreurs client (React, navigation) et serveur (Server Components/Route Handlers), vérifié en conditions réelles le 2026-08-10 (événement de test capturé et transmis avec succès). Pas d'upload de source maps configuré (nécessiterait un `SENTRY_AUTH_TOKEN` et `withSentryConfig` dans `next.config.ts`, volontairement laissé de côté pour ne pas risquer de casser le build Turbopack — les stack traces resteront minifiées tant que ce n'est pas fait).
+
+Ces variables sont injectées **à la compilation** par Next.js (préfixe `NEXT_PUBLIC_` obligatoire pour être exposées au navigateur).
 
 ### 5c. Déploiements automatiques
 
@@ -319,7 +319,7 @@ Pour chaque projet (backend + frontend), configurer dans Sentry → Alerts → A
 1. Vercel → Project → Settings → Domains → Add
 2. Ajouter votre domaine (ex. `warah.tg` et `www.warah.tg`)
 3. Configurer les DNS selon les instructions Vercel (CNAME ou A record)
-4. Mettre à jour `NG_APP_API_URL` si l'URL Railway change aussi
+4. Mettre à jour `NEXT_PUBLIC_API_URL` si l'URL Railway change aussi
 
 > **Temporaire :** En attendant un domaine custom, utiliser les URLs générées :
 >

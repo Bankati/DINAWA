@@ -2,7 +2,7 @@
 
 Ce document décrit l'architecture du backend WARAH — la plateforme de gestion locative immobilière pour le marché togolais. Il fixe les frontières des modules, le modèle de stockage, le modèle d'authentification et les invariants non négociables que l'ensemble du code doit respecter.
 
-Périmètre : backend uniquement (API REST consommée par un frontend Angular géré dans un dépôt séparé). Hébergement Railway. Périmètre métier strictement Togo en V1 (FCFA, français, fuseau `Africa/Lome`).
+Périmètre : backend uniquement (API REST consommée par un frontend Next.js, `apps/frontend/`, dans le même dépôt). Hébergement Railway. Périmètre métier strictement Togo en V1 (FCFA, français, fuseau `Africa/Lome`).
 
 ---
 
@@ -57,8 +57,8 @@ Structure du projet, en respectant strictement la modularité NestJS.
 - `src/modules/identity/` — vérification automatique de la CNI togolaise via Tesseract.js
 - `src/modules/users/` — gestion du profil utilisateur (modification infos, photo, préférences de notification, suppression RGPD)
 - `src/modules/properties/` — CRUD biens immobiliers, statuts, photos et documents associés
-- `src/modules/tenants/` — gestion des locataires liés à un propriétaire, invitations, historique
-- `src/modules/leases/` — création et résiliation des baux, génération du calendrier d'échéances
+- `src/modules/tenants/` — blocage locataire↔bien (`TenantPropertyBlock`), historiques baux par bien et par locataire (la création/invitation du locataire reste dans `src/modules/auth/`, voir unité 14)
+- `src/modules/leases/` — création et résiliation des baux, génération du calendrier d'échéances (`POST /api/leases`, `POST /api/leases/:id/terminate`)
 - `src/modules/payments/` — initialisation Cashpay, webhook Cashpay, saisie manuelle propriétaire/gestionnaire, déclaration locataire, historique, export
 - `src/modules/receipts/` — génération à la volée des quittances PDF (jamais stockées)
 - `src/modules/listings/` — publication d'annonces, page publique, contact candidat, modération
@@ -94,7 +94,7 @@ Source de vérité pour toutes les données métier et techniques :
 - Baux (`Lease`) et calendrier d'échéances (`PaymentScheduleEntry`) générés à la création du bail
 - Paiements (`Payment`) avec leur `source` (`CASHPAY_API` / `MANUAL_OWNER` / `TENANT_DECLARATION`) et leur statut
 - Déclarations de paiement par le locataire (`PaymentDeclaration`)
-- Annonces (`Listing`) et demandes de contact (`ListingContact`)
+- Annonces (`Listing`)
 - Mandats gestionnaire ↔ propriétaire (`Mandate`)
 - Avis sur les gestionnaires (`ManagerReview`)
 - Abonnements (`Subscription`) et historique des factures (`SubscriptionInvoice`)
@@ -102,7 +102,7 @@ Source de vérité pour toutes les données métier et techniques :
 - Abonnements push web (`PushSubscription`)
 - Journal d'audit (`AuditLog`) pour la traçabilité légale des transactions financières
 
-### Supabase Storage (5 buckets privés)
+### Supabase Storage (6 buckets privés)
 
 Stockage des fichiers binaires uploadés par les utilisateurs. Tous les buckets sont privés — accès uniquement via URL signée (expiration 15 minutes max).
 
@@ -113,6 +113,7 @@ Stockage des fichiers binaires uploadés par les utilisateurs. Tous les buckets 
 | `id-documents`       | Cartes nationales d'identité uploadées pour vérification OCR (qualité préservée, non compressée)                                  |
 | `manager-documents`  | Références professionnelles des gestionnaires                                                                                     |
 | `payment-proofs`     | Photos justificatives uploadées soit par le locataire (déclaration) soit par le propriétaire/gestionnaire (confirmation manuelle) |
+| `profile-photos`     | Photo de profil de l'utilisateur (tous rôles) — ajouté à l'étape 10, compressée via sharp comme `property-photos`                 |
 
 ### Supabase Auth
 
@@ -140,10 +141,11 @@ Aucun modèle Prisma `Receipt`, `MonthlyReport` ou `Invoice` ne stocke un binair
 
 ### Inscription et vérification
 
-- Inscription via Supabase Auth (`POST /api/auth/signup/owner` ou `/signup/manager` ou `/signup/tenant?token=...`) — création parallèle du `User` côté Prisma et du profil correspondant en une transaction
+- Inscription via Supabase Auth (`POST /api/auth/signup/owner` ou `/signup/manager` ou `/signup/tenant?token=...`) — création parallèle du `User` (avec `phone`/`city` obligatoires pour owner/manager) côté Prisma et du profil correspondant en une transaction
 - Le rôle de l'utilisateur (`OWNER`, `TENANT`, `MANAGER`, `ADMIN`) est figé à l'inscription et stocké côté Prisma
-- Pièce d'identité obligatoire pour propriétaire et gestionnaire, optionnelle pour locataire
+- Pièce d'identité **facultative pour tous les rôles** (révisé le 2026-07-16, voir /architect — initialement obligatoire pour propriétaire/gestionnaire) : peut être fournie à l'inscription ou plus tard via `POST /api/identity/verify`
 - Vérification CNI automatique via Tesseract.js (étape 07) — décision `VERIFIED` ou `REJECTED` en moins de 10 secondes, aucune validation humaine
+- **Le verrou fonctionnel n'est plus l'inscription mais la création de bien** : `PropertiesService.create()` refuse tant que `idVerificationStatus !== VERIFIED` (`assertIdentityVerified()`, `src/common/permissions/identity-verified.ts`) — seul point de blocage dans tout le produit, aucune autre action n'en dépend
 - Le statut de compte (`accountStatus`) est suivi côté Prisma : `ACTIVE`, `SUSPENDED_INACTIVITY`, `SUSPENDED_ADMIN`, `SUSPENDED_PAYMENT`
 
 ### Connexion
@@ -158,7 +160,7 @@ Aucun modèle Prisma `Receipt`, `MonthlyReport` ou `Invoice` ne stocke un binair
 - Tout endpoint authentifié est protégé par `SupabaseAuthGuard` (validation du JWT Supabase + synchronisation avec l'`User` Prisma + injection dans `request.user`)
 - Les endpoints qui exigent un rôle sont annotés `@Roles(UserRole.OWNER)` et protégés par `RolesGuard`
 - L'objet `request.user` est l'`User` Prisma — jamais l'`User` Supabase brut
-- Les comptes `SUSPENDED_ADMIN` voient leur JWT rejeté avec `401`. Les comptes `SUSPENDED_INACTIVITY` ou `SUSPENDED_PAYMENT` peuvent se connecter mais reçoivent `403 ACCOUNT_SUSPENDED` sur tout endpoint de mutation
+- Les comptes `SUSPENDED_ADMIN` voient leur JWT rejeté avec `401`. Les comptes `SUSPENDED_INACTIVITY` ou `SUSPENDED_PAYMENT` peuvent se connecter mais reçoivent `403 ACCOUNT_SUSPENDED` sur tout endpoint de mutation — **sauf** ceux annotés `@AllowWhileSuspended()`, réservés aux actions dont le but est justement de débloquer le compte (ex. `POST /properties`, voir build-plan.md unité 11/12)
 
 ### Autorisation par bien — `canActOnProperty()`
 
@@ -179,6 +181,9 @@ Le helper `canActOnProperty(user, propertyId)` dans `src/common/permissions/` es
 - Un `TenantProfile` ne peut avoir qu'un seul `Lease` en statut `ACTIVE` à un instant donné — contrainte unique partielle au niveau de la base de données
 - Le locataire ne peut consulter que son propre bail actif et ses propres paiements (`tenantUserId === user.id`)
 - L'historique des baux passés et des paiements associés est conservé intégralement même quand le locataire change de bien — accessible via `GET /api/tenants/:id/leases/history`
+- **Blocage locataire↔bien** (unité 14) : un propriétaire/gestionnaire peut bloquer un locataire pour **un bien précis**, avec justification obligatoire (`TenantPropertyBlock`) — jamais global au compte, jamais à l'échelle du propriétaire. Le même locataire reste invitable par ce même propriétaire pour un autre bien, ou par n'importe quel autre propriétaire. Vérifié à la fois dans `POST /api/auth/invite/tenant` (unité 09) et `POST /api/leases` (unité 15) via `assertTenantNotBlocked()` (`src/common/permissions/tenant-block.ts`), autorité unique — jamais de vérification inline ailleurs. Un blocage est refusé si un bail actif existe encore entre ce locataire et ce bien (résiliation d'abord requise).
+- **Cycle de vie d'un bail** (unité 15) : `POST /api/leases` crée le bail, génère immédiatement tout le calendrier d'échéances connu (durée fixe ou 12 mois glissants pour un bail ouvert — pas de cron dédié, prolongation à la demande à l'unité 16) et fait passer le bien à `OCCUPIED`, en une seule transaction. `POST /api/leases/:id/terminate` libère le bien (`VACANT`) et purge les échéances futures jamais touchées par un paiement — les échéances passées ou en cours (même partiellement payées) restent intactes.
+- **Accès à l'historique d'un locataire** (`GET /api/tenants/:id/leases/history`) : le locataire lui-même et un admin voient tous ses baux ; tout autre propriétaire/gestionnaire doit avoir eu au moins un bail (actif ou passé) avec ce locataire pour accéder à l'endpoint, mais ne voit alors que **ses propres baux avec lui**, jamais ceux liés à un propriétaire tiers — la relation est un filtre appliqué à la requête elle-même (même principe que `propertyVisibilityWhere()`), jamais une simple porte d'entrée tout-ou-rien (voir /review unité 14, fuite de confidentialité corrigée).
 
 ### Spécificité du gestionnaire
 
@@ -224,6 +229,8 @@ Notifications push web vers les navigateurs ayant consenti. Une `PushSubscriptio
 
 ### Cashpay
 
+**Non construit à ce jour (reporté le 2026-07-25, décision explicite du développeur)** — la Phase 4 (paiements) a été construite avec les flows manuel et déclaration locataire uniquement (`source = MANUAL_OWNER` / `TENANT_DECLARATION`). Les invariants #3 et #4 ci-dessous, et les gardes correspondantes dans `PaymentsService`, sont déjà en place par anticipation. Description ci-dessous conservée telle que prévue pour le jour où l'intégration reprend :
+
 Agrégateur de paiement mobile money. Deux flux :
 
 - **Sortant — Initialisation** : `POST` vers l'API Cashpay avec axios (timeout 10s, pas de retry — opération non idempotente). Crée une transaction et renvoie au locataire les instructions de paiement.
@@ -245,15 +252,15 @@ Hébergement et CI/CD. Auto-deploy depuis Git. Variables d'environnement gérée
 
 Tous les jobs cron utilisent `@nestjs/schedule` et tournent dans le même conteneur NestJS. Les expressions cron sont centralisées dans `src/common/constants.ts`.
 
-| Job                            | Fréquence               | Verrou Postgres | Rôle                                                                                                          |
-| ------------------------------ | ----------------------- | :-------------: | ------------------------------------------------------------------------------------------------------------- |
-| `reminders.task.ts`            | Toutes les heures       |       non       | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
-| `overdue.task.ts`              | Toutes les heures       |       non       | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
-| `pending-declaration.task.ts`  | Tous les jours à 8h UTC |       non       | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours |
-| `inactivity.task.ts`           | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                 |
-| `listing-suspension.task.ts`   | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                   |
-| `monthly-reports.task.ts`      | Le 1er du mois à 8h UTC |     **oui**     | Générer et envoyer les rapports mensuels aux propriétaires mandants                                           |
-| `subscription-billing.task.ts` | Le 1er du mois à 6h UTC |     **oui**     | Prélever les abonnements actifs via Cashpay, gérer les retries et suspensions                                 |
+| Job                                                                | Fréquence               | Verrou Postgres | Rôle                                                                                                          |
+| ------------------------------------------------------------------ | ----------------------- | :-------------: | ------------------------------------------------------------------------------------------------------------- |
+| `reminders.task.ts`                                                | Toutes les heures       |     **oui**     | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
+| `overdue.task.ts`                                                  | Toutes les heures       |     **oui**     | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
+| `payment-declaration-reminders.task.ts` **(construit 2026-07-25)** | Tous les jours à 8h UTC |     **oui**     | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours |
+| `inactivity.task.ts`                                               | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                 |
+| `listing-suspension.task.ts`                                       | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                   |
+| `monthly-reports.task.ts`                                          | Le 1er du mois à 8h UTC |     **oui**     | Générer et envoyer les rapports mensuels aux propriétaires mandants                                           |
+| `subscription-billing.task.ts`                                     | Le 1er du mois à 6h UTC |     **oui**     | Prélever les abonnements actifs via Cashpay, gérer les retries et suspensions                                 |
 
 Les jobs marqués « verrou Postgres » utilisent `pg_try_advisory_lock` pour éviter la double exécution si plusieurs instances NestJS tournent en parallèle. Toute itération à l'intérieur d'une boucle est isolée dans son propre try/catch.
 

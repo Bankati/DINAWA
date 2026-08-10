@@ -13,6 +13,9 @@ node_modules/
 # Coverage
 coverage/
 
+# SonarQube scanner cache/report
+.scannerwork/
+
 # Prisma generated client (re-généré au build)
 node_modules/.prisma/
 
@@ -25,3 +28,7 @@ test-results/
 
 # IntelliJ
 .idea/
+
+# Fixtures locales sensibles (ex. vraies photos de CNI pour tester l'OCR
+# manuellement) — jamais commitées.
+.local-fixtures/

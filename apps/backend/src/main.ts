@@ -1,24 +1,16 @@
+import './instrument';
+
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import helmet from 'helmet';
 import * as bodyParser from 'body-parser';
-import * as Sentry from '@sentry/node';
 import { AppModule } from './app.module';
+import { buildSwaggerConfig } from './swagger.config';
 
 async function bootstrap(): Promise<void> {
-  // Sentry doit être initialisé avant tout — ne s'active que si SENTRY_DSN est présent
-  if (process.env['SENTRY_DSN']) {
-    Sentry.init({
-      dsn: process.env['SENTRY_DSN'],
-      environment: process.env['NODE_ENV'] ?? 'development',
-      tracesSampleRate: 0.1,
-      integrations: [Sentry.httpIntegration(), Sentry.expressIntegration()],
-    });
-  }
-
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     bodyParser: false, // On gère le body parser manuellement pour contrôler les limites
@@ -32,6 +24,10 @@ async function bootstrap(): Promise<void> {
 
   // Headers de sécurité HTTP
   app.use(helmet());
+
+  // Compression gzip — réduit les payloads JSON de ~70%
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-call
+  app.use(require('compression')());
 
   // Body parser avec limite à 1 MB (évite les attaques par payload volumineux)
   app.use(bodyParser.json({ limit: '1mb' }));
@@ -53,7 +49,7 @@ async function bootstrap(): Promise<void> {
   );
 
   // CORS
-  const allowedOrigins = process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:4200'];
+  const allowedOrigins = process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:4300'];
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
@@ -62,25 +58,12 @@ async function bootstrap(): Promise<void> {
 
   // Swagger — désactivé en production
   if (process.env['NODE_ENV'] !== 'production') {
-    const config = new DocumentBuilder()
-      .setTitle('WARAH API')
-      .setDescription('API de gestion locative WARAH — marché togolais')
-      .setVersion('1.0')
-      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
-      .addTag('Health', 'Sondes de disponibilité Railway')
-      .addTag('Auth', 'Authentification Supabase')
-      .addTag('Properties', 'Gestion des biens immobiliers')
-      .addTag('Leases', 'Contrats de location')
-      .addTag('Payments', 'Paiements mobile money')
-      .addTag('Receipts', 'Génération de quittances')
-      .build();
-
-    const document = SwaggerModule.createDocument(app, config);
+    const document = SwaggerModule.createDocument(app, buildSwaggerConfig());
     SwaggerModule.setup('api/docs', app, document);
     Logger.log('Swagger disponible sur /api/docs', 'Bootstrap');
   }
 
-  const port = parseInt(process.env['PORT'] ?? '3000', 10);
+  const port = Number.parseInt(process.env['PORT'] ?? '3000', 10);
   await app.listen(port, '0.0.0.0');
 
   Logger.log(`Application démarrée sur le port ${port} (${process.env['NODE_ENV']})`, 'Bootstrap');

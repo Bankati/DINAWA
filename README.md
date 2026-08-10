@@ -1,92 +1,98 @@
-# WARAH — Plateforme de gestion locative
+# WARAH
 
-WARAH permet aux propriétaires immobiliers togolais (résidant au Togo ou à l'étranger) de gérer leurs
-locations en temps réel : encaissement des loyers via mobile money (T-Money et Flooz), génération de
-quittances officielles, tableau de bord analytique et gestion des mandats.
+Plateforme de gestion locative immobilière pour le Togo.
 
-**Périmètre V1 :** Togo uniquement · Devise FCFA · Langue française · UTC+0 (Africa/Lomé)
+## 🏠 À propos
 
----
+WARAH est une SaaS B2B conçue spécifiquement pour le marché togolais, permettant aux propriétaires immobiliers (locaux et diaspora) de gérer leurs biens, encaisser les loyers et automatiser les quittances.
 
-## Structure du monorepo
+### Stack Technique
 
-```
-warah/
-├── apps/
-│   ├── backend/          NestJS 10 — déployé sur Railway
-│   └── frontend/         Angular 20 — déployé sur Vercel
-├── .github/
-│   └── workflows/        CI (ci.yml) + CD backend (cd-backend.yml)
-├── docs/
-│   ├── DEPLOYMENT.md     Procédure de premier déploiement
-│   ├── ROLLBACK.md       Procédure de rollback
-│   ├── ENV.md            Référence de toutes les variables d'environnement
-│   └── ARCHITECTURE.md   Vue d'ensemble de l'architecture
-├── .husky/               Pre-commit hooks (lint-staged + commitlint)
-├── package.json          Racine npm workspaces
-└── CONTRIBUTING.md       Conventions de contribution
-```
+- **Frontend** (`apps/frontend/`) : Next.js 16 (App Router, Turbopack), TypeScript, Tailwind CSS v4
+- **Backend** (`apps/backend/`) : NestJS, Prisma, PostgreSQL (Supabase), Supabase Auth/Storage
+- **Emails** : Resend — **Push web** : `web-push` (VAPID)
+- **PDF** : PDFKit (quittances/rapports générés à la volée, jamais stockés)
+- **Hébergement** : backend sur Railway (Docker), frontend sur Vercel
 
----
+## 📦 Installation
 
-## Prérequis
-
-- **Node.js** `22.12.0` (utilise `.nvmrc` — `nvm use` suffit)
-- **npm** `>=10.0.0`
-- Accès aux services : Supabase, Railway, Vercel, Resend
-
----
-
-## Installation
+Monorepo à deux applications indépendantes, chacune avec son propre `package.json`/lockfile.
 
 ```bash
-# Installer toutes les dépendances des workspaces
+# Backend
+cd apps/backend
 npm install
+npm run dev          # nest start --watch, port 3001
 
-# Activer les git hooks
-npm run prepare
+# Frontend
+cd apps/frontend
+npm install
+npm run dev           # next dev, port 4300 (voir package.json)
 ```
 
+Voir `apps/backend/.env.example` pour les variables d'environnement requises côté backend (Supabase, Resend, VAPID, etc.).
+
+## 🏗️ Structure du Projet
+
+```
+apps/
+├── backend/
+│   ├── src/modules/<feature>/   # controller, service, dto/ par module métier
+│   ├── src/common/               # guards, decorators, permissions, constants
+│   ├── prisma/                   # schema.prisma + migrations versionnées
+│   └── contexte/                 # architecture.md, code-standards.md (référence du projet)
+└── frontend/
+    └── src/
+        ├── app/            # routes App Router (page.tsx + page.css par route)
+        ├── components/      # composants partagés (AppShell, RequireRole, navbar/footer)
+        └── lib/             # client API, contexte auth, utilitaires de formatage
+```
+
+## 🎨 Palette de Couleurs
+
+- **Primaire** : Bleu marine `#0F4C81` (`--color-primary`)
+- **Primaire foncé** : `#0A2650` (`--color-primary-dark`)
+- **Accent** : Or `#C9982E` (`--color-accent`)
+- **Fond** : Blanc cassé `#F9FAFB`
+- **Succès** : Vert `#10B981`
+- **Erreur** : Rouge `#EF4444`
+- **Avertissement** : Orange `#F59E0B`
+
+Variables définies dans `apps/frontend/src/app/globals.css` — toujours les utiliser plutôt qu'une valeur hexadécimale codée en dur.
+
+## 📝 Règles de Développement
+
+- TypeScript strict partout, interfaces/DTOs explicites
+- Commentaires en français dans le code, uniquement quand le pourquoi n'est pas évident
+- Loading states et états d'erreur visibles pour chaque appel API
+- Zones cliquables ≥ 44px (accessibilité mobile), éléments interactifs toujours de vrais `<button>`/`<a>`
+- Côté backend : voir `apps/backend/contexte/code-standards.md` pour les conventions NestJS/Prisma détaillées
+
+## 🚀 Scripts Disponibles
+
+Backend (`apps/backend/`) :
+
+```bash
+npm run dev         # nest start --watch
+npm run build       # nest build
+npm run test        # jest
+npm run lint        # eslint
+npm run typecheck   # tsc --noEmit
+```
+
+Frontend (`apps/frontend/`) :
+
+```bash
+npm run dev         # next dev
+npm run build       # next build
+npm run lint        # eslint
+npm run typecheck   # tsc --noEmit
+```
+
+## 📄 Licence
+
+Confidentiel - Usage interne WARAH
+
 ---
 
-## Commandes principales
-
-| Commande                 | Description                          |
-| ------------------------ | ------------------------------------ |
-| `npm run dev:backend`    | Démarre le backend en watch mode     |
-| `npm run dev:frontend`   | Démarre le frontend en dev mode      |
-| `npm run build`          | Build toutes les apps                |
-| `npm run test`           | Lance tous les tests                 |
-| `npm run lint`           | Lint tout le monorepo                |
-| `npm run typecheck`      | Vérification TypeScript stricte      |
-| `npm run build:backend`  | Build le backend uniquement          |
-| `npm run build:frontend` | Build le frontend en mode production |
-
----
-
-## Premier déploiement
-
-Voir [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) pour la procédure complète pas-à-pas.
-
-## Variables d'environnement
-
-Voir [`docs/ENV.md`](docs/ENV.md) pour la liste exhaustive avec descriptions et procédures de génération.
-
-## Architecture
-
-Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Contribution
-
-Voir [`CONTRIBUTING.md`](CONTRIBUTING.md) pour les conventions de commit, nommage des branches et processus de PR.
-
----
-
-## Rôles utilisateurs
-
-| Rôle      | Description                                                                     |
-| --------- | ------------------------------------------------------------------------------- |
-| `OWNER`   | Propriétaire de biens immobiliers                                               |
-| `TENANT`  | Locataire                                                                       |
-| `MANAGER` | Gestionnaire immobilier professionnel (peut être mandataire et/ou propriétaire) |
-| `ADMIN`   | Administrateur de la plateforme                                                 |
+_WARAH — Gérez vos biens. Encaissez vos loyers. Dormez tranquille._

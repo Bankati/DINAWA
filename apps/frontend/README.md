@@ -1,71 +1,36 @@
-# WARAH — Frontend (Angular 20)
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-SPA Angular de la plateforme WARAH, déployée sur **Vercel**.
+## Getting Started
 
-## Stack
-
-- Angular 20 + TypeScript strict
-- Composants standalone (pas de NgModule)
-- Communication avec le backend via API REST (`HttpClient`)
-- Sentry pour le monitoring d'erreurs frontend
-
-## Démarrage local
-
-### 1. Variables d'environnement
-
-Les variables sont injectées à la **compilation** via les préfixes `NG_APP_*`.
-En développement local, les valeurs de `src/environments/environment.ts` sont utilisées directement.
-
-### 2. Installer les dépendances (depuis la racine du monorepo)
+First, run the development server:
 
 ```bash
-npm install
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-### 3. Démarrer le serveur de développement
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-```bash
-npm run dev:frontend
-```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-L'application est disponible sur `http://localhost:4200`.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Scripts
+## Learn More
 
-| Script               | Description                             |
-| -------------------- | --------------------------------------- |
-| `npm run start`      | Dev server (port 4200)                  |
-| `npm run build`      | Build développement                     |
-| `npm run build:prod` | Build production optimisé               |
-| `npm run test`       | Tests unitaires (Karma)                 |
-| `npm run lint`       | ESLint (TypeScript + templates Angular) |
-| `npm run typecheck`  | Vérification TypeScript sans build      |
+To learn more about Next.js, take a look at the following resources:
 
-## Variables d'environnement Vercel
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-À configurer dans Vercel → Project → Settings → Environment Variables :
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-| Variable Vercel           | Description                                    | Exemple                                |
-| ------------------------- | ---------------------------------------------- | -------------------------------------- |
-| `NG_APP_API_URL`          | URL de l'API backend Railway                   | `https://warah-api.up.railway.app/api` |
-| `NG_APP_SENTRY_DSN`       | DSN du projet Sentry frontend                  | `https://xxx@sentry.io/yyy`            |
-| `NG_APP_VAPID_PUBLIC_KEY` | Clé publique VAPID pour les notifications push | `BI0...`                               |
+## Deploy on Vercel
 
-Ces variables sont automatiquement reconnues par `@angular/build:application` et injectées dans le bundle.
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-## Premier déploiement Vercel
-
-Voir [`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md) pour la procédure complète.
-
-## Headers de sécurité
-
-Configurés dans [`vercel.json`](vercel.json) :
-
-- **Content-Security-Policy** adapté à la SPA (connect-src Railway + Supabase)
-- **Cache-Control** : `no-cache` sur `index.html`, `immutable` sur les assets JS/CSS
-- **HSTS**, **X-Frame-Options: DENY**, **X-Content-Type-Options**, **Referrer-Policy**
-
-## Notes
-
-- Toute route non trouvée renvoie vers `index.html` (SPA routing via `vercel.json` rewrites)
-- Sentry est désactivé si `NG_APP_SENTRY_DSN` est vide
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

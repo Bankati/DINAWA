@@ -15,7 +15,10 @@ FROM node:22.12.0-alpine AS builder
 # ("Could not parse schema engine response").
 RUN apk add --no-cache openssl
 
-WORKDIR /app
+# OpenSSL explicite — sans ça, le moteur Prisma échoue à détecter la
+# version d'OpenSSL sur cette image Alpine et plante au démarrage
+# ("Could not parse schema engine response").
+RUN apk add --no-cache openssl
 
 COPY . .
 
@@ -46,6 +49,8 @@ COPY --from=builder --chown=warah:warah /app ./
 
 USER warah
 
+WORKDIR /app/apps/backend
+
 EXPOSE 3000
 
 # Health check sur /health/live (léger, sans dépendances DB)
@@ -53,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:3000/health/live || exit 1
 
 # Exécuter les migrations puis démarrer l'application
-CMD ["sh", "-c", "cd apps/backend && npx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]

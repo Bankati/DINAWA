@@ -9,7 +9,7 @@ Ce document est un résumé de haut niveau. Le document complet (`architecture.m
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        NAVIGATEUR                           │
-│               Angular 20 SPA (Vercel CDN)                   │
+│               Next.js 16 App Router (Vercel CDN)            │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTPS / REST API
                            ▼
@@ -64,22 +64,22 @@ Ce document est un résumé de haut niveau. Le document complet (`architecture.m
 
 ## Stack résumé
 
-| Couche           | Technologie                                            |
-| ---------------- | ------------------------------------------------------ |
-| Frontend         | Angular 20 — TypeScript strict — Composants standalone |
-| Backend          | NestJS 10 — TypeScript strict — Express adapter        |
-| ORM              | Prisma — migrations versionnées                        |
-| Base de données  | PostgreSQL via Supabase                                |
-| Auth             | Supabase Auth (JWT)                                    |
-| Fichiers         | Supabase Storage (5 buckets privés)                    |
-| Emails           | Resend                                                 |
-| Paiements        | Cashpay / Semoa (T-Money + Flooz)                      |
-| Notifications    | Web Push VAPID                                         |
-| OCR              | Tesseract.js (vérification CNI togolaise)              |
-| PDF              | PDFKit (génération à la volée)                         |
-| Export           | ExcelJS                                                |
-| Images           | sharp (compression à l'upload)                         |
-| Logs             | nestjs-pino + pino                                     |
-| Monitoring       | Sentry (backend + frontend) + UptimeRobot              |
-| Hosting backend  | Railway                                                |
-| Hosting frontend | Vercel (CDN)                                           |
+| Couche           | Technologie                                     |
+| ---------------- | ----------------------------------------------- |
+| Frontend         | Next.js 16 (App Router) — TypeScript strict     |
+| Backend          | NestJS 10 — TypeScript strict — Express adapter |
+| ORM              | Prisma — migrations versionnées                 |
+| Base de données  | PostgreSQL via Supabase                         |
+| Auth             | Supabase Auth (JWT)                             |
+| Fichiers         | Supabase Storage (5 buckets privés)             |
+| Emails           | Resend                                          |
+| Paiements        | Cashpay / Semoa (T-Money + Flooz)               |
+| Notifications    | Web Push VAPID                                  |
+| OCR              | Tesseract.js (vérification CNI togolaise)       |
+| PDF              | PDFKit (génération à la volée)                  |
+| Export           | ExcelJS                                         |
+| Images           | sharp (compression à l'upload)                  |
+| Logs             | nestjs-pino + pino                              |
+| Monitoring       | Sentry (backend + frontend) + UptimeRobot       |
+| Hosting backend  | Railway                                         |
+| Hosting frontend | Vercel (CDN)                                    |

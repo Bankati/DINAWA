@@ -50,7 +50,6 @@ class EnvironmentVariables {
   @IsOptional()
   SUPABASE_JWT_SECRET?: string;
 
-  // Resend
   @IsString()
   RESEND_API_KEY!: string;
 
@@ -60,6 +59,10 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   RESEND_FROM_NAME?: string = 'WARAH';
+
+  // Adresse recevant les messages du formulaire de contact public (/contact)
+  @IsEmail()
+  CONTACT_RECIPIENT_EMAIL!: string;
 
   // VAPID (Web Push)
   @IsString()
@@ -92,7 +95,18 @@ class EnvironmentVariables {
   // CORS
   @IsString()
   @IsOptional()
-  ALLOWED_ORIGINS?: string = 'http://localhost:4200';
+  ALLOWED_ORIGINS?: string = 'http://localhost:4300';
+
+  // URL du frontend — utilisée comme redirectTo du lien de confirmation
+  // d'email généré par Supabase Auth (voir AuthService.signupOwner)
+  @IsUrl({ require_tld: false })
+  FRONTEND_URL!: string;
+
+  // Secret HMAC pour signer les tokens d'invitation locataire (voir
+  // src/common/utils/invitation-token.ts) — générer avec :
+  // node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  @IsString()
+  INVITATION_TOKEN_SECRET!: string;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {

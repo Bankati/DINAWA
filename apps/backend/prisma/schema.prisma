@@ -50,11 +50,6 @@ enum NotificationConsent {
   DECLINED
 }
 
-enum IdVerificationStatus {
-  PENDING
-  VERIFIED
-  REJECTED
-}
 
 enum PropertyType {
   VILLA
@@ -171,21 +166,35 @@ enum NotificationDispatchStatus {
 // ────────────────────────────────────────────────────────────────
 
 model User {
-  id                  String              @id @default(cuid())
-  supabaseId          String?             @unique
-  email               String?             @unique
-  phone               String?             @unique
-  role                UserRole
-  firstName           String
-  lastName            String
-  accountStatus       AccountStatus       @default(ACTIVE)
-  notificationConsent NotificationConsent @default(NOT_ASKED)
-  reminderDaysBefore  Int                 @default(5)
-  overdueGraceDays    Int                 @default(3)
-  profilePhotoPath    String?
-  anonymizedAt        DateTime?           @db.Timestamptz(6)
-  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime            @updatedAt @db.Timestamptz(6)
+  id                        String              @id @default(cuid())
+  supabaseId                String?             @unique
+  email                     String?             @unique
+  phone                     String?             @unique
+  role                      UserRole
+  firstName                 String
+  lastName                  String
+  // Ville de résidence — texte libre, aucune logique métier attachée
+  // (contrairement à OwnerProfile.residenceCountry qui pilote la distinction
+  // local/diaspora). Voir /architect révision inscription owner/manager.
+  city                      String?
+  accountStatus             AccountStatus       @default(ACTIVE)
+  notificationConsent       NotificationConsent @default(NOT_ASKED)
+  reminderDaysBefore        Int                 @default(5)
+  overdueGraceDays          Int                 @default(3)
+  profilePhotoPath          String?
+  // Blocage temporaire après 5 échecs de connexion consécutifs (voir
+  // build-plan.md unité 10) — remis à zéro sur connexion réussie.
+  failedLoginAttempts       Int                 @default(0)
+  lockedUntil               DateTime?           @db.Timestamptz(6)
+  // Anti-doublon pour les rappels d'inactivité (voir build-plan.md unité 11)
+  // — remis à `null` dès que le compte redevient actif, pour que le prochain
+  // cycle d'inactivité reparte de zéro.
+  inactivityWarning30SentAt DateTime?           @db.Timestamptz(6)
+  inactivityWarning7SentAt  DateTime?           @db.Timestamptz(6)
+  inactivityWarning1SentAt  DateTime?           @db.Timestamptz(6)
+  anonymizedAt              DateTime?           @db.Timestamptz(6)
+  createdAt                 DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime            @updatedAt @db.Timestamptz(6)
 
   ownerProfile   OwnerProfile?
   tenantProfile  TenantProfile?
@@ -197,6 +206,8 @@ model User {
   listingsPublished      Listing[]
   leasesAsOwner          Lease[]                @relation("LeaseOwner")
   leasesAsTenant         Lease[]                @relation("LeaseTenant")
+  tenantBlocksReceived   TenantPropertyBlock[]  @relation("TenantPropertyBlockTenant")
+  tenantBlocksAuthored   TenantPropertyBlock[]  @relation("TenantPropertyBlockAuthor")
   mandatesAsOwner        Mandate[]              @relation("MandateOwner")
   mandatesAsManager      Mandate[]              @relation("MandateManager")
   paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
@@ -204,7 +215,6 @@ model User {
   managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
   managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
   subscription           Subscription?
-  identityVerifications  IdentityVerification[]
   pushSubscriptions      PushSubscription[]
   passwordResetOtps      PasswordResetOtp[]
   notifications          Notification[]
@@ -214,14 +224,13 @@ model User {
 }
 
 model OwnerProfile {
-  id                   String               @id @default(cuid())
-  userId               String               @unique
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  residenceCountry     String
-  idVerificationStatus IdVerificationStatus @default(PENDING)
-  betaUntil            DateTime?            @db.Timestamptz(6)
-  createdAt            DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime             @updatedAt @db.Timestamptz(6)
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  residenceCountry String
+  betaUntil        DateTime? @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
 
   @@map("owner_profiles")
 }
@@ -230,29 +239,27 @@ model OwnerProfile {
 // existe donc avant même que le locataire n'ait terminé son inscription
 // via le lien d'invitation (voir unité 09).
 model TenantProfile {
-  id                   String               @id @default(cuid())
-  userId               String               @unique
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  idVerificationStatus IdVerificationStatus @default(PENDING)
-  invitedByUserId      String?
-  invitedBy            User?                @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
-  createdAt            DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime             @updatedAt @db.Timestamptz(6)
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedByUserId String?
+  invitedBy       User?     @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
   @@map("tenant_profiles")
 }
 
 model ManagerProfile {
-  id                   String               @id @default(cuid())
-  userId               String               @unique
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  idVerificationStatus IdVerificationStatus @default(PENDING)
-  zonesOfIntervention  String[]             @default([])
-  pricingNote          String?
-  ratingAverage        Float                @default(0)
-  ratingCount          Int                  @default(0)
-  createdAt            DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime             @updatedAt @db.Timestamptz(6)
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zonesOfIntervention String[] @default([])
+  pricingNote         String?
+  ratingAverage       Float    @default(0)
+  ratingCount         Int      @default(0)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("manager_profiles")
 }
@@ -280,19 +287,6 @@ model PasswordResetOtp {
   @@map("password_reset_otps")
 }
 
-model IdentityVerification {
-  id          String               @id @default(cuid())
-  userId      String
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storagePath String
-  status      IdVerificationStatus
-  reason      String?
-  rawText     String?              @db.Text
-  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
-
-  @@index([userId])
-  @@map("identity_verifications")
-}
 
 // ────────────────────────────────────────────────────────────────
 // Patrimoine immobilier
@@ -307,7 +301,7 @@ model Property {
   address        String
   neighborhood   String
   city           String
-  surfaceArea    Float
+  surfaceArea    Float?
   roomsCount     Int?
   monthlyRent    Int
   monthlyCharges Int            @default(0)
@@ -316,11 +310,12 @@ model Property {
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
 
-  photos    PropertyPhoto[]
-  documents PropertyDocument[]
-  leases    Lease[]
-  mandates  Mandate[]
-  listings  Listing[]
+  photos       PropertyPhoto[]
+  documents    PropertyDocument[]
+  leases       Lease[]
+  mandates     Mandate[]
+  listings     Listing[]
+  tenantBlocks TenantPropertyBlock[]
 
   @@index([ownerId])
   @@index([status])
@@ -353,10 +348,31 @@ model PropertyDocument {
   @@map("property_documents")
 }
 
+// Blocage d'un locataire pour un bien précis (voir build-plan.md unité 14)
+// — jamais global au compte, jamais à l'échelle du propriétaire. Le même
+// locataire reste invitable par le même propriétaire pour un autre bien, ou
+// par n'importe quel autre propriétaire. Vérifié dès l'invitation
+// (AuthService.inviteTenant()), pas seulement à la création du bail.
+model TenantPropertyBlock {
+  id              String   @id @default(cuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id])
+  tenantUserId    String
+  tenant          User     @relation("TenantPropertyBlockTenant", fields: [tenantUserId], references: [id])
+  blockedByUserId String
+  blockedBy       User     @relation("TenantPropertyBlockAuthor", fields: [blockedByUserId], references: [id])
+  reason          String
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([propertyId, tenantUserId])
+  @@index([tenantUserId])
+  @@map("tenant_property_blocks")
+}
+
 // Contrainte non exprimable en Prisma : un seul Lease ACTIVE par
-// tenantUserId à la fois. À ajouter manuellement dans la migration
-// générée : CREATE UNIQUE INDEX leases_tenant_active_unique ON
-// leases (tenant_user_id) WHERE status = 'ACTIVE'.
+// tenantUserId à la fois — déjà en base (migration
+// 20260701104113_partial_unique_active_constraints, unité 02),
+// `leases_tenant_active_unique`.
 model Lease {
   id                      String           @id @default(cuid())
   propertyId              String
@@ -375,6 +391,13 @@ model Lease {
   status                  LeaseStatus      @default(ACTIVE)
   terminatedAt            DateTime?        @db.Timestamptz(6)
   terminationReason       String?
+  // Réglages propres à ce bail (voir build-plan.md unité 15, /architect) —
+  // jamais liés à `User.reminderDaysBefore`/`overdueGraceDays` (réglages
+  // globaux distincts, non utilisés par cette unité). Optionnels : `null`
+  // signifie aucun rappel/alerte configuré pour ce bail. Stockage
+  // uniquement — l'envoi effectif reste pour les unités 24/25.
+  reminderDaysBefore      Int?
+  overdueAlertWindowDays  Int?
   createdAt               DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt               DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -465,6 +488,11 @@ model PaymentDeclaration {
   proofStoragePath String?
   note             String?
   editedAt         DateTime?     @db.Timestamptz(6)
+  // Anti-doublon des relances (voir build-plan.md unité 20, cron
+  // PaymentDeclarationReminderTask) — posés après envoi, jamais réinitialisés
+  // tant que la déclaration reste PENDING_CONFIRMATION.
+  reminder3SentAt  DateTime?     @db.Timestamptz(6)
+  reminder7SentAt  DateTime?     @db.Timestamptz(6)
   createdAt        DateTime      @default(now()) @db.Timestamptz(6)
 
   @@map("payment_declarations")
@@ -489,25 +517,9 @@ model Listing {
   createdAt         DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
 
-  contacts ListingContact[]
-
   @@index([propertyId])
   @@index([status])
   @@map("listings")
-}
-
-model ListingContact {
-  id        String   @id @default(cuid())
-  listingId String
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  firstName String
-  phone     String
-  message   String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-
-  @@index([listingId])
-  @@map("listing_contacts")
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -545,6 +557,9 @@ model Mandate {
   @@map("mandates")
 }
 
+// Un avis par relation propriétaire↔gestionnaire, jamais par mandat
+// individuel (voir /architect unité 34) — un propriétaire avec plusieurs
+// biens confiés au même gestionnaire ne peut pas le noter plusieurs fois.
 model ManagerReview {
   id        String   @id @default(cuid())
   managerId String
@@ -559,6 +574,7 @@ model ManagerReview {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
+  @@unique([ownerId, managerId])
   @@index([managerId])
   @@map("manager_reviews")
 }

@@ -1,0 +1,3180 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/push/vapid-public-key": {
+      "get": {
+        "operationId": "PushController_getVapidPublicKey",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clé publique VAPID pour l'abonnement côté navigateur",
+        "tags": ["Push"]
+      }
+    },
+    "/push/subscribe": {
+      "post": {
+        "operationId": "PushController_subscribe",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribePushDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enregistre un abonnement Web Push et active le consentement notifications",
+        "tags": ["Push"]
+      }
+    },
+    "/push/unsubscribe": {
+      "post": {
+        "operationId": "PushController_unsubscribe",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnsubscribePushDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supprime un abonnement Web Push et désactive le consentement notifications",
+        "tags": ["Push"]
+      }
+    },
+    "/notifications": {
+      "get": {
+        "operationId": "NotifyController_getNotifications",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique des notifications de l'utilisateur connecté",
+        "tags": ["Notifications"]
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "operationId": "NotifyController_getUnreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Nombre de notifications non lues (dernières 24h)",
+        "tags": ["Notifications"]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_liveness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe — le process tourne, sans dépendances",
+        "tags": ["Health"]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_readiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe — vérifie Prisma/PostgreSQL",
+        "tags": ["Health"]
+      }
+    },
+    "/auth/signup/owner": {
+      "post": {
+        "description": "Crée le compte Supabase Auth et le profil propriétaire, envoie l'email de confirmation WARAH.",
+        "operationId": "AuthController_signupOwner",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupOwnerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Inscription propriétaire",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/signup/manager": {
+      "post": {
+        "description": "Crée le compte Supabase Auth et le profil gestionnaire, envoie l'email de confirmation WARAH.",
+        "operationId": "AuthController_signupManager",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupManagerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Inscription gestionnaire",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/invite/tenant": {
+      "post": {
+        "description": "Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire (email confirmé d'office) et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.",
+        "operationId": "AuthController_inviteTenant",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Invite un locataire sur un bien",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/signup/tenant": {
+      "post": {
+        "description": "Vérifie le token signé reçu par email (paramètre `token`, expire après 7 jours) et pose le mot de passe du compte déjà créé — aucun autre champ à fournir.",
+        "operationId": "AuthController_signupTenant",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTenantPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Active le compte locataire créé par l'invitation",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "description": "Route la connexion via NestJS (plutôt que directement Supabase côté client) pour appliquer le blocage de 15 minutes après 5 tentatives échouées. Renvoie une session Supabase valide en cas de succès.",
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Connexion par email et mot de passe",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "description": "Renvoie un nouveau access token et refresh token sans re-saisir le mot de passe.",
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Renouvelle la session avec le refresh token",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/password-reset/request": {
+      "post": {
+        "description": "Envoie un code à 6 chiffres par email (expire après 10 minutes, usage unique). Toute nouvelle demande invalide les codes précédents. Réponse toujours générique, qu'un compte existe ou non pour cet email.",
+        "operationId": "AuthController_requestPasswordReset",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPasswordResetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Demande un code de réinitialisation de mot de passe",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/password-reset/confirm": {
+      "post": {
+        "operationId": "AuthController_confirmPasswordReset",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPasswordResetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Confirme la réinitialisation avec le code reçu par email",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "description": "Renvoie l'utilisateur courant avec son profil de rôle (Owner/Tenant/Manager/Admin), son statut de compte et ses préférences de notification.",
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Profil de l'utilisateur courant",
+        "tags": ["Auth"]
+      }
+    },
+    "/public/listings": {
+      "get": {
+        "description": "Aucune authentification requise. Alimentée automatiquement — jamais de publication manuelle.",
+        "operationId": "ListingsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "neighborhood",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minRent",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxRent",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "roomsCount",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Annonces publiques actives, paginées et filtrables",
+        "tags": ["Listings publiques"]
+      }
+    },
+    "/public/listings/{slug}": {
+      "get": {
+        "operationId": "ListingsController_findOne",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Fiche détaillée d'une annonce (par slug)",
+        "tags": ["Listings publiques"]
+      }
+    },
+    "/profile": {
+      "get": {
+        "operationId": "ProfileController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Profil de l'utilisateur courant",
+        "tags": ["Profile"]
+      },
+      "patch": {
+        "description": "Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage.",
+        "operationId": "ProfileController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Met à jour les informations personnelles et/ou la photo de profil",
+        "tags": ["Profile"]
+      },
+      "delete": {
+        "description": "Supprime le compte Supabase Auth (connexion impossible ensuite) et vide les champs personnels côté Prisma (email, téléphone, nom). L'historique des paiements et baux est conservé pour les obligations légales.",
+        "operationId": "ProfileController_anonymize",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Anonymise et désactive le compte",
+        "tags": ["Profile"]
+      }
+    },
+    "/profile/notification-consent": {
+      "patch": {
+        "description": "Bascule uniquement la préférence — n'affecte pas les abonnements push déjà enregistrés sur les appareils (voir POST /push/subscribe, étape 06).",
+        "operationId": "ProfileController_updateNotificationConsent",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Active ou désactive les notifications",
+        "tags": ["Profile"]
+      }
+    },
+    "/account/status": {
+      "get": {
+        "operationId": "AccountController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Statut du compte courant — pour affichage du bandeau frontend",
+        "tags": ["Account"]
+      }
+    },
+    "/manager/owners/{ownerId}/report/preview.pdf": {
+      "get": {
+        "description": "Couvre le mois civil en cours, avec les données disponibles jusqu'à maintenant — pas le dernier rapport déjà envoyé. Réservé au gestionnaire ayant au moins un mandat ACTIVE avec ce propriétaire.",
+        "operationId": "ManagerReportsController_preview",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Prévisualisation du rapport mensuel courant pour un propriétaire mandant",
+        "tags": ["Manager Reports"]
+      }
+    },
+    "/properties": {
+      "post": {
+        "operationId": "PropertiesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePropertyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enregistrer un nouveau bien — toujours VACANT, toujours l'appelant comme propriétaire",
+        "tags": ["Properties"]
+      },
+      "get": {
+        "operationId": "PropertiesController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["OCCUPIED", "VACANT", "RENOVATION", "ARCHIVED"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste paginée des biens visibles par l'utilisateur courant",
+        "tags": ["Properties"]
+      }
+    },
+    "/properties/{id}": {
+      "get": {
+        "operationId": "PropertiesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Détail d'un bien, avec ses photos (URLs signées)",
+        "tags": ["Properties"]
+      },
+      "patch": {
+        "operationId": "PropertiesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePropertyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifier la fiche ou le statut d'un bien",
+        "tags": ["Properties"]
+      },
+      "delete": {
+        "operationId": "PropertiesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Archiver un bien (jamais de suppression physique)",
+        "tags": ["Properties"]
+      }
+    },
+    "/properties/{id}/photos": {
+      "post": {
+        "operationId": "PropertiesController_addPhotos",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ajoute jusqu'à 10 photos (plafond cumulatif) — compression WebP automatique",
+        "tags": ["Properties"]
+      }
+    },
+    "/properties/{id}/photos/{photoId}": {
+      "delete": {
+        "operationId": "PropertiesController_removePhoto",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "photoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supprime une photo (Storage puis Prisma)",
+        "tags": ["Properties"]
+      }
+    },
+    "/properties/{id}/documents": {
+      "post": {
+        "operationId": "PropertiesController_addDocuments",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadPropertyDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ajoute des documents d'un même type (plafond cumulatif de 20) — jamais compressés",
+        "tags": ["Properties"]
+      },
+      "get": {
+        "operationId": "PropertiesController_listDocuments",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste les documents du bien avec URLs signées (15 min)",
+        "tags": ["Properties"]
+      }
+    },
+    "/properties/{id}/documents/{documentId}": {
+      "delete": {
+        "operationId": "PropertiesController_removeDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "documentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supprime un document (Storage puis Prisma)",
+        "tags": ["Properties"]
+      }
+    },
+    "/subscription/quota": {
+      "get": {
+        "operationId": "SubscriptionsController_getQuota",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "État actuel du quota de biens facturables vs limite du forfait courant",
+        "tags": ["Subscriptions"]
+      }
+    },
+    "/subscription/upgrade": {
+      "post": {
+        "operationId": "SubscriptionsController_upgrade",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Migration instantanée vers un forfait supérieur, sans frais ni pénalité",
+        "tags": ["Subscriptions"]
+      }
+    },
+    "/subscription/cancel": {
+      "post": {
+        "operationId": "SubscriptionsController_cancel",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annulation — effective à la fin de la période payée",
+        "tags": ["Subscriptions"]
+      }
+    },
+    "/properties/{propertyId}/tenants/{tenantUserId}/block": {
+      "post": {
+        "operationId": "PropertyTenantsController_blockTenant",
+        "parameters": [
+          {
+            "name": "propertyId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bloque un locataire pour ce bien précis (justification obligatoire)",
+        "tags": ["Tenants"]
+      }
+    },
+    "/properties/{propertyId}/tenants/history": {
+      "get": {
+        "operationId": "PropertyTenantsController_getHistory",
+        "parameters": [
+          {
+            "name": "propertyId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique des baux (passés et présent) de ce bien",
+        "tags": ["Tenants"]
+      }
+    },
+    "/tenants": {
+      "get": {
+        "operationId": "TenantsController_listTenants",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste les locataires invités par le propriétaire/gestionnaire courant",
+        "tags": ["Tenants"]
+      }
+    },
+    "/tenants/{tenantUserId}": {
+      "get": {
+        "operationId": "TenantsController_getTenant",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Détail d'un locataire invité par le propriétaire/gestionnaire courant",
+        "tags": ["Tenants"]
+      }
+    },
+    "/tenants/{tenantUserId}/leases/history": {
+      "get": {
+        "operationId": "TenantsController_getLeasesHistory",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique complet des baux passés et présent d'un locataire",
+        "tags": ["Tenants"]
+      }
+    },
+    "/leases/{id}/terminate": {
+      "post": {
+        "operationId": "LeasesController_terminate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminateLeaseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Résilie un bail — libère le bien (VACANT), historique conservé",
+        "tags": ["Leases"]
+      }
+    },
+    "/leases/{id}/schedule": {
+      "get": {
+        "operationId": "LeasesController_getSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Calendrier complet des échéances d'un bail",
+        "tags": ["Leases"]
+      }
+    },
+    "/payments/manual": {
+      "post": {
+        "description": "Réservé à celui qui peut agir sur le bien (propriétaire sans mandat actif, ou gestionnaire mandaté). Crée directement un paiement PAID — pas d'étape de confirmation.",
+        "operationId": "PaymentsController_createManual",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManualPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enregistre un paiement reçu hors plateforme (espèces, virement)",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments": {
+      "get": {
+        "operationId": "PaymentsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "propertyId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantUserId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "PENDING",
+                "PENDING_CONFIRMATION",
+                "PAID",
+                "PARTIAL",
+                "LATE",
+                "OVERDUE",
+                "REJECTED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["CASHPAY_API", "MANUAL_OWNER", "TENANT_DECLARATION"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Filtre paidAt >= from (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Filtre paidAt <= to (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique paginé des paiements, filtrable",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/{id}/confirm": {
+      "post": {
+        "operationId": "PaymentsController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirme une déclaration de paiement locataire — passe à PAID",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/{id}/reject": {
+      "post": {
+        "operationId": "PaymentsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rejette une déclaration de paiement locataire — motif obligatoire",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/{id}/receipt.pdf": {
+      "get": {
+        "description": "Disponible uniquement pour un paiement PAID.",
+        "operationId": "PaymentsController_downloadReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Quittance PDF générée à la volée — jamais persistée",
+        "tags": ["Payments"]
+      }
+    },
+    "/payment-declarations": {
+      "post": {
+        "description": "Réservé au locataire connecté, sur son propre bail. Justificatif (`proof`) optionnel.",
+        "operationId": "PaymentDeclarationsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentDeclarationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Déclare avoir payé une échéance — passe en attente de confirmation",
+        "tags": ["Payment Declarations"]
+      }
+    },
+    "/payment-declarations/{id}/proof": {
+      "get": {
+        "operationId": "PaymentDeclarationsController_getProofUrl",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retourne une URL signée pour consulter la preuve de paiement",
+        "tags": ["Payment Declarations"]
+      }
+    },
+    "/payment-declarations/{id}": {
+      "patch": {
+        "description": "Justificatif (`proof`) optionnel — remplace le précédent si fourni.",
+        "operationId": "PaymentDeclarationsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePaymentDeclarationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifie une déclaration tant qu’elle est en attente de confirmation",
+        "tags": ["Payment Declarations"]
+      },
+      "delete": {
+        "operationId": "PaymentDeclarationsController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annule une déclaration tant qu’elle est en attente de confirmation",
+        "tags": ["Payment Declarations"]
+      }
+    },
+    "/admin/stats": {
+      "get": {
+        "operationId": "AdminController_getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Statistiques globales plateforme (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminController_listUsers",
+        "parameters": [
+          {
+            "name": "role",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste tous les comptes (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminController_getUserDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Détail d'un compte (super admin)",
+        "tags": ["Admin"]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supprimer (anonymiser) un compte (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/reviews/{id}/moderate": {
+      "patch": {
+        "operationId": "AdminController_moderateReview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModerateReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Masque ou réaffiche un avis signalé (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/managers/{id}/reviews": {
+      "post": {
+        "operationId": "ManagerReviewsController_create",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManagerReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Laisse un avis sur un gestionnaire — réservé à un propriétaire ayant eu un mandat accepté avec lui",
+        "tags": ["Manager Reviews"]
+      }
+    },
+    "/managers/{id}/reviews/{reviewId}": {
+      "patch": {
+        "operationId": "ManagerReviewsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reviewId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateManagerReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifie son propre avis — jamais de suppression",
+        "tags": ["Manager Reviews"]
+      }
+    },
+    "/public/managers": {
+      "get": {
+        "description": "Aucune authentification requise.",
+        "operationId": "PublicManagersController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "zone",
+            "required": false,
+            "in": "query",
+            "description": "Ville d’intervention exacte (ManagerProfile.zonesOfIntervention)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minRating",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 5,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Annuaire public des gestionnaires, filtrable par ville d’intervention et note minimale",
+        "tags": ["Public Managers"]
+      }
+    },
+    "/public/managers/{id}": {
+      "get": {
+        "operationId": "PublicManagersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Profil détaillé public d’un gestionnaire — portfolio et avis vérifiés",
+        "tags": ["Public Managers"]
+      }
+    },
+    "/mandates": {
+      "post": {
+        "operationId": "MandatesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMandateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Propose un mandat de gestion à un gestionnaire pour un ou plusieurs biens",
+        "tags": ["Mandates"]
+      },
+      "get": {
+        "operationId": "MandatesController_findAll",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["PENDING", "ACTIVE", "REVOKED", "EXPIRED"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MandateWithPartiesDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste les mandats où l’appelant est propriétaire mandant ou gestionnaire destinataire",
+        "tags": ["Mandates"]
+      }
+    },
+    "/mandates/{id}/accept": {
+      "post": {
+        "operationId": "MandatesController_accept",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Accepte un mandat proposé — réservé au gestionnaire destinataire",
+        "tags": ["Mandates"]
+      }
+    },
+    "/mandates/{id}/revoke": {
+      "post": {
+        "operationId": "MandatesController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeMandateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Révoque (ou refuse) un mandat — par le propriétaire ou le gestionnaire",
+        "tags": ["Mandates"]
+      }
+    },
+    "/manager/portfolio": {
+      "get": {
+        "operationId": "ManagerController_getPortfolio",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Biens sous mandat actif du gestionnaire connecté, distincts de ses propres biens",
+        "tags": ["Mandates"]
+      }
+    },
+    "/managers/search": {
+      "get": {
+        "operationId": "ManagersController_search",
+        "parameters": [
+          {
+            "name": "email",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrouve le managerId d’un gestionnaire par email ou téléphone exact",
+        "tags": ["Mandates"]
+      }
+    },
+    "/dashboard/manager/summary": {
+      "get": {
+        "operationId": "DashboardManagerController_getSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Synthèse des biens sous mandat actif, répartition par statut, nombre de propriétaires mandants",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard/manager/revenue": {
+      "get": {
+        "operationId": "DashboardManagerController_getRevenue",
+        "parameters": [
+          {
+            "name": "period",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "MONTH",
+              "enum": ["MONTH", "YEAR"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "1-12, ignoré si period=YEAR",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "year",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "description": "Restreint le volet \"biens sous mandat\" à ce propriétaire mandant",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Encaissements de la période (mois/année), comparaison à la période précédente, ventilation biens propres/sous mandat",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard/manager/alerts": {
+      "get": {
+        "operationId": "DashboardManagerController_getAlerts",
+        "parameters": [
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "ALL",
+              "enum": ["MANAGED", "OWNED", "ALL"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Échéances impayées, baux expirant sous 30 jours, déclarations en attente de confirmation",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard/manager/owners": {
+      "get": {
+        "operationId": "DashboardManagerController_getOwners",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Propriétaires mandants actuels, avec le nombre de biens confiés à chacun",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard/manager/upcoming-payments": {
+      "get": {
+        "operationId": "DashboardManagerController_getUpcomingPayments",
+        "parameters": [
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "ALL",
+              "enum": ["MANAGED", "OWNED", "ALL"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Prochaines échéances à venir, triées par date",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard/manager/properties/{id}/performance": {
+      "get": {
+        "operationId": "DashboardManagerController_getPropertyPerformance",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Taux de recouvrement à temps sur les 6 derniers mois pour un bien donné",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "operationId": "DashboardController_getSummary",
+        "parameters": [
+          {
+            "name": "annee",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Résumé dashboard — KPIs, revenus mensuels, biens et paiements récents",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/contact": {
+      "post": {
+        "operationId": "ContactController_submit",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContactMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Envoie un message depuis le formulaire de contact public",
+        "tags": ["Contact"]
+      }
+    }
+  },
+  "info": {
+    "title": "WARAH API",
+    "description": "API de gestion locative WARAH — marché togolais",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Sondes de disponibilité Railway"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentification Supabase"
+    },
+    {
+      "name": "Properties",
+      "description": "Gestion des biens immobiliers"
+    },
+    {
+      "name": "Leases",
+      "description": "Contrats de location"
+    },
+    {
+      "name": "Payments",
+      "description": "Paiements mobile money"
+    },
+    {
+      "name": "Receipts",
+      "description": "Génération de quittances"
+    },
+    {
+      "name": "Admin",
+      "description": "Supervision des comptes (accès administrateur)"
+    },
+    {
+      "name": "Contact",
+      "description": "Formulaire de contact public"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "PushSubscriptionKeysDto": {
+        "type": "object",
+        "properties": {
+          "p256dh": {
+            "type": "string"
+          },
+          "auth": {
+            "type": "string"
+          }
+        },
+        "required": ["p256dh", "auth"]
+      },
+      "SubscribePushDto": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "example": "https://fcm.googleapis.com/fcm/send/abc123"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/PushSubscriptionKeysDto"
+          }
+        },
+        "required": ["endpoint", "keys"]
+      },
+      "UnsubscribePushDto": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "example": "https://fcm.googleapis.com/fcm/send/abc123"
+          }
+        },
+        "required": ["endpoint"]
+      },
+      "SignupOwnerDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "example": "90330557"
+          },
+          "city": {
+            "type": "string",
+            "example": "Lomé"
+          },
+          "residenceCountry": {
+            "type": "string",
+            "example": "TG"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "firstName",
+          "lastName",
+          "phone",
+          "city",
+          "residenceCountry"
+        ]
+      },
+      "SignupManagerDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "example": "90330557"
+          },
+          "city": {
+            "type": "string",
+            "example": "Lomé"
+          }
+        },
+        "required": ["email", "password", "firstName", "lastName", "phone", "city"]
+      },
+      "InviteTenantDto": {
+        "type": "object",
+        "properties": {
+          "propertyId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "example": "90330557"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "monthlyRent": {
+            "type": "number",
+            "description": "Absent = reprend le loyer actuel du bien"
+          },
+          "monthlyCharges": {
+            "type": "number",
+            "description": "Absent = reprend les charges actuelles du bien"
+          },
+          "paymentFrequency": {
+            "type": "string",
+            "enum": ["MONTHLY", "QUARTERLY", "BIANNUAL", "ANNUAL"]
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Date de début du bail (ISO 8601)"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "Absent = bail ouvert, calendrier glissant sur 12 mois"
+          },
+          "securityDeposit": {
+            "type": "number"
+          },
+          "depositReturnConditions": {
+            "type": "string"
+          },
+          "reminderDaysBefore": {
+            "type": "number",
+            "description": "Jours avant échéance pour le rappel — omis = pas de rappel configuré"
+          },
+          "overdueAlertWindowDays": {
+            "type": "number",
+            "description": "Fenêtre (en jours) de l'alerte de retard après échéance — omis = pas d'alerte configurée"
+          }
+        },
+        "required": [
+          "propertyId",
+          "email",
+          "phone",
+          "firstName",
+          "lastName",
+          "paymentFrequency",
+          "startDate",
+          "securityDeposit"
+        ]
+      },
+      "SetTenantPasswordDto": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": ["password"]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "password"]
+      },
+      "RequestPasswordResetDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": ["email"]
+      },
+      "ConfirmPasswordResetDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "example": "123456"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "code", "newPassword"]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "reminderDaysBefore": {
+            "type": "number",
+            "description": "Jours avant échéance pour le rappel de loyer"
+          },
+          "overdueGraceDays": {
+            "type": "number",
+            "description": "Jours de grâce avant l'alerte d'impayé"
+          }
+        }
+      },
+      "UpdateNotificationConsentDto": {
+        "type": "object",
+        "properties": {
+          "consent": {
+            "type": "string",
+            "enum": ["ACCEPTED", "DECLINED"]
+          }
+        },
+        "required": ["consent"]
+      },
+      "CreatePropertyDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
+          },
+          "address": {
+            "type": "string"
+          },
+          "neighborhood": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "surfaceArea": {
+            "type": "number"
+          },
+          "roomsCount": {
+            "type": "number"
+          },
+          "monthlyRent": {
+            "type": "number"
+          },
+          "monthlyCharges": {
+            "type": "number"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "address", "neighborhood", "city", "monthlyRent"]
+      },
+      "UpdatePropertyDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["OCCUPIED", "VACANT", "RENOVATION", "ARCHIVED"]
+          },
+          "address": {
+            "type": "string"
+          },
+          "neighborhood": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "surfaceArea": {
+            "type": "number"
+          },
+          "roomsCount": {
+            "type": "number"
+          },
+          "monthlyRent": {
+            "type": "number"
+          },
+          "monthlyCharges": {
+            "type": "number"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "UploadPropertyDocumentDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["STATE_OF_PLAY", "PROPERTY_TITLE", "INSURANCE", "OTHER"]
+          }
+        },
+        "required": ["type"]
+      },
+      "UpgradeSubscriptionDto": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": ["STARTER", "PRO", "PREMIUM"],
+            "description": "Forfait cible — doit être strictement supérieur au forfait courant"
+          }
+        },
+        "required": ["tier"]
+      },
+      "BlockTenantDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Justification obligatoire du blocage"
+          }
+        },
+        "required": ["reason"]
+      },
+      "TerminateLeaseDto": {
+        "type": "object",
+        "properties": {
+          "terminationReason": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateManualPaymentDto": {
+        "type": "object",
+        "properties": {
+          "scheduleEntryId": {
+            "type": "string"
+          },
+          "paidAmount": {
+            "type": "number"
+          },
+          "paidAt": {
+            "type": "string",
+            "description": "Date effective du paiement (ISO 8601)"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": ["CASH", "BANK_TRANSFER"]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": ["scheduleEntryId", "paidAmount", "paidAt", "paymentMethod"]
+      },
+      "RejectPaymentDto": {
+        "type": "object",
+        "properties": {
+          "rejectionReason": {
+            "type": "string",
+            "description": "Motif obligatoire — communiqué au locataire"
+          }
+        },
+        "required": ["rejectionReason"]
+      },
+      "CreatePaymentDeclarationDto": {
+        "type": "object",
+        "properties": {
+          "scheduleEntryId": {
+            "type": "string"
+          },
+          "declaredAmount": {
+            "type": "number"
+          },
+          "declaredAt": {
+            "type": "string",
+            "description": "Date effective du paiement (ISO 8601)"
+          },
+          "declaredMethod": {
+            "type": "string",
+            "enum": ["CASH", "BANK_TRANSFER"]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": ["scheduleEntryId", "declaredAmount", "declaredAt", "declaredMethod"]
+      },
+      "UpdatePaymentDeclarationDto": {
+        "type": "object",
+        "properties": {
+          "declaredAmount": {
+            "type": "number"
+          },
+          "declaredAt": {
+            "type": "string",
+            "description": "Date effective du paiement (ISO 8601)"
+          },
+          "declaredMethod": {
+            "type": "string",
+            "enum": ["CASH", "BANK_TRANSFER"]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "ModerateReviewDto": {
+        "type": "object",
+        "properties": {
+          "isHidden": {
+            "type": "boolean",
+            "description": "true = masque l’avis de l’annuaire public, false = le réaffiche"
+          }
+        },
+        "required": ["isHidden"]
+      },
+      "CreateManagerReviewDto": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Note sur 5 étoiles"
+          },
+          "comment": {
+            "type": "string"
+          }
+        },
+        "required": ["rating"]
+      },
+      "UpdateManagerReviewDto": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateMandateDto": {
+        "type": "object",
+        "properties": {
+          "propertyIds": {
+            "description": "Biens à confier — tous doivent appartenir en propre à l’appelant",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "managerId": {
+            "type": "string",
+            "description": "Identifiant du gestionnaire désigné (jamais par email/téléphone)"
+          },
+          "feeType": {
+            "type": "string",
+            "enum": ["PERCENTAGE", "FLAT"]
+          },
+          "feeValue": {
+            "type": "number",
+            "description": "Pourcentage (1-100) si PERCENTAGE, montant FCFA entier si FLAT"
+          },
+          "startDate": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string"
+          }
+        },
+        "required": ["propertyIds", "managerId", "feeType", "feeValue", "startDate"]
+      },
+      "PropertySummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["OCCUPIED", "VACANT", "RENOVATION", "ARCHIVED"]
+          },
+          "address": {
+            "type": "string"
+          },
+          "neighborhood": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "surfaceArea": {
+            "type": "number",
+            "nullable": true
+          },
+          "roomsCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "monthlyRent": {
+            "type": "number"
+          },
+          "monthlyCharges": {
+            "type": "number"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "ownerId",
+          "type",
+          "status",
+          "address",
+          "neighborhood",
+          "city",
+          "monthlyRent",
+          "monthlyCharges",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "MandatePartyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": ["id", "firstName", "lastName"]
+      },
+      "MandateWithPartiesDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "propertyId": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "managerId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "ACTIVE", "REVOKED", "EXPIRED"]
+          },
+          "feeType": {
+            "type": "string",
+            "enum": ["PERCENTAGE", "FLAT"]
+          },
+          "feeValue": {
+            "type": "number"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "revokedReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "property": {
+            "$ref": "#/components/schemas/PropertySummaryDto"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/MandatePartyDto"
+          },
+          "manager": {
+            "$ref": "#/components/schemas/MandatePartyDto"
+          }
+        },
+        "required": [
+          "id",
+          "propertyId",
+          "ownerId",
+          "managerId",
+          "status",
+          "feeType",
+          "feeValue",
+          "startDate",
+          "createdAt",
+          "updatedAt",
+          "property",
+          "owner",
+          "manager"
+        ]
+      },
+      "RevokeMandateDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateContactMessageDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "email", "subject", "message"]
+      }
+    }
+  }
+}

@@ -125,7 +125,7 @@ fix: corrections
 
 - **TypeScript strict** — `noImplicitAny`, `strictNullChecks` activés dans tous les tsconfig
 - **Pas de `any` explicite** sans commentaire justifiant pourquoi
-- **Pas de console.log** en production — utiliser le logger Pino (backend) ou le service de logging Angular (frontend)
+- **Pas de console.log** en production — utiliser le logger Pino côté backend ; côté frontend, un état d'erreur visible plutôt qu'un `console.log`
 - **Variables sensibles** — jamais en dur dans le code, toujours via variables d'environnement
 - **PDFs** — jamais stockés (génération à la volée uniquement, c'est une contrainte projet)
 - **Migrations Prisma** — rétrocompatibles (voir `docs/ROLLBACK.md`)

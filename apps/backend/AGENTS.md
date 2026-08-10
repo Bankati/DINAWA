@@ -8,7 +8,7 @@ alwaysApply: true
 
 ## What is WARAH?
 
-Plateforme de gestion locative immobilière pour le marché toogolais — propriétaires résidant au Togo ou dans la diaspora, gérant leurs biens à distance depuis un navigateur. Ce dépôt contient **uniquement le backend** (API REST NestJS consommée par un frontend Angular hébergé séparément).
+Plateforme de gestion locative immobilière pour le marché toogolais — propriétaires résidant au Togo ou dans la diaspora, gérant leurs biens à distance depuis un navigateur. Ce dépôt contient **uniquement le backend** (API REST NestJS consommée par un frontend Next.js hébergé séparément, `apps/frontend/`).
 
 Périmètre géographique : Togo uniquement en V1 — devise FCFA, langue française, fuseau `Africa/Lome`. Fonctionnalités principales :
 

@@ -31,7 +31,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 **Logique :**
 
-- Modèles : `User`, `OwnerProfile`, `TenantProfile`, `ManagerProfile`, `AdminProfile`, `Property`, `PropertyPhoto`, `PropertyDocument`, `Lease`, `Payment`, `PaymentDeclaration`, `PaymentScheduleEntry`, `Listing`, `ListingContact`, `Mandate`, `ManagerReview`, `Subscription`, `SubscriptionInvoice`, `IdentityVerification`, `PushSubscription`, `AuditLog`, `Notification`
+- Modèles : `User`, `OwnerProfile`, `TenantProfile`, `ManagerProfile`, `AdminProfile`, `Property`, `PropertyPhoto`, `PropertyDocument`, `Lease`, `Payment`, `PaymentDeclaration`, `PaymentScheduleEntry`, `Listing`, `Mandate`, `ManagerReview`, `Subscription`, `SubscriptionInvoice`, `IdentityVerification`, `PushSubscription`, `AuditLog`, `Notification` (`ListingContact` retiré le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Pas de modèle `Receipt`, `MonthlyReport` ni `Invoice` — les PDFs sont générés à la volée, jamais stockés
 - Énumérations : `UserRole` (OWNER / TENANT / MANAGER / ADMIN), `PropertyStatus` (OCCUPIED / VACANT / RENOVATION / ARCHIVED), `LeaseStatus` (ACTIVE / TERMINATED / EXPIRED), `PaymentFrequency` (MONTHLY / QUARTERLY / BIANNUAL / ANNUAL), `PaymentStatus` (PENDING / PENDING_CONFIRMATION / PAID / PARTIAL / LATE / OVERDUE / REJECTED), `PaymentSource` (CASHPAY_API / MANUAL_OWNER / TENANT_DECLARATION), `PaymentMethod` (TMONEY / FLOOZ / CASH / BANK_TRANSFER), `SubscriptionTier` (STARTER / PRO / PREMIUM), `IdVerificationStatus` (PENDING / VERIFIED / REJECTED), `NotificationConsent` (NOT_ASKED / ACCEPTED / DECLINED), `AccountStatus` (ACTIVE / SUSPENDED_INACTIVITY / SUSPENDED_ADMIN / SUSPENDED_PAYMENT)
 - Contrainte : un `User` a exactement un rôle actif, lié à un profil unique selon ce rôle
@@ -50,14 +50,14 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 - Décorateur custom `@CurrentUser()` — extrait l'utilisateur courant dans les controllers
 - Synchronisation automatique : à la première connexion d'un utilisateur Supabase, création de la ligne correspondante dans `User` côté Prisma si absente
 - Helper `canActOnProperty(user, propertyId)` — autorité unique pour décider qui peut agir sur un bien : le propriétaire si pas de mandat actif, le gestionnaire mandataire si un mandat est actif, l'admin toujours. Tous les services métier passent par ce helper.
-- Endpoint `GET /api/auth/me` — renvoie le profil de l'utilisateur courant selon son rôle, statut du compte et préférences de notification
+- Endpoint `GET /api/auth/me` — renvoie le profil de l'utilisateur courant selon son rôle, statut du compte et préférences de notification. Depuis la révision de l'unité 08 (2026-07-16), inclut aussi `identityVerifiedAt` (date de la dernière `IdentityVerification` en statut `VERIFIED`, `null` sinon) — badge de vérification visible uniquement par l'utilisateur lui-même, aucune surface publique pour l'instant.
 
 ### 04 Service emails transactionnels (Resend)
 
 **Logique :**
 
 - Client Resend configuré dans `src/modules/email/email.service.ts`
-- Templates fournis par le client intégrés tels quels dans `src/modules/email/templates/` — la liste exacte sera précisée à la livraison, mais couvre au minimum : confirmation d'inscription, réinitialisation de mot de passe, invitation locataire, quittance de loyer, rappel d'échéance, alerte impayé, déclaration de paiement à confirmer, rapport mensuel gestionnaire, notification de contact d'annonce, blocage de compte imminent, compte bloqué
+- Templates fournis par le client intégrés tels quels dans `src/modules/email/templates/` — la liste exacte sera précisée à la livraison, mais couvre au minimum : confirmation d'inscription, réinitialisation de mot de passe, invitation locataire, quittance de loyer, rappel d'échéance, alerte impayé, déclaration de paiement à confirmer, rapport mensuel gestionnaire, blocage de compte imminent, compte bloqué (« notification de contact d'annonce » retirée le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Méthode `sendEmail({ to, template, variables, attachments? })` — point d'entrée unique pour tout envoi
 - Gestion des échecs avec retry exponentiel (max 3 tentatives) et log dans `AuditLog`
 - Limite de débit respectée pour ne pas saturer Resend en cas de cron de masse
@@ -67,7 +67,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Service `StorageService` (`src/modules/storage/storage.service.ts`) — wrapper sur le SDK Supabase Storage
-- Buckets dédiés : `property-photos`, `property-documents`, `id-documents`, `manager-documents`, `payment-proofs` — aucun bucket pour les quittances ou rapports (générés à la volée)
+- Buckets dédiés : `property-photos`, `property-documents`, `id-documents`, `manager-documents`, `payment-proofs` — aucun bucket pour les quittances ou rapports (générés à la volée). `manager-documents` reste défini mais n'est plus utilisé par aucun flux depuis le retrait du document de référence gestionnaire (voir unité 09 révisée, 2026-07-16) — conservé au cas où un usage futur apparaîtrait.
 - Méthode `upload(bucket, path, file)` — upload avec compression image (sharp) si applicable
 - Méthode `getSignedUrl(bucket, path, expiresIn)` — URLs signées avec expiration courte pour les fichiers privés
 - Validation systématique des types MIME et de la taille (5 Mo max pour photos, 10 Mo pour documents)
@@ -108,10 +108,10 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 **Logique :**
 
-- Endpoint `POST /api/auth/signup/owner` — création du compte Supabase Auth, création du `User` et de l'`OwnerProfile` en une transaction Prisma
+- Endpoint `POST /api/auth/signup/owner` — création du compte Supabase Auth, création du `User` (avec `phone`, `city`, obligatoires) et de l'`OwnerProfile` en une transaction Prisma
 - Distinction local / diaspora via le champ `residenceCountry` (`TG` ou autre code ISO)
-- Upload obligatoire de la pièce d'identité avec vérification automatique via le pipeline de l'étape 07
-- Tant que `IdVerificationStatus !== VERIFIED`, le propriétaire peut se connecter mais ne peut pas ajouter de biens ni publier d'annonces — accès en lecture seule de son profil uniquement
+- Pièce d'identité **facultative** à l'inscription (revu le 2026-07-16 avec le développeur, voir /architect — initialement obligatoire) : si `image`/`imageBack` sont fournis, la vérification démarre immédiatement via le pipeline de l'étape 07 ; sinon elle peut être soumise plus tard via `POST /api/identity/verify`
+- Le verrou fonctionnel n'est plus à l'inscription mais à `POST /api/properties` : tant que `idVerificationStatus !== VERIFIED`, la création de bien est refusée (`ForbiddenException`, voir `assertIdentityVerified()`) — aucune autre action n'est bloquée par ce statut
 - Envoi automatique de l'email de confirmation Supabase ; tant que l'email n'est pas confirmé, le `SupabaseAuthGuard` rejette les requêtes avec un code d'erreur explicite
 
 ### 09 Inscription locataire et gestionnaire
@@ -120,10 +120,10 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 - Endpoint `POST /api/auth/invite/tenant` — réservé au propriétaire ou au gestionnaire mandaté du bien, envoie au locataire un lien d'invitation contenant un token signé (expiration 7 jours)
 - Endpoint `POST /api/auth/signup/tenant?token=...` — création du compte locataire lié au propriétaire invitant via le token ; pièce d'identité **optionnelle**, aucune vérification CNI déclenchée tant qu'elle n'est pas fournie
-- Endpoint `POST /api/auth/signup/manager` — création du compte gestionnaire ; pièce d'identité obligatoire avec vérification CNI automatique (étape 07), upload des références professionnelles
-- Le statut du gestionnaire passe à `active` automatiquement dès que la CNI est `VERIFIED` — aucune validation admin requise
-- Un gestionnaire possède le rôle `MANAGER`, ce qui lui permet à la fois d'enregistrer ses propres biens (avec tous les droits d'un propriétaire dessus) **et** d'être mandataire de biens d'autres propriétaires via le modèle `Mandate`
-- Si la CNI du gestionnaire est `REJECTED`, le compte reste en accès restreint jusqu'à une nouvelle soumission validée
+- Endpoint `POST /api/auth/signup/manager` — création du compte gestionnaire (avec `phone`, `city`, obligatoires) ; même mécanique que l'inscription propriétaire (CNI facultative à l'inscription, voir unité 08 révisée)
+- Document de référence professionnelle (PDF) **retiré** (revu le 2026-07-16 avec le développeur, voir /architect — jugé non indispensable, sans consommateur produit tant que la Phase 8 n'existe pas) : plus d'upload `referenceDocuments`, plus de colonne `ManagerProfile.referenceDocumentPaths`
+- Un gestionnaire possède le rôle `MANAGER`, ce qui lui permet à la fois d'enregistrer ses propres biens (avec tous les droits d'un propriétaire dessus, sous réserve du verrou identité de l'unité 08) **et** d'être mandataire de biens d'autres propriétaires via le modèle `Mandate`
+- Principe retenu pour l'unité 31 (mandats, non construite) : accepter un mandat ne nécessitera pas de vérification d'identité propre au gestionnaire — la confiance transite par le propriétaire, déjà vérifié pour avoir pu créer son bien
 
 ### 10 Sécurité d'accès et gestion du profil
 
@@ -173,7 +173,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 - Endpoint `DELETE /api/properties/:id/photos/:photoId` — supprime la ligne Prisma et le fichier Storage
 - Endpoint `POST /api/properties/:id/documents` — upload de documents (état des lieux, titre, assurance), max 20 par bien, 10 Mo par fichier, types acceptés PDF/JPG/PNG
 - Endpoint `GET /api/properties/:id/documents` — liste des documents avec URLs signées (expiration 15 min)
-- Toutes les URLs servies aux clients sont signées et non publiques
+- Toutes les URLs servies aux clients sont signées et non publiques/
 
 ### 14 Locataires
 
@@ -339,7 +339,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 - Endpoint `GET /api/dashboard/owner/summary` — nombre total de biens, biens occupés vs vacants, taux de recouvrement périodique (loyers encaissés / loyers attendus selon la fréquence contractuelle de chaque bien), distinction explicite entre biens **auto-gérés** (le propriétaire agit dessus) et biens **sous mandat** (un gestionnaire agit dessus, le propriétaire est en lecture seule)
 - Endpoint `GET /api/dashboard/owner/revenue?months=12` — évolution mensuelle des revenus sur les 12 derniers mois, avec comparaison mois courant vs mois précédent
-- Endpoint `GET /api/dashboard/owner/alerts` — liste consolidée : biens auto-gérés avec loyer en retard, baux expirant dans moins de 30 jours, demandes de contact d'annonces non lues, déclarations de paiement en attente de confirmation, biens sous mandat dont le rapport mensuel vient d'arriver
+- Endpoint `GET /api/dashboard/owner/alerts` — liste consolidée : biens auto-gérés avec loyer en retard, baux expirant dans moins de 30 jours, déclarations de paiement en attente de confirmation, biens sous mandat dont le rapport mensuel vient d'arriver (« demandes de contact d'annonces non lues » retiré le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Endpoint `GET /api/dashboard/owner/properties/:id/performance` — taux de paiement à temps sur les 6 derniers mois pour le bien donné
 - Les calculs sont faits côté serveur via des requêtes Prisma optimisées (jamais d'agrégation côté client)
 - Cible de performance : réponse en moins de 500 ms pour le `summary`
@@ -364,24 +364,22 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Module `ListingsModule` — gestion des annonces
-- Endpoint `POST /api/listings` — création d'une annonce pour un bien dont le statut est `VACANT` uniquement, sinon rejet ; appel à `canActOnProperty()` pour décider qui peut publier (propriétaire ou gestionnaire mandaté)
-- Le montant du loyer affiché doit correspondre exactement au loyer enregistré dans la fiche du bien — toute divergence bloque la publication
-- Endpoints publics sans authentification : `GET /api/public/listings` (paginé, filtres par type, quartier, fourchette de loyer, nombre de pièces) et `GET /api/public/listings/:slug` (fiche détaillée)
+- **Publication automatique** (révisé le 2026-07-24 avec le développeur, remplace la publication manuelle initialement prévue) : dès qu'un bien passe au statut `VACANT` (création d'un nouveau bien, ou repassage en `VACANT` après résiliation d'un bail), une annonce est créée et activée automatiquement — aucun appel `POST /api/listings` explicite par le propriétaire/gestionnaire, aucune étape de publication manuelle
+- Le montant du loyer affiché est toujours celui de la fiche du bien au moment de la génération — cohérence garantie par construction puisque l'annonce est dérivée automatiquement, pas saisie séparément
+- Endpoints publics sans authentification (inchangés) : `GET /api/public/listings` (paginé, filtres par type, quartier, fourchette de loyer, nombre de pièces) et `GET /api/public/listings/:slug` (fiche détaillée)
 - Le `slug` est généré automatiquement (`{type}-{quartier}-{ville}-{loyer}-fcfa`) pour favoriser le SEO côté frontend
-- L'adresse exacte du bien n'est jamais exposée publiquement — seuls le quartier et la ville sont visibles
+- **Toutes les informations saisies par le propriétaire sont visibles publiquement, y compris l'adresse exacte** (révisé le 2026-07-24 — décision explicite du développeur après qu'un risque de sécurité physique a été signalé : un bien `VACANT` publié avec adresse exacte est par définition un logement inoccupé et localisable ; le développeur a maintenu sa décision en connaissance de cause)
 - Désactivation automatique de l'annonce dès qu'un locataire est rattaché au bien (statut `OCCUPIED`)
 - Conservation de l'historique de toutes les annonces publiées par bien avec dates d'activation/désactivation
 
-### 29 Formulaire de contact candidat locataire
+### 29 Contact candidat locataire via WhatsApp
 
 **Logique :**
 
-- Endpoint public `POST /api/public/listings/:id/contact` — body : prénom, téléphone, message court (max 500 caractères)
-- Rate limiting strict par IP (max 5 demandes par heure) pour éviter le spam
-- Création d'une ligne `ListingContact` liée à l'annonce
-- Notification immédiate via `notifyUser()` au propriétaire ou au gestionnaire mandataire (selon `canActOnProperty()`) avec les coordonnées du candidat
-- Si la notification se fait par email, lien `wa.me` inclus pour permettre un contact WhatsApp direct
-- Endpoint `GET /api/listings/:id/contacts` — réservé à celui qui peut agir sur le bien, liste de toutes les demandes reçues avec statut lu/non lu
+- **Formulaire de contact supprimé** (révisé le 2026-07-24 avec le développeur, remplace le formulaire + notification backend initialement prévus) : plus de `POST /api/public/listings/:id/contact`, plus de modèle `ListingContact`, plus de rate limiting anti-spam dédié (devenu sans objet), plus de template email "notification de contact d'annonce" — le candidat contacte directement le propriétaire/gestionnaire par WhatsApp, sans passer par le backend
+- `GET /api/public/listings/:slug` (fiche détaillée, unité 28) expose le `phone` du propriétaire/gestionnaire — le même numéro que celui utilisé pour se connecter au compte (décision explicite du développeur : pas de champ "numéro de contact public" séparé)
+- Le frontend construit un lien `https://wa.me/<phone>?text=<message pré-rempli>` — le message pré-rempli identifie le bien (type, quartier, ville) avant même que le candidat n'écrive quoi que ce soit ; entièrement côté frontend, aucun endpoint backend dédié nécessaire
+- Suppression en cascade déjà appliquée dans ce document : `ListingContact` retiré de la liste des modèles, "notification de contact d'annonce" retirée de la liste des templates email, "demandes de contact d'annonces non lues" retirée de `GET /api/dashboard/owner/alerts` (unité 26) et "nouveaux contacts d'annonces" retiré de `GET /api/dashboard/manager/alerts` (unité 32)
 
 ### 30 Modération et suspension automatique
 
@@ -414,7 +412,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 - Endpoint `GET /api/dashboard/manager/summary` — nombre total de biens gérés (avec distinction biens propres / biens sous mandat), répartition par statut (occupés / vacants / en travaux), nombre de propriétaires mandants
 - Endpoint `GET /api/dashboard/manager/revenue` — encaissements du mois en cours et du mois précédent sur l'ensemble des biens gérés, avec comparaison et ventilation biens propres / biens sous mandat
-- Endpoint `GET /api/dashboard/manager/alerts` — retards et impayés en cours, baux expirant dans moins de 30 jours, déclarations de paiement locataire en attente de confirmation, nouveaux contacts d'annonces
+- Endpoint `GET /api/dashboard/manager/alerts` — retards et impayés en cours, baux expirant dans moins de 30 jours, déclarations de paiement locataire en attente de confirmation (« nouveaux contacts d'annonces » retiré le 2026-07-24 — contact candidat via WhatsApp direct, voir unité 29)
 - Endpoint `GET /api/dashboard/manager/owners` — liste des propriétaires mandants avec le nombre de biens confiés et le statut de la relation
 - Endpoint `GET /api/dashboard/manager/upcoming-payments` — calendrier des prochaines échéances triées par date
 - Endpoint `GET /api/dashboard/manager/properties/:id/performance` — taux de recouvrement à temps sur les 6 derniers mois pour un bien donné
@@ -478,7 +476,7 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 **Logique :**
 
 - Module `AdminModule` — protégé par `@Roles(UserRole.ADMIN)` sur tous les endpoints
-- Endpoint `GET /api/admin/users` — liste paginée des utilisateurs, filtres par rôle, statut de compte (`ACTIVE`, `SUSPENDED_INACTIVITY`, `SUSPENDED_ADMIN`, `SUSPENDED_PAYMENT`), date d'inscription, statut de vérification CNI, recherche par nom/email
+- Endpoint `GET /api/admin/users` — liste paginée des utilisateurs, filtres par rôle, statt de compte (`ACTIVE`, `SUSPENDED_INACTIVITY`, `SUSPENDED_ADMIN`, `SUSPENDED_PAYMENT`), date d'inscription, statut de vérification CNI, recherche par nom/email
 - Endpoint `POST /api/admin/users/:id/suspend` — suspension manuelle d'un compte avec motif, passage en `SUSPENDED_ADMIN`, l'utilisateur est notifié par email
 - Endpoint `POST /api/admin/users/:id/reactivate` — levée d'une suspension admin
 - Endpoint `GET /api/admin/transactions` — supervision de tous les paiements de la plateforme, filtres par source, période, statut, méthode
