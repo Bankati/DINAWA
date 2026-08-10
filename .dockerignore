@@ -30,8 +30,12 @@ docs/
 .gitignore
 .github/
 
-# Angular (inutile pour le backend)
+# Frontend (inutile pour l'image backend) — sauf son package.json, requis
+# pour que `npm ci`/`npm run build --workspace=apps/backend` résolvent
+# correctement les workspaces npm déclarés à la racine (voir
+# apps/backend/Dockerfile).
 apps/frontend/
+!apps/frontend/package.json
 
 # Logs
 *.log
