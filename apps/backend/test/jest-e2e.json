@@ -1,0 +1,11 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "test/.*\\.e2e-spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/test/tsconfig-e2e.json" }]
+  },
+  "transformIgnorePatterns": ["/node_modules/(?!(mrz|p-retry|is-network-error)/)"],
+  "testTimeout": 60000
+}
