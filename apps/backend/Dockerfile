@@ -1,11 +1,10 @@
 # ════════════════════════════════════════════════════════════════
 # Stage 1 — Builder
-# Backend autonome — n'utilise plus `npm ci --workspace=apps/backend`
-# depuis que le package.json racine a été repris par le frontend
-# (restructuration Vercel, plus aucun champ "workspaces" ; voir
-# apps/backend/contexte/progress-tracker.md). apps/backend a son
-# propre package-lock.json et s'installe indépendamment, insensible à
-# ce que fait le frontend à la racine du repo.
+# Monorepo npm workspaces (package.json racine, réintroduit le
+# 2026-08-09 pour turborepo) — npm ci se fait depuis la racine avec
+# le lockfile racine, jamais depuis apps/backend/ isolément : son
+# propre package-lock.json n'est plus mis à jour depuis l'ajout des
+# workspaces et est périmé (voir contexte/progress-tracker.md).
 # ════════════════════════════════════════════════════════════════
 FROM node:22.12.0-alpine AS builder
 
@@ -16,14 +15,19 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copié séparément du reste du code source pour que cette couche
-# (la plus lente, `npm ci`) reste en cache tant que les dépendances
-# ne changent pas, même si le code applicatif change.
-COPY apps/backend/package.json apps/backend/package-lock.json ./
+# Manifests seuls d'abord (les 3 du monorepo — npm ci vérifie que
+# package-lock.json est en phase avec TOUS les workspaces déclarés,
+# pas seulement celui qu'on construit) — cette couche reste en cache
+# tant que les dépendances ne changent pas, même si le code applicatif
+# change.
+COPY package.json package-lock.json ./
+COPY apps/backend/package.json apps/backend/package.json
+COPY apps/frontend/package.json apps/frontend/package.json
 RUN npm ci
 
-COPY apps/backend/ .
+COPY apps/backend/ apps/backend/
 
+WORKDIR /app/apps/backend
 RUN npx prisma generate
 RUN npm run build
 RUN npm prune --omit=dev
@@ -49,6 +53,8 @@ WORKDIR /app
 COPY --from=builder --chown=warah:warah /app ./
 
 USER warah
+
+WORKDIR /app/apps/backend
 
 EXPOSE 3000
 

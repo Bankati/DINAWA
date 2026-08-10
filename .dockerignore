@@ -32,8 +32,11 @@ docs/
 
 # Frontend (inutile pour le backend) — le Dockerfile ne copie que
 # apps/backend/, mais le contexte complet est quand même transféré au
-# démon Docker sans cette exclusion.
+# démon Docker sans cette exclusion. Exception : son package.json seul
+# reste nécessaire pour que `npm ci` (workspaces racine) valide que
+# package-lock.json est en phase avec TOUS les workspaces déclarés.
 apps/frontend/
+!apps/frontend/package.json
 image logo/
 *.docx
 
