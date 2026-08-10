@@ -49,6 +49,8 @@ COPY --from=builder --chown=warah:warah /app ./
 
 USER warah
 
+WORKDIR /app/apps/backend
+
 EXPOSE 3000
 
 # Health check sur /health/live (léger, sans dépendances DB)

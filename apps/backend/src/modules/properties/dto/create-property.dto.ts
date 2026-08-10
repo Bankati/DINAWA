@@ -30,10 +30,11 @@ export class CreatePropertyDto {
   @MaxLength(200)
   city!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Number)
   @Min(0.01)
-  surfaceArea!: number;
+  surfaceArea?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

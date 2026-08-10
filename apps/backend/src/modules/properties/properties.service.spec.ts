@@ -24,6 +24,7 @@ function makeFile(overrides: Record<string, unknown> = {}): Express.Multer.File 
 describe('PropertiesService', () => {
   let service: PropertiesService;
   let prisma: {
+    $transaction: jest.Mock;
     property: {
       create: jest.Mock;
       findMany: jest.Mock;
@@ -50,7 +51,15 @@ describe('PropertiesService', () => {
     };
   };
   let accountActivation: { reactivateIfEligible: jest.Mock };
-  let storage: { upload: jest.Mock; getSignedUrl: jest.Mock; remove: jest.Mock };
+  let storage: {
+    upload: jest.Mock;
+    getSignedUrl: jest.Mock;
+    getSignedUrls: jest.Mock;
+    invalidateCachedUrl: jest.Mock;
+    remove: jest.Mock;
+  };
+  let listings: { publishForProperty: jest.Mock; deactivateForProperty: jest.Mock };
+  let subscriptions: { assertQuotaAvailable: jest.Mock };
 
   const owner = { id: 'owner-1', role: 'OWNER' } as AuthenticatedUser;
   const manager = { id: 'manager-1', role: 'MANAGER' } as AuthenticatedUser;
@@ -75,12 +84,18 @@ describe('PropertiesService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       photos: [],
+      listings: [],
       ...overrides,
     };
   }
 
   beforeEach(() => {
     prisma = {
+      // create() est désormais transactionnel (voir /architect module
+      // Annonces, 2026-07-28) — le mock exécute simplement le callback avec
+      // le même objet prisma en guise de tx, les assertions existantes sur
+      // prisma.property.create restent valables telles quelles.
+      $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma)),
       property: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -90,15 +105,8 @@ describe('PropertiesService', () => {
       },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
       lease: { findFirst: jest.fn().mockResolvedValue(null) },
-      // VERIFIED par défaut — la plupart des tests ne portent pas sur le
-      // verrou d'identité (voir /architect révision inscription
-      // owner/manager) ; les tests dédiés ci-dessous écrasent cette valeur.
-      ownerProfile: {
-        findUnique: jest.fn().mockResolvedValue({ idVerificationStatus: 'VERIFIED' }),
-      },
-      managerProfile: {
-        findUnique: jest.fn().mockResolvedValue({ idVerificationStatus: 'VERIFIED' }),
-      },
+      ownerProfile: { findUnique: jest.fn() },
+      managerProfile: { findUnique: jest.fn() },
       propertyPhoto: {
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
@@ -117,13 +125,50 @@ describe('PropertiesService', () => {
     storage = {
       upload: jest.fn().mockResolvedValue('path'),
       getSignedUrl: jest.fn().mockResolvedValue('https://signed.example/url'),
+      getSignedUrls: jest
+        .fn()
+        .mockImplementation((_bucket: string, paths: string[]) =>
+          Promise.resolve(new Map(paths.map((p) => [p, 'https://signed.example/url']))),
+        ),
+      invalidateCachedUrl: jest.fn(),
       remove: jest.fn().mockResolvedValue(undefined),
     };
+    listings = {
+      publishForProperty: jest.fn().mockResolvedValue({ id: 'listing-1' }),
+      deactivateForProperty: jest.fn().mockResolvedValue(undefined),
+    };
+    subscriptions = { assertQuotaAvailable: jest.fn().mockResolvedValue(undefined) };
 
-    service = new PropertiesService(prisma as never, accountActivation as never, storage as never);
+    service = new PropertiesService(
+      prisma as never,
+      accountActivation as never,
+      storage as never,
+      listings as never,
+      subscriptions as never,
+    );
   });
 
   describe('create', () => {
+    it('vérifie le quota avant toute écriture — propage le rejet si dépassé (voir /architect unité 35)', async () => {
+      subscriptions.assertQuotaAvailable.mockRejectedValueOnce(
+        new ConflictException('Quota atteint'),
+      );
+
+      await expect(
+        service.create(owner, {
+          type: 'APARTMENT',
+          address: '1 Rue Test',
+          neighborhood: 'Bè',
+          city: 'Lomé',
+          surfaceArea: 40,
+          monthlyRent: 30000,
+        } as never),
+      ).rejects.toThrow(ConflictException);
+
+      expect(subscriptions.assertQuotaAvailable).toHaveBeenCalledWith(prisma, 'owner-1');
+      expect(prisma.property.create).not.toHaveBeenCalled();
+    });
+
     it('force ownerId=utilisateur courant, status=VACANT, et ignore toute valeur cliente pour ces champs', async () => {
       prisma.property.create.mockResolvedValueOnce(makeProperty());
 
@@ -159,48 +204,21 @@ describe('PropertiesService', () => {
       expect(accountActivation.reactivateIfEligible).toHaveBeenCalledWith('owner-1');
     });
 
-    // CNI facultative à l'inscription mais bloquante à la création de bien
-    // (voir /architect révision inscription owner/manager) —
-    // assertIdentityVerified() est le seul verrou fonctionnel.
-    describe('verrou identité (idVerificationStatus)', () => {
-      const createDto = {
+    it('publie une annonce dans la même transaction que la création du bien', async () => {
+      const created = makeProperty();
+      prisma.property.create.mockResolvedValueOnce(created);
+
+      await service.create(owner, {
         type: 'APARTMENT',
         address: '1 Rue Test',
         neighborhood: 'Bè',
         city: 'Lomé',
         surfaceArea: 40,
         monthlyRent: 30000,
-      } as never;
+      } as never);
 
-      it('rejette avec 403 si le propriétaire a idVerificationStatus=PENDING (jamais soumis)', async () => {
-        prisma.ownerProfile.findUnique.mockResolvedValueOnce({ idVerificationStatus: 'PENDING' });
-
-        await expect(service.create(owner, createDto)).rejects.toThrow(ForbiddenException);
-        expect(prisma.property.create).not.toHaveBeenCalled();
-      });
-
-      it('rejette avec 403 si le propriétaire a idVerificationStatus=REJECTED', async () => {
-        prisma.ownerProfile.findUnique.mockResolvedValueOnce({ idVerificationStatus: 'REJECTED' });
-
-        await expect(service.create(owner, createDto)).rejects.toThrow(ForbiddenException);
-        expect(prisma.property.create).not.toHaveBeenCalled();
-      });
-
-      it('autorise la création si le propriétaire est VERIFIED', async () => {
-        prisma.ownerProfile.findUnique.mockResolvedValueOnce({ idVerificationStatus: 'VERIFIED' });
-        prisma.property.create.mockResolvedValueOnce(makeProperty());
-
-        await expect(service.create(owner, createDto)).resolves.toBeDefined();
-      });
-
-      it('vérifie le profil gestionnaire (pas propriétaire) quand un MANAGER crée son propre bien', async () => {
-        prisma.managerProfile.findUnique.mockResolvedValueOnce({
-          idVerificationStatus: 'PENDING',
-        });
-
-        await expect(service.create(manager, createDto)).rejects.toThrow(ForbiddenException);
-        expect(prisma.ownerProfile.findUnique).not.toHaveBeenCalled();
-      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(listings.publishForProperty).toHaveBeenCalledWith(prisma, created, 'owner-1');
     });
   });
 
@@ -269,7 +287,12 @@ describe('PropertiesService', () => {
     it('renvoie le bien si le propriétaire y a accès', async () => {
       const property = makeProperty();
       prisma.property.findUnique.mockResolvedValueOnce(property);
-      await expect(service.findOne(owner, 'prop-1')).resolves.toEqual(property);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { listings, ...expected } = property;
+      await expect(service.findOne(owner, 'prop-1')).resolves.toEqual({
+        ...expected,
+        activeListing: null,
+      });
     });
   });
 

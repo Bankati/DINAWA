@@ -1,11 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
+import { withTimeout } from '../../common/utils/with-timeout';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
+// Défaut aligné sur EmailService (voir code-standards.md, "Timeouts et retry
+// sur les appels externes" — 10s par défaut) — borne chaque tentative
+// individuelle de withRetry(), indépendamment du nombre de retries.
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 10_000;
+
+// Défaut aligné sur EmailService/WebPushService (mêmes valeurs pRetry) —
+// absorbe un blip réseau ponctuel vers l'infrastructure Supabase (voir
+// incident constaté en test : ConnectTimeoutError sur generateLink() et
+// transaction Postgres pendant un réveil de projet gratuit). N'aide pas
+// contre une panne prolongée, seulement contre les échecs transitoires.
+const DEFAULT_RETRY_OPTIONS = { retries: 3, minTimeout: 1000, maxTimeout: 16000 };
+
 @Injectable()
 export class SupabaseAdminService {
+  private readonly logger = new Logger(SupabaseAdminService.name);
+
   private readonly client: SupabaseClient;
   // Client anon dédié à signInWithPassword() (AuthService.login) — le
   // principe de moindre privilège veut qu'on ne fasse jamais transiter une
@@ -38,5 +53,33 @@ export class SupabaseAdminService {
   // Accès complet au client — utilisé par StorageService pour l'API Storage
   get raw(): SupabaseClient {
     return this.client;
+  }
+
+  // Seul point d'entrée pour retenter un appel vers l'API Supabase (Auth
+  // admin, getUser, signInWithPassword...) — jamais de pRetry ad hoc dans un
+  // service métier. Ne retente que sur exception levée (échec réseau bas
+  // niveau : timeout, connexion refusée) — une erreur métier retournée par
+  // le SDK (ex. `{ error: { code: 'email_exists' } }`, jamais levée en
+  // exception) traverse normalement dès le premier essai, aucun retry inutile.
+  async withRetry<T>(
+    fn: () => Promise<T>,
+    options: {
+      retries?: number;
+      minTimeout?: number;
+      maxTimeout?: number;
+      timeoutMs?: number;
+    } = {},
+  ): Promise<T> {
+    const { default: pRetry } = await import('p-retry');
+    const { timeoutMs = DEFAULT_ATTEMPT_TIMEOUT_MS, ...retryOptions } = options;
+    return pRetry(() => withTimeout(fn(), timeoutMs), {
+      ...DEFAULT_RETRY_OPTIONS,
+      ...retryOptions,
+      onFailedAttempt: (error) => {
+        this.logger.warn(
+          `[supabase-admin] tentative ${error.attemptNumber} échouée, ${error.retriesLeft} restante(s) — ${error.message}`,
+        );
+      },
+    });
   }
 }

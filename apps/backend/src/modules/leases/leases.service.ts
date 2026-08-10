@@ -2,141 +2,26 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { addMonths, format } from 'date-fns';
-import { Lease, PaymentFrequency, Prisma, Property } from '@prisma/client';
+import { Lease, PaymentScheduleEntry, Property } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { canActOnProperty } from '../../common/permissions/property-access';
-import { assertTenantNotBlocked } from '../../common/permissions/tenant-block';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
-import { NotifyService } from '../notify/notify.service';
-import { CreateLeaseDto } from './dto/create-lease.dto';
+import { ListingsService } from '../listings/listings.service';
 import { TerminateLeaseDto } from './dto/terminate-lease.dto';
 
-// Nombre de mois couverts par une période selon la fréquence — voir
-// build-plan.md unité 15 : "montant = (monthlyRent + monthlyCharges) ×
-// nombreDeMoisDansLaPeriode".
-const PERIOD_MONTHS: Record<PaymentFrequency, number> = {
-  MONTHLY: 1,
-  QUARTERLY: 3,
-  BIANNUAL: 6,
-  ANNUAL: 12,
-};
-
-// Fenêtre initiale d'un bail ouvert (sans endDate) — voir /architect unité
-// 15 : pas de cron dédié, la prolongation se fera à la demande (unité 16)
-// en complétant les échéances manquantes jusqu'à 12 mois à partir
-// d'aujourd'hui.
-const ROLLING_WINDOW_MONTHS = 12;
-
-type ScheduleEntryInput = Prisma.PaymentScheduleEntryCreateManyInput;
-
+// La création d'un bail a été fusionnée dans AuthService.inviteTenant()
+// (voir /architect révision paiements, 2026-07-25) — ce service ne couvre
+// plus que le cycle de vie d'un bail déjà créé : résiliation et lecture de
+// l'échéancier. buildScheduleEntries() a déménagé dans schedule-builder.ts,
+// partagé avec AuthService.
 @Injectable()
 export class LeasesService {
-  private readonly logger = new Logger(LeasesService.name);
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notify: NotifyService,
+    private readonly listings: ListingsService,
   ) {}
-
-  // Le bien passe à OCCUPIED et les échéances sont générées dans la même
-  // transaction que la création du bail (voir code-standards.md, exemple
-  // explicite de cas nécessitant `$transaction`). La contrainte "un seul
-  // Lease ACTIVE par locataire" (déjà en base depuis l'unité 02) est
-  // capturée en 409 propre, jamais un 500 brut — même réflexe que le
-  // blocage locataire (unité 14).
-  async create(user: AuthenticatedUser, dto: CreateLeaseDto): Promise<Lease> {
-    const property = await this.getPropertyOrThrow(dto.propertyId);
-    const access = await canActOnProperty(this.prisma, user, property);
-    if (!access.canMutate) throw new ForbiddenException('Accès refusé à ce bien');
-
-    const tenant = await this.prisma.user.findUnique({ where: { id: dto.tenantId } });
-    if (!tenant || tenant.role !== 'TENANT') {
-      throw new NotFoundException('Locataire introuvable');
-    }
-
-    // Referme le gap laissé ouvert à l'unité 14 : sans cette vérification,
-    // un blocage locataire↔bien pouvait être contourné en créant
-    // directement un bail avec un tenantId existant (voir /architect unité
-    // 15).
-    await assertTenantNotBlocked(this.prisma, dto.propertyId, dto.tenantId);
-
-    const startDate = new Date(dto.startDate);
-    const endDate = dto.endDate ? new Date(dto.endDate) : null;
-    const scheduleEndDate = endDate ?? addMonths(startDate, ROLLING_WINDOW_MONTHS);
-
-    let lease: Lease;
-    try {
-      lease = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.lease.create({
-          data: {
-            propertyId: dto.propertyId,
-            ownerId: property.ownerId,
-            tenantUserId: dto.tenantId,
-            monthlyRent: dto.monthlyRent,
-            monthlyCharges: dto.monthlyCharges,
-            paymentFrequency: dto.paymentFrequency,
-            startDate,
-            endDate,
-            securityDeposit: dto.securityDeposit,
-            depositReturnConditions: dto.depositReturnConditions,
-            reminderDaysBefore: dto.reminderDaysBefore,
-            overdueAlertWindowDays: dto.overdueAlertWindowDays,
-          },
-        });
-
-        const entries = this.buildScheduleEntries(
-          created.id,
-          startDate,
-          scheduleEndDate,
-          dto.paymentFrequency,
-          dto.monthlyRent,
-          dto.monthlyCharges,
-        );
-        if (entries.length > 0) {
-          await tx.paymentScheduleEntry.createMany({ data: entries });
-        }
-
-        // Jamais via PropertiesService.update() — le passage à OCCUPIED est
-        // exclusivement piloté par la création d'un bail, PATCH /properties
-        // le refuse explicitement (voir assertValidTransition()).
-        await tx.property.update({ where: { id: dto.propertyId }, data: { status: 'OCCUPIED' } });
-
-        return created;
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException(
-          "Ce locataire a déjà un bail actif — un locataire ne peut avoir qu'un seul bail actif à la fois",
-        );
-      }
-      throw error;
-    }
-
-    // Événement métier, jamais un email direct (voir architecture.md,
-    // invariant #7 — l'exception ne couvre que les emails d'authentification).
-    // Une notification manquée (locataire sans email/push actif) ne doit
-    // jamais faire échouer la création du bail elle-même.
-    try {
-      await this.notify.notifyUser({
-        userId: dto.tenantId,
-        event: 'lease-created',
-        variables: {
-          propertyAddress: property.address,
-          ownerName: `${user.firstName} ${user.lastName}`,
-          startDate: format(startDate, 'dd/MM/yyyy'),
-          monthlyAmount: dto.monthlyRent + dto.monthlyCharges,
-        },
-      });
-    } catch (error) {
-      this.logger.error(`[lease-created] notification échouée pour tenant=${dto.tenantId}`, error);
-    }
-
-    return lease;
-  }
 
   // Libère le bien et purge les échéances futures jamais touchées par un
   // paiement — évite de laisser des PENDING fantômes sur un bail résilié
@@ -167,41 +52,37 @@ export class LeasesService {
 
       await tx.property.update({ where: { id: lease.propertyId }, data: { status: 'VACANT' } });
 
+      // Redevenu VACANT — republié automatiquement (nouvelle ligne Listing,
+      // voir /architect module Annonces, 2026-07-28). L'acteur de la
+      // résiliation (propriétaire ou gestionnaire mandaté) est crédité comme
+      // publisher, cohérent avec publishForProperty() à la création du bien.
+      await this.listings.publishForProperty(tx, property, user.id);
+
       return updated;
     });
   }
 
-  // Pas de prorata sur la première période même si `startDate` ne tombe pas
-  // en début de mois calendaire — le build-plan ne mentionne aucune règle
-  // de prorata, chaque période court une durée pleine à partir de
-  // `startDate` (voir /architect unité 15). `dueDate` = début de période :
-  // le loyer est dû au début de chaque période, pas à la fin.
-  private buildScheduleEntries(
-    leaseId: string,
-    startDate: Date,
-    scheduleEndDate: Date,
-    frequency: PaymentFrequency,
-    monthlyRent: number,
-    monthlyCharges: number,
-  ): ScheduleEntryInput[] {
-    const periodMonths = PERIOD_MONTHS[frequency];
-    const expectedAmount = (monthlyRent + monthlyCharges) * periodMonths;
+  // Voir build-plan.md unité 16 — renvoie le calendrier complet, statut de
+  // chaque échéance tel qu'enregistré (mis à jour explicitement à chaque
+  // paiement, voir PaymentsService/PaymentDeclarationsService, pas
+  // recalculé à la volée ici). Accessible au locataire lui-même pour son
+  // propre bail — canActOnProperty() ne le couvre pas (il porte sur qui
+  // peut *agir* sur un bien, pas sur le locataire qui y habite), même
+  // principe que TenantsService.getTenantLeasesHistory().
+  async getSchedule(user: AuthenticatedUser, leaseId: string): Promise<PaymentScheduleEntry[]> {
+    const lease = await this.getLeaseOrThrow(leaseId);
 
-    const entries: ScheduleEntryInput[] = [];
-    let periodStart = startDate;
-    while (periodStart < scheduleEndDate) {
-      const periodEnd = addMonths(periodStart, periodMonths);
-      entries.push({
-        leaseId,
-        periodStart,
-        periodEnd,
-        dueDate: periodStart,
-        expectedAmount,
-      });
-      periodStart = periodEnd;
+    if (user.role !== 'TENANT' || user.id !== lease.tenantUserId) {
+      const property = await this.getPropertyOrThrow(lease.propertyId);
+      const access = await canActOnProperty(this.prisma, user, property);
+      if (!access.canRead) throw new ForbiddenException('Accès refusé à ce bien');
     }
 
-    return entries;
+    return this.prisma.paymentScheduleEntry.findMany({
+      where: { leaseId },
+      orderBy: { periodStart: 'asc' },
+      take: 100,
+    });
   }
 
   private async getPropertyOrThrow(id: string): Promise<Property> {

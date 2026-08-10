@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { AccountStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
 
 type ActivitySubject = { id: string; role: UserRole };
+
+export type AccountStatusResponse = {
+  accountStatus: AccountStatus;
+  suspendedReason: string | null;
+  unblockCondition: string | null;
+};
 
 // Seule autorité pour décider si un OWNER/MANAGER a une activité qualifiante
 // (voir build-plan.md unité 11) — jamais de vérification inline ailleurs.
@@ -64,5 +70,33 @@ export class AccountActivationService {
     }
 
     return true;
+  }
+
+  // Messages affichés par le bandeau de compte suspendu côté frontend (voir
+  // AccountController.getStatus()) — logique de présentation pure, extraite
+  // du controller pour respecter l'invariant "aucune logique métier dans les
+  // controllers" (voir /review).
+  resolveStatus(user: { accountStatus: AccountStatus; role: UserRole }): AccountStatusResponse {
+    if (user.accountStatus === 'SUSPENDED_INACTIVITY') {
+      return {
+        accountStatus: user.accountStatus,
+        suspendedReason:
+          'Compte inactif depuis plus de 60 jours, sans bien enregistré ni mandat actif.',
+        unblockCondition:
+          user.role === 'MANAGER'
+            ? 'Enregistrez un bien ou acceptez un mandat pour réactiver votre compte.'
+            : 'Enregistrez un bien pour réactiver votre compte.',
+      };
+    }
+
+    if (user.accountStatus === 'SUSPENDED_PAYMENT') {
+      return {
+        accountStatus: user.accountStatus,
+        suspendedReason: 'Abonnement impayé.',
+        unblockCondition: 'Régularisez votre abonnement pour réactiver votre compte.',
+      };
+    }
+
+    return { accountStatus: user.accountStatus, suspendedReason: null, unblockCondition: null };
   }
 }

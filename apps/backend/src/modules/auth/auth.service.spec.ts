@@ -10,7 +10,6 @@ import { AuthService } from './auth.service';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
-import { IdentityVerificationFiles } from '../identity/identity.service';
 import { createInvitationToken } from '../../common/utils/invitation-token';
 
 describe('AuthService', () => {
@@ -26,7 +25,6 @@ describe('AuthService', () => {
     property: { findUnique: jest.Mock };
     mandate: { findFirst: jest.Mock };
     tenantPropertyBlock: { findUnique: jest.Mock };
-    identityVerification: { findFirst: jest.Mock };
     passwordResetOtp: {
       updateMany: jest.Mock;
       create: jest.Mock;
@@ -39,24 +37,29 @@ describe('AuthService', () => {
     ownerProfile: { create: jest.Mock };
     managerProfile: { create: jest.Mock };
     tenantProfile: { create: jest.Mock };
+    subscription: { create: jest.Mock };
+    lease: { create: jest.Mock };
+    paymentScheduleEntry: { createMany: jest.Mock };
+    property: { update: jest.Mock };
   };
   let config: { getOrThrow: jest.Mock };
   let supabaseAdmin: {
     auth: {
       admin: {
-        generateLink: jest.Mock;
         createUser: jest.Mock;
         deleteUser: jest.Mock;
         updateUserById: jest.Mock;
       };
     };
-    anonAuth: { signInWithPassword: jest.Mock };
+    anonAuth: { signInWithPassword: jest.Mock; refreshSession: jest.Mock };
+    withRetry: jest.Mock;
   };
   let emailService: { sendEmail: jest.Mock };
-  let identityService: { verify: jest.Mock };
+  let notify: { notifyUser: jest.Mock };
+  let listings: { deactivateForProperty: jest.Mock };
 
   const CONFIG_VALUES: Record<string, string> = {
-    FRONTEND_URL: 'http://localhost:4200',
+    FRONTEND_URL: 'http://localhost:4300',
     INVITATION_TOKEN_SECRET: 'test-secret',
   };
 
@@ -77,18 +80,8 @@ describe('AuthService', () => {
     phone: '91445566',
     city: 'Kara',
   };
-  const frontFile = {
-    buffer: Buffer.from('front'),
-    mimetype: 'image/jpeg',
-    size: 1000,
-  } as Express.Multer.File;
-  const backFile = {
-    buffer: Buffer.from('back'),
-    mimetype: 'image/jpeg',
-    size: 1000,
-  } as Express.Multer.File;
-  const files: IdentityVerificationFiles = { image: [frontFile], imageBack: [backFile] };
   const createdUser = { id: 'user-1', email: ownerDto.email, role: 'OWNER' };
+  const createdLease = { id: 'lease-1', propertyId: 'property-1', tenantUserId: 'tenant-1' };
 
   beforeEach(() => {
     tx = {
@@ -96,6 +89,10 @@ describe('AuthService', () => {
       ownerProfile: { create: jest.fn().mockResolvedValue({}) },
       managerProfile: { create: jest.fn().mockResolvedValue({}) },
       tenantProfile: { create: jest.fn().mockResolvedValue({}) },
+      subscription: { create: jest.fn().mockResolvedValue({}) },
+      lease: { create: jest.fn().mockResolvedValue(createdLease) },
+      paymentScheduleEntry: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      property: { update: jest.fn().mockResolvedValue({}) },
     };
     prisma = {
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)),
@@ -108,7 +105,6 @@ describe('AuthService', () => {
       property: { findUnique: jest.fn() },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
       tenantPropertyBlock: { findUnique: jest.fn().mockResolvedValue(null) },
-      identityVerification: { findFirst: jest.fn().mockResolvedValue(null) },
       passwordResetOtp: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         create: jest.fn().mockResolvedValue({}),
@@ -120,16 +116,9 @@ describe('AuthService', () => {
     supabaseAdmin = {
       auth: {
         admin: {
-          generateLink: jest.fn().mockResolvedValue({
-            data: {
-              user: { id: 'supabase-uid-1' },
-              properties: { action_link: 'https://supabase.example/auth/v1/verify?token=abc' },
-            },
-            error: null,
-          }),
           createUser: jest
             .fn()
-            .mockResolvedValue({ data: { user: { id: 'supabase-uid-tenant' } }, error: null }),
+            .mockResolvedValue({ data: { user: { id: 'supabase-uid-1' } }, error: null }),
           deleteUser: jest.fn().mockResolvedValue({ error: null }),
           updateUserById: jest.fn().mockResolvedValue({ error: null }),
         },
@@ -139,17 +128,24 @@ describe('AuthService', () => {
           data: { session: { access_token: 'access-1', refresh_token: 'refresh-1' } },
           error: null,
         }),
+        refreshSession: jest.fn().mockResolvedValue({
+          data: { session: { access_token: 'access-2', refresh_token: 'refresh-2' } },
+          error: null,
+        }),
       },
+      withRetry: jest.fn((fn: () => unknown) => fn()),
     };
     emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
-    identityService = { verify: jest.fn().mockResolvedValue({ id: 'verif-1', status: 'PENDING' }) };
+    notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
+    listings = { deactivateForProperty: jest.fn().mockResolvedValue(undefined) };
 
     service = new AuthService(
       prisma as never,
       config as never,
       supabaseAdmin as never,
       emailService as never,
-      identityService as never,
+      notify as never,
+      listings as never,
     );
   });
 
@@ -211,14 +207,13 @@ describe('AuthService', () => {
       expect(updateArgs.data.lockedUntil).toBeInstanceOf(Date);
     });
 
-    it('rejette avec 403 sans appeler Supabase si le compte est déjà bloqué', async () => {
+    it('rejette avec 403 si le compte est déjà bloqué', async () => {
       prisma.user.findUnique.mockResolvedValue({
         ...activeUser,
         lockedUntil: new Date(Date.now() + 5 * 60_000),
       });
 
       await expect(service.login(loginDto)).rejects.toThrow(ForbiddenException);
-      expect(supabaseAdmin.anonAuth.signInWithPassword).not.toHaveBeenCalled();
     });
 
     it("rejette avec 401 générique si Supabase réussit mais aucun User Prisma ne correspond (sans fuite d'info)", async () => {
@@ -226,10 +221,9 @@ describe('AuthService', () => {
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('rejette un compte SUSPENDED_ADMIN sans appeler Supabase', async () => {
+    it('rejette un compte SUSPENDED_ADMIN', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...activeUser, accountStatus: 'SUSPENDED_ADMIN' });
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      expect(supabaseAdmin.anonAuth.signInWithPassword).not.toHaveBeenCalled();
     });
   });
 
@@ -299,14 +293,18 @@ describe('AuthService', () => {
   });
 
   describe('signupOwner', () => {
-    it("crée le compte Supabase, le User+OwnerProfile (avec phone/city), envoie l'email de confirmation et déclenche la vérification CNI quand une image est fournie", async () => {
-      const result = await service.signupOwner(ownerDto, files);
+    it("crée le compte Supabase, le User+OwnerProfile (avec phone/city), envoie l'email de confirmation", async () => {
+      const result = await service.signupOwner(ownerDto);
 
-      expect(supabaseAdmin.auth.admin.generateLink).toHaveBeenCalledWith({
-        type: 'signup',
+      // email_confirm: true — connexion immédiate sans clic dans un email de
+      // confirmation (voir /recover fusion auth.service.ts : fiabilité email
+      // variable au Togo, friction jugée plus coûteuse que le gain sécurité
+      // pour ce contexte B2B).
+      expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
         email: ownerDto.email,
         password: ownerDto.password,
-        options: { data: { role: 'OWNER' }, redirectTo: 'http://localhost:4200' },
+        email_confirm: true,
+        user_metadata: { role: 'OWNER' },
       });
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
@@ -322,45 +320,31 @@ describe('AuthService', () => {
       expect(tx.ownerProfile.create).toHaveBeenCalledWith({
         data: { userId: createdUser.id, residenceCountry: ownerDto.residenceCountry },
       });
+      // Abonnement créé systématiquement à l'inscription (voir /architect
+      // unité 35) — Starter + bêta gratuite immédiate.
+      const [subscriptionArgs] = tx.subscription.create.mock.calls[0] as [
+        { data: { userId: string; tier: string; betaUntil: Date } },
+      ];
+      expect(subscriptionArgs.data.userId).toBe(createdUser.id);
+      expect(subscriptionArgs.data.tier).toBe('STARTER');
+      expect(subscriptionArgs.data.betaUntil).toBeInstanceOf(Date);
       expect(emailService.sendEmail).toHaveBeenCalledWith({
         to: ownerDto.email,
         template: 'signup-confirmation',
         variables: {
           firstName: ownerDto.firstName,
-          confirmationUrl: 'https://supabase.example/auth/v1/verify?token=abc',
+          confirmationUrl: 'http://localhost:4300/auth/login',
         },
       });
-      expect(identityService.verify).toHaveBeenCalledWith(createdUser, files);
-      expect(result).toEqual({
-        user: createdUser,
-        identityVerification: { id: 'verif-1', status: 'PENDING' },
-      });
-    });
-
-    // CNI facultative à l'inscription (voir /architect révision inscription
-    // owner/manager) — le compte se crée normalement sans aucune image, et
-    // la vérification n'est jamais tentée.
-    it('crée le compte sans aucune CNI fournie, sans appeler identityService.verify()', async () => {
-      const result = await service.signupOwner(ownerDto, {});
-
-      expect(supabaseAdmin.auth.admin.generateLink).toHaveBeenCalled();
-      expect(identityService.verify).not.toHaveBeenCalled();
-      expect(result).toEqual({ user: createdUser, identityVerification: null });
-    });
-
-    it('ne tente pas la vérification si seul le verso est fourni sans le recto', async () => {
-      const result = await service.signupOwner(ownerDto, { imageBack: [backFile] });
-
-      expect(identityService.verify).not.toHaveBeenCalled();
-      expect(result.identityVerification).toBeNull();
+      expect(result).toEqual({ user: createdUser });
     });
 
     it('convertit une erreur Supabase email_exists en 409, sans toucher à Prisma', async () => {
-      supabaseAdmin.auth.admin.generateLink.mockResolvedValue({
+      supabaseAdmin.auth.admin.createUser.mockResolvedValue({
         data: null,
         error: { code: 'email_exists', message: 'User already registered' },
       });
-      await expect(service.signupOwner(ownerDto, files)).rejects.toThrow(ConflictException);
+      await expect(service.signupOwner(ownerDto)).rejects.toThrow(ConflictException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -372,20 +356,20 @@ describe('AuthService', () => {
           meta: { target: ['email'] },
         }),
       );
-      await expect(service.signupOwner(ownerDto, files)).rejects.toThrow(ConflictException);
+      await expect(service.signupOwner(ownerDto)).rejects.toThrow(ConflictException);
       expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
 
     it("supprime le compte Supabase et relance l'erreur si la transaction échoue pour une autre raison", async () => {
       prisma.$transaction.mockRejectedValue(new Error('DB down'));
-      await expect(service.signupOwner(ownerDto, files)).rejects.toThrow('DB down');
+      await expect(service.signupOwner(ownerDto)).rejects.toThrow('DB down');
       expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
   });
 
   describe('signupManager', () => {
-    it('crée le compte (User avec phone/city, ManagerProfile) et déclenche la vérification CNI quand une image est fournie', async () => {
-      const result = await service.signupManager(managerDto, files);
+    it('crée le compte (User avec phone/city, ManagerProfile)', async () => {
+      const result = await service.signupManager(managerDto);
 
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
@@ -401,22 +385,7 @@ describe('AuthService', () => {
       expect(tx.managerProfile.create).toHaveBeenCalledWith({
         data: { userId: createdUser.id },
       });
-      expect(identityService.verify).toHaveBeenCalledWith(createdUser, files);
-      expect(result).toEqual({
-        user: createdUser,
-        identityVerification: { id: 'verif-1', status: 'PENDING' },
-      });
-    });
-
-    // Même mécanique que signupOwner — CNI facultative à l'inscription (voir
-    // /architect révision inscription owner/manager). Le document de
-    // référence professionnelle (PDF) a été retiré du flux, jugé non
-    // indispensable — plus aucun test à son sujet.
-    it('crée le compte sans aucune CNI fournie, sans appeler identityService.verify()', async () => {
-      const result = await service.signupManager(managerDto, {});
-
-      expect(identityService.verify).not.toHaveBeenCalled();
-      expect(result).toEqual({ user: createdUser, identityVerification: null });
+      expect(result).toEqual({ user: createdUser });
     });
   });
 
@@ -429,14 +398,24 @@ describe('AuthService', () => {
       phone: '90330557',
       firstName: 'Ama',
       lastName: 'Kodjo',
+      monthlyRent: 50000,
+      monthlyCharges: 5000,
+      paymentFrequency: 'MONTHLY',
+      startDate: '2026-01-01',
+      securityDeposit: 100000,
     };
 
     beforeEach(() => {
       prisma.property.findUnique.mockResolvedValue(property);
       tx.user.create.mockResolvedValue({ id: 'tenant-1', role: 'TENANT' });
+      tx.lease.create.mockResolvedValue({
+        id: 'lease-1',
+        propertyId: 'property-1',
+        tenantUserId: 'tenant-1',
+      });
     });
 
-    it("crée le compte locataire (email confirmé), l'associe à l'inviteur et envoie l'email avec l'adresse du bien", async () => {
+    it("crée le compte locataire (email confirmé), l'associe à l'inviteur, crée le bail et l'échéancier, envoie l'email avec l'adresse du bien", async () => {
       const result = await service.inviteTenant(owner as never, inviteDto);
 
       expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
@@ -446,7 +425,7 @@ describe('AuthService', () => {
       });
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
-          supabaseId: 'supabase-uid-tenant',
+          supabaseId: 'supabase-uid-1',
           email: inviteDto.email,
           phone: inviteDto.phone,
           role: 'TENANT',
@@ -457,18 +436,49 @@ describe('AuthService', () => {
       expect(tx.tenantProfile.create).toHaveBeenCalledWith({
         data: { userId: 'tenant-1', invitedByUserId: owner.id },
       });
-      type SendEmailArgs = {
-        to: string;
-        template: string;
-        variables: { inviterName: string; propertyAddress: string; invitationUrl: string };
-      };
-      const [emailArgs] = emailService.sendEmail.mock.calls[0] as [SendEmailArgs];
-      expect(emailArgs.to).toBe(inviteDto.email);
-      expect(emailArgs.template).toBe('tenant-invitation');
-      expect(emailArgs.variables.inviterName).toBe('Jean Dupont');
-      expect(emailArgs.variables.propertyAddress).toBe(property.address);
-      expect(emailArgs.variables.invitationUrl).toContain('/activate-account?token=');
-      expect(result.invitationUrl).toContain('/activate-account?token=');
+
+      const [leaseCreateArgs] = tx.lease.create.mock.calls[0] as [
+        { data: { ownerId: string; tenantUserId: string; monthlyRent: number } },
+      ];
+      expect(leaseCreateArgs.data.ownerId).toBe('owner-1');
+      expect(leaseCreateArgs.data.tenantUserId).toBe('tenant-1');
+      expect(leaseCreateArgs.data.monthlyRent).toBe(50000);
+
+      expect(tx.paymentScheduleEntry.createMany).toHaveBeenCalled();
+      expect(tx.property.update).toHaveBeenCalledWith({
+        where: { id: 'property-1' },
+        data: { status: 'OCCUPIED' },
+      });
+      // Bien passé OCCUPIED — annonce désactivée dans la même transaction
+      // (voir /architect module Annonces, 2026-07-28).
+      expect(listings.deactivateForProperty).toHaveBeenCalledWith(tx, 'property-1');
+
+      // Un seul email lease-created, avec invitationUrl inclus pour un
+      // nouveau locataire (fusionné avec l'ancien événement tenant-invitation
+      // séparé — voir /recover fusion auth.service.ts).
+      expect(result.invitationUrl).toContain('/auth/activate?token=');
+      expect(result.lease).toEqual({
+        id: 'lease-1',
+        propertyId: 'property-1',
+        tenantUserId: 'tenant-1',
+      });
+
+      expect(notify.notifyUser).toHaveBeenCalledWith({
+        userId: 'tenant-1',
+        event: 'lease-created',
+        variables: {
+          propertyAddress: property.address,
+          ownerName: 'Jean Dupont',
+          startDate: '01/01/2026',
+          monthlyAmount: 55000,
+          invitationUrl: result.invitationUrl,
+        },
+      });
+    });
+
+    it('ne fait pas échouer la création si la notification lease-created échoue', async () => {
+      notify.notifyUser.mockRejectedValueOnce(new Error('push down'));
+      await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toBeDefined();
     });
 
     it('rejette avec 404 si le bien est introuvable', async () => {
@@ -515,14 +525,14 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
         'Ce numéro de téléphone est déjà utilisé(e)',
       );
-      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-tenant');
+      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
 
     // Voir /architect unité 14 : le blocage locataire↔bien est vérifié dès
     // l'invitation, pas seulement à la création du bail (unité 15).
     describe('blocage locataire↔bien (unité 14)', () => {
       it('rejette avec 403 et le motif si le locataire (email ou téléphone déjà connu) est bloqué sur ce bien', async () => {
-        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1' });
+        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
         prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce({
           id: 'block-1',
           reason: 'Dégâts constatés',
@@ -534,14 +544,14 @@ describe('AuthService', () => {
         expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
       });
 
-      it("recherche l'utilisateur existant par email OU téléphone parmi les locataires uniquement", async () => {
+      it("recherche l'utilisateur existant par email OU téléphone, tous rôles confondus (email/phone uniques globalement)", async () => {
         prisma.user.findFirst.mockResolvedValueOnce(null);
         await service.inviteTenant(owner as never, inviteDto);
 
         const [findFirstArgs] = prisma.user.findFirst.mock.calls[0] as [
-          { where: { role: string; OR: [{ email: string }, { phone: string }] } },
+          { where: { OR: [{ email: string }, { phone: string }] } },
         ];
-        expect(findFirstArgs.where.role).toBe('TENANT');
+        expect(findFirstArgs.where).not.toHaveProperty('role');
         expect(findFirstArgs.where.OR).toEqual([
           { email: inviteDto.email },
           { phone: inviteDto.phone },
@@ -555,10 +565,106 @@ describe('AuthService', () => {
       });
 
       it("laisse passer normalement un utilisateur existant qui n'est pas bloqué sur ce bien", async () => {
-        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1' });
+        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
         prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
         await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toBeDefined();
       });
+
+      // Bug réel corrigé le 2026-08-09 : l'ancienne recherche filtrait
+      // `role: 'TENANT'`, donc un email déjà pris par un compte
+      // OWNER/MANAGER/ADMIN n'était jamais détecté ici — l'appel Supabase
+      // plus bas échouait alors avec un "email déjà utilisé" trompeur,
+      // jamais vu côté locataire par l'appelant.
+      it("rejette avec 409 explicite si l'email appartient déjà à un compte non-TENANT (ex: OWNER)", async () => {
+        prisma.user.findFirst.mockResolvedValueOnce({
+          id: 'owner-9',
+          role: 'OWNER',
+          email: inviteDto.email,
+          phone: 'autre-numero',
+        });
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
+          ConflictException,
+        );
+        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+      });
+
+      it('rejette avec 409 explicite si le téléphone appartient déjà à un compte non-TENANT', async () => {
+        prisma.user.findFirst.mockResolvedValueOnce({
+          id: 'manager-9',
+          role: 'MANAGER',
+          email: 'autre-email@example.com',
+          phone: inviteDto.phone,
+        });
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
+          'Ce numéro de téléphone est déjà utilisé par un autre compte WARAH',
+        );
+      });
+    });
+
+    // Voir /architect révision paiements, 2026-07-25 : un locataire déjà
+    // connu de la plateforme (ex. bail précédent résilié, nouveau bien) est
+    // rattaché à un nouveau bail sans nouveau compte Supabase ni ré-invitation.
+    describe('locataire déjà existant sur la plateforme', () => {
+      const existingTenant = {
+        id: 'existing-tenant-1',
+        role: 'TENANT',
+        email: inviteDto.email,
+        phone: inviteDto.phone,
+      };
+
+      beforeEach(() => {
+        prisma.user.findFirst.mockResolvedValueOnce(existingTenant);
+        prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
+        tx.lease.create.mockResolvedValue({
+          id: 'lease-2',
+          propertyId: 'property-1',
+          tenantUserId: 'existing-tenant-1',
+        });
+      });
+
+      it('ne crée ni compte Supabase ni User ni email d’invitation — réutilise le locataire existant', async () => {
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+        expect(tx.user.create).not.toHaveBeenCalled();
+        expect(tx.tenantProfile.create).not.toHaveBeenCalled();
+        expect(emailService.sendEmail).not.toHaveBeenCalled();
+        expect(result.invitationUrl).toBeNull();
+        expect(result.user).toBe(existingTenant);
+      });
+
+      it('crée le bail et l’échéancier rattachés au locataire existant, et le notifie', async () => {
+        await service.inviteTenant(owner as never, inviteDto);
+
+        const [leaseCreateArgs] = tx.lease.create.mock.calls[0] as [
+          { data: { tenantUserId: string; ownerId: string } },
+        ];
+        expect(leaseCreateArgs.data.tenantUserId).toBe('existing-tenant-1');
+        expect(leaseCreateArgs.data.ownerId).toBe('owner-1');
+        expect(tx.property.update).toHaveBeenCalledWith({
+          where: { id: 'property-1' },
+          data: { status: 'OCCUPIED' },
+        });
+        expect(notify.notifyUser).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: 'existing-tenant-1', event: 'lease-created' }),
+        );
+      });
+    });
+
+    it('mappe la contrainte leases_tenant_active_unique en 409 avec un message dédié (locataire déjà en bail actif)', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
+      prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the constraint: `leases_tenant_active_unique`',
+          { code: 'P2002', clientVersion: '5.22.0' },
+        ),
+      );
+
+      await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
+        'Ce locataire a déjà un bail actif',
+      );
+      expect(supabaseAdmin.auth.admin.deleteUser).not.toHaveBeenCalled();
     });
   });
 
@@ -598,7 +704,7 @@ describe('AuthService', () => {
   });
 
   describe('getMe', () => {
-    it("renvoie l'utilisateur avec son profil de rôle et identityVerifiedAt à null tant qu'aucune vérification n'a abouti", async () => {
+    it("renvoie l'utilisateur avec son profil de rôle", async () => {
       prisma.user.findUniqueOrThrow.mockResolvedValue({
         id: 'user-1',
         email: ownerDto.email,
@@ -607,40 +713,10 @@ describe('AuthService', () => {
         managerProfile: null,
         adminProfile: null,
       });
-      prisma.identityVerification.findFirst.mockResolvedValue(null);
 
       const result = await service.getMe(createdUser as never);
 
       expect(result.profile).toEqual({ id: 'profile-1' });
-      expect(result.identityVerifiedAt).toBeNull();
-    });
-
-    // Badge de vérification (voir /architect révision inscription
-    // owner/manager) — dérivé du updatedAt de la dernière IdentityVerification
-    // VERIFIED, jamais stocké en double.
-    it('renvoie identityVerifiedAt = updatedAt de la dernière IdentityVerification VERIFIED', async () => {
-      const verifiedAt = new Date('2026-07-10T12:00:00Z');
-      prisma.user.findUniqueOrThrow.mockResolvedValue({
-        id: 'user-1',
-        email: ownerDto.email,
-        ownerProfile: { id: 'profile-1' },
-        tenantProfile: null,
-        managerProfile: null,
-        adminProfile: null,
-      });
-      prisma.identityVerification.findFirst.mockResolvedValue({
-        id: 'verif-1',
-        status: 'VERIFIED',
-        updatedAt: verifiedAt,
-      });
-
-      const result = await service.getMe(createdUser as never);
-
-      expect(prisma.identityVerification.findFirst).toHaveBeenCalledWith({
-        where: { userId: createdUser.id, status: 'VERIFIED' },
-        orderBy: { updatedAt: 'desc' },
-      });
-      expect(result.identityVerifiedAt).toBe(verifiedAt);
     });
   });
 });

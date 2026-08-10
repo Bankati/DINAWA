@@ -15,7 +15,7 @@ export const pinoConfig: Params = {
         'req.body.newPassword',
         'req.body.cni',
         'req.body.cniNumber',
-        'req.body.phoneNumber',
+        'req.body.phone',
         'req.body.token',
         'req.body.secret',
         '*.password',

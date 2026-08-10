@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+/* Variables de marque WARAH - source unique de vérité pour les couleurs
+   (portées telles quelles depuis l'app Angular, src/styles.css) */
+:root {
+  --color-primary: #0F4C81;
+  --color-primary-light: #1B6FB8;
+  --color-primary-dark: #0A2650;
+  --color-primary-50: #EAF1F8;
+  --color-primary-100: #D2E3F0;
+  --color-primary-900: #081E41;
+
+  --color-accent: #C9982E;
+  --color-accent-light: #E0B655;
+  --color-accent-dark: #9C7320;
+
+  --color-text: #111827;
+  --color-text-muted: #6B7280;
+  --color-border: #E5E7EB;
+  --color-bg: #F9FAFB;
+
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+  --color-info: #3B82F6;
+}
+
+@theme inline {
+  --color-primary: #0F4C81;
+  --color-primary-light: #1B6FB8;
+  --color-primary-dark: #0A2650;
+  --color-primary-50: #EAF1F8;
+  --color-primary-100: #D2E3F0;
+  --color-primary-200: #A8C7E1;
+  --color-primary-300: #7DABD1;
+  --color-primary-400: #3E83B0;
+  --color-primary-500: #0F4C81;
+  --color-primary-600: #0C3D68;
+  --color-primary-700: #0A2650;
+  --color-primary-800: #081E41;
+  --color-primary-900: #050F22;
+
+  --color-secondary: #C9982E;
+  --color-secondary-50: #FBF3E0;
+  --color-secondary-100: #F5E4B8;
+  --color-secondary-200: #ECCB7E;
+  --color-secondary-300: #E2B257;
+  --color-secondary-400: #D4A03D;
+  --color-secondary-500: #C9982E;
+  --color-secondary-600: #AD7E22;
+  --color-secondary-700: #8C641B;
+  --color-secondary-800: #6B4B14;
+  --color-secondary-900: #4A330D;
+
+  --color-accent: #C9982E;
+  --color-accent-light: #E0B655;
+  --color-accent-dark: #9C7320;
+
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+  --color-info: #3B82F6;
+
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+body {
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+}
+
+/* Styles personnalisés (portés depuis src/styles.css) */
+.input-field {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.input-field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(15, 76, 129, 0.15);
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+  font-weight: 500;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 2px 6px rgba(15, 76, 129, 0.25);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 76, 129, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background-color: #F3F4F6;
+  color: var(--color-text);
+  font-weight: 500;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-border);
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes warah-sk {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.sk {
+  background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+  background-size: 400% 100%;
+  animation: warah-sk 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.btn-accent {
+  background-color: var(--color-accent);
+  color: var(--color-text);
+  font-weight: 600;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s;
+}
+
+.btn-accent:hover {
+  background-color: var(--color-accent-dark);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-primary);
+  font-weight: 500;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid var(--color-primary);
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-outline:hover {
+  background-color: var(--color-primary);
+  color: white;
+}

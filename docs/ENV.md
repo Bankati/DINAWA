@@ -8,7 +8,7 @@ organisée par couche de déploiement.
 ## Table des matières
 
 1. [Backend — `.env` local / Railway](#1-backend--env-local--railway)
-2. [Frontend — Variables Vercel (`NG_APP_*`)](#2-frontend--variables-vercel-ng_app_)
+2. [Frontend — Variables Vercel (`NEXT_PUBLIC_*`)](#2-frontend--variables-vercel-next_public_)
 3. [GitHub Actions — Secrets et Variables](#3-github-actions--secrets-et-variables)
 4. [Comment générer les secrets](#4-comment-générer-les-secrets)
 
@@ -73,32 +73,31 @@ Sans elles, les endpoints de paiement retournent `503 Service Unavailable`.
 
 ### Sentry (monitoring)
 
-| Variable     | Obligatoire | Description                                                                                             |
-| ------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `SENTRY_DSN` | ➖          | DSN du projet `warah-backend` dans Sentry. Si absent, Sentry est désactivé (comportement normal en dev) |
+| Variable     | Obligatoire | Description                                                                                                                                               |
+| ------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN` | ➖          | DSN backend dans Sentry (org `athena-ju`), câblé via `@sentry/nestjs` (`src/instrument.ts`). Si absent, Sentry est désactivé (comportement normal en dev) |
 
 ### CORS
 
 | Variable          | Obligatoire | Description                                                                     |
 | ----------------- | ----------- | ------------------------------------------------------------------------------- |
-| `ALLOWED_ORIGINS` | ➖          | Origines autorisées séparées par des virgules. Défaut : `http://localhost:4200` |
+| `ALLOWED_ORIGINS` | ➖          | Origines autorisées séparées par des virgules. Défaut : `http://localhost:4300` |
 
 ---
 
-## 2. Frontend — Variables Vercel (`NG_APP_*`)
+## 2. Frontend — Variables Vercel (`NEXT_PUBLIC_*`)
 
-Ces variables sont injectées **au moment de la compilation** par `@angular/build:application`.
+Ces variables sont injectées **au moment de la compilation** par Next.js — seules celles préfixées
+`NEXT_PUBLIC_` sont exposées au navigateur (convention Next.js, pas de choix arbitraire).
 Elles doivent être configurées dans Vercel → Project → Settings → Environment Variables.
 
-> **Note** : Pour Angular, les variables d'environnement ne sont pas injectées à l'exécution
-> comme dans Next.js. Elles sont embarquées dans le bundle JavaScript lors du build.
-> Un redéploiement est nécessaire pour changer leur valeur.
+Un redéploiement est nécessaire pour changer leur valeur (embarquées dans le bundle au build, pas lues à l'exécution).
 
-| Variable Vercel           | Fichier Angular                          | Description                                                                                    |
-| ------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `NG_APP_API_URL`          | `environment.prod.ts` → `apiUrl`         | URL complète de l'API backend Railway avec `/api`. Ex : `https://warah-api.up.railway.app/api` |
-| `NG_APP_SENTRY_DSN`       | `environment.prod.ts` → `sentryDsn`      | DSN du projet `warah-frontend` Sentry. Laisser vide pour désactiver                            |
-| `NG_APP_VAPID_PUBLIC_KEY` | `environment.prod.ts` → `vapidPublicKey` | Clé publique VAPID (même valeur que `VAPID_PUBLIC_KEY` Railway)                                |
+| Variable Vercel       | Utilisée dans    | Description                                                                                    |
+| --------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL` | `src/lib/api.ts` | URL complète de l'API backend Railway avec `/api`. Ex : `https://warah-api.up.railway.app/api` |
+
+D'autres variables (Sentry, VAPID) seront à ajouter ici si/quand ces intégrations sont câblées côté frontend — non utilisées actuellement.
 
 ---
 
@@ -133,7 +132,7 @@ npx web-push generate-vapid-keys
 # Private Key: ...
 ```
 
-Stocker `Public Key` dans `VAPID_PUBLIC_KEY` (Railway) et `NG_APP_VAPID_PUBLIC_KEY` (Vercel).
+Stocker `Public Key` dans `VAPID_PUBLIC_KEY` (Railway). Non utilisée côté frontend actuellement (voir note §2).
 Stocker `Private Key` dans `VAPID_PRIVATE_KEY` (Railway uniquement).
 
 ### Secret HMAC Cashpay
@@ -158,6 +157,6 @@ Ne pas générer soi-même, utiliser la valeur fournie par Supabase.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **`.env` local** (dev) | Toutes les variables backend (copier `.env.example`)                                                          |
 | **Railway**            | `NODE_ENV`, `DATABASE_URL`, `SUPABASE_*`, `RESEND_*`, `VAPID_*`, `CASHPAY_*`, `SENTRY_DSN`, `ALLOWED_ORIGINS` |
-| **Vercel**             | `NG_APP_API_URL`, `NG_APP_SENTRY_DSN`, `NG_APP_VAPID_PUBLIC_KEY`                                              |
+| **Vercel**             | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SENTRY_DSN`                                                               |
 | **GitHub Secrets**     | `RAILWAY_TOKEN`                                                                                               |
 | **GitHub Variables**   | `RAILWAY_SERVICE_NAME`                                                                                        |

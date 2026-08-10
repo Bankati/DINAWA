@@ -1,22 +1,10 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Post,
-  Query,
-  UploadedFiles,
-  UseInterceptors,
-} from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
-import { MAX_PHOTO_BYTES } from '../../common/constants';
-import { IdentityVerificationFiles } from '../identity/identity.service';
 import {
   AuthService,
   AuthMeResponse,
@@ -24,6 +12,7 @@ import {
   SignupManagerResponse,
   InviteTenantResponse,
   LoginResponse,
+  RefreshResponse,
 } from './auth.service';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
@@ -33,11 +22,6 @@ import { LoginDto } from './dto/login.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 
-const CNI_FILE_FIELDS = [
-  { name: 'image', maxCount: 1 },
-  { name: 'imageBack', maxCount: 1 },
-];
-
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -46,45 +30,25 @@ export class AuthController {
   @Post('signup/owner')
   @Public()
   @HttpCode(201)
-  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Inscription propriétaire',
     description:
-      "Crée le compte Supabase Auth et le profil propriétaire, envoie l'email de confirmation " +
-      "WARAH. La pièce d'identité (recto `image` + verso `imageBack`) est facultative à ce " +
-      'stade — si fournie, la vérification CNI démarre immédiatement ; sinon elle peut être ' +
-      'soumise plus tard via POST /api/identity/verify. Le compte peut se connecter dès que ' +
-      "l'email est confirmé, mais la création de bien reste bloquée tant que idVerificationStatus " +
-      "n'est pas VERIFIED (voir POST /api/properties).",
+      "Crée le compte Supabase Auth et le profil propriétaire, envoie l'email de confirmation WARAH.",
   })
-  @UseInterceptors(
-    FileFieldsInterceptor(CNI_FILE_FIELDS, { limits: { fileSize: MAX_PHOTO_BYTES } }),
-  )
-  async signupOwner(
-    @Body() dto: SignupOwnerDto,
-    @UploadedFiles() files: IdentityVerificationFiles = {},
-  ): Promise<SignupOwnerResponse> {
-    return this.authService.signupOwner(dto, files);
+  async signupOwner(@Body() dto: SignupOwnerDto): Promise<SignupOwnerResponse> {
+    return this.authService.signupOwner(dto);
   }
 
   @Post('signup/manager')
   @Public()
   @HttpCode(201)
-  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Inscription gestionnaire',
     description:
-      "Même mécanique que l'inscription propriétaire (CNI facultative à l'inscription, " +
-      'création de bien bloquée tant que non VERIFIED).',
+      "Crée le compte Supabase Auth et le profil gestionnaire, envoie l'email de confirmation WARAH.",
   })
-  @UseInterceptors(
-    FileFieldsInterceptor(CNI_FILE_FIELDS, { limits: { fileSize: MAX_PHOTO_BYTES } }),
-  )
-  async signupManager(
-    @Body() dto: SignupManagerDto,
-    @UploadedFiles() files: IdentityVerificationFiles = {},
-  ): Promise<SignupManagerResponse> {
-    return this.authService.signupManager(dto, files);
+  async signupManager(@Body() dto: SignupManagerDto): Promise<SignupManagerResponse> {
+    return this.authService.signupManager(dto);
   }
 
   @Post('invite/tenant')
@@ -130,6 +94,17 @@ export class AuthController {
   })
   async login(@Body() dto: LoginDto): Promise<LoginResponse> {
     return this.authService.login(dto);
+  }
+
+  @Post('refresh')
+  @Public()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Renouvelle la session avec le refresh token',
+    description: 'Renvoie un nouveau access token et refresh token sans re-saisir le mot de passe.',
+  })
+  async refresh(@Body() body: { refreshToken: string }): Promise<RefreshResponse> {
+    return this.authService.refreshSession(body.refreshToken);
   }
 
   @Post('password-reset/request')

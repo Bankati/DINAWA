@@ -2,7 +2,7 @@
 
 Ce document décrit l'architecture du backend WARAH — la plateforme de gestion locative immobilière pour le marché togolais. Il fixe les frontières des modules, le modèle de stockage, le modèle d'authentification et les invariants non négociables que l'ensemble du code doit respecter.
 
-Périmètre : backend uniquement (API REST consommée par un frontend Angular géré dans un dépôt séparé). Hébergement Railway. Périmètre métier strictement Togo en V1 (FCFA, français, fuseau `Africa/Lome`).
+Périmètre : backend uniquement (API REST consommée par un frontend Next.js, `apps/frontend/`, dans le même dépôt). Hébergement Railway. Périmètre métier strictement Togo en V1 (FCFA, français, fuseau `Africa/Lome`).
 
 ---
 
@@ -94,7 +94,7 @@ Source de vérité pour toutes les données métier et techniques :
 - Baux (`Lease`) et calendrier d'échéances (`PaymentScheduleEntry`) générés à la création du bail
 - Paiements (`Payment`) avec leur `source` (`CASHPAY_API` / `MANUAL_OWNER` / `TENANT_DECLARATION`) et leur statut
 - Déclarations de paiement par le locataire (`PaymentDeclaration`)
-- Annonces (`Listing`) et demandes de contact (`ListingContact`)
+- Annonces (`Listing`)
 - Mandats gestionnaire ↔ propriétaire (`Mandate`)
 - Avis sur les gestionnaires (`ManagerReview`)
 - Abonnements (`Subscription`) et historique des factures (`SubscriptionInvoice`)
@@ -229,6 +229,8 @@ Notifications push web vers les navigateurs ayant consenti. Une `PushSubscriptio
 
 ### Cashpay
 
+**Non construit à ce jour (reporté le 2026-07-25, décision explicite du développeur)** — la Phase 4 (paiements) a été construite avec les flows manuel et déclaration locataire uniquement (`source = MANUAL_OWNER` / `TENANT_DECLARATION`). Les invariants #3 et #4 ci-dessous, et les gardes correspondantes dans `PaymentsService`, sont déjà en place par anticipation. Description ci-dessous conservée telle que prévue pour le jour où l'intégration reprend :
+
 Agrégateur de paiement mobile money. Deux flux :
 
 - **Sortant — Initialisation** : `POST` vers l'API Cashpay avec axios (timeout 10s, pas de retry — opération non idempotente). Crée une transaction et renvoie au locataire les instructions de paiement.
@@ -250,15 +252,15 @@ Hébergement et CI/CD. Auto-deploy depuis Git. Variables d'environnement gérée
 
 Tous les jobs cron utilisent `@nestjs/schedule` et tournent dans le même conteneur NestJS. Les expressions cron sont centralisées dans `src/common/constants.ts`.
 
-| Job                            | Fréquence               | Verrou Postgres | Rôle                                                                                                          |
-| ------------------------------ | ----------------------- | :-------------: | ------------------------------------------------------------------------------------------------------------- |
-| `reminders.task.ts`            | Toutes les heures       |       non       | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
-| `overdue.task.ts`              | Toutes les heures       |       non       | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
-| `pending-declaration.task.ts`  | Tous les jours à 8h UTC |       non       | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours |
-| `inactivity.task.ts`           | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                 |
-| `listing-suspension.task.ts`   | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                   |
-| `monthly-reports.task.ts`      | Le 1er du mois à 8h UTC |     **oui**     | Générer et envoyer les rapports mensuels aux propriétaires mandants                                           |
-| `subscription-billing.task.ts` | Le 1er du mois à 6h UTC |     **oui**     | Prélever les abonnements actifs via Cashpay, gérer les retries et suspensions                                 |
+| Job                                                                | Fréquence               | Verrou Postgres | Rôle                                                                                                          |
+| ------------------------------------------------------------------ | ----------------------- | :-------------: | ------------------------------------------------------------------------------------------------------------- |
+| `reminders.task.ts`                                                | Toutes les heures       |     **oui**     | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
+| `overdue.task.ts`                                                  | Toutes les heures       |     **oui**     | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
+| `payment-declaration-reminders.task.ts` **(construit 2026-07-25)** | Tous les jours à 8h UTC |     **oui**     | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours |
+| `inactivity.task.ts`                                               | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                 |
+| `listing-suspension.task.ts`                                       | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                   |
+| `monthly-reports.task.ts`                                          | Le 1er du mois à 8h UTC |     **oui**     | Générer et envoyer les rapports mensuels aux propriétaires mandants                                           |
+| `subscription-billing.task.ts`                                     | Le 1er du mois à 6h UTC |     **oui**     | Prélever les abonnements actifs via Cashpay, gérer les retries et suspensions                                 |
 
 Les jobs marqués « verrou Postgres » utilisent `pg_try_advisory_lock` pour éviter la double exécution si plusieurs instances NestJS tournent en parallèle. Toute itération à l'intérieur d'une boucle est isolée dans son propre try/catch.
 

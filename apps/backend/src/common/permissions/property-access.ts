@@ -37,6 +37,21 @@ export async function canActOnProperty(
   return { canRead: false, canMutate: false, isOwner: false, isMandatedManager: false };
 }
 
+// Qui doit être notifié pour un événement propre à ce bien (déclaration de
+// paiement, alerte d'impayé...) : le gestionnaire mandaté s'il y en a un
+// actif, sinon le propriétaire — jamais les deux (voir build-plan.md unités
+// 20 et 25). Co-localisé avec canActOnProperty() : même requête de mandat,
+// même définition de "qui agit sur ce bien".
+export async function resolveResponsibleUserId(
+  prisma: PrismaService,
+  property: Property,
+): Promise<string> {
+  const activeMandate = await prisma.mandate.findFirst({
+    where: { propertyId: property.id, status: 'ACTIVE' },
+  });
+  return activeMandate?.managerId ?? property.ownerId;
+}
+
 // Équivalent de canActOnProperty().canRead, mais exprimé comme filtre
 // Prisma pour une liste plutôt que pour un Property déjà chargé (canRead
 // est vrai pour : ADMIN, propriétaire, ou mandataire actif — voir la

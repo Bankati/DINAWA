@@ -11,7 +11,7 @@ describe('ProfileService', () => {
   let service: ProfileService;
   let prisma: { user: { update: jest.Mock } };
   let storage: { upload: jest.Mock; remove: jest.Mock };
-  let supabaseAdmin: { auth: { admin: { deleteUser: jest.Mock } } };
+  let supabaseAdmin: { auth: { admin: { deleteUser: jest.Mock } }; withRetry: jest.Mock };
   let authService: { getMe: jest.Mock };
 
   const user = { id: 'user-1', supabaseId: 'supabase-uid-1', role: 'OWNER' } as AuthenticatedUser;
@@ -24,6 +24,7 @@ describe('ProfileService', () => {
     };
     supabaseAdmin = {
       auth: { admin: { deleteUser: jest.fn().mockResolvedValue({ error: null }) } },
+      withRetry: jest.fn((fn: () => unknown) => fn()),
     };
     authService = { getMe: jest.fn().mockResolvedValue({ id: 'user-1' }) };
 

@@ -6,8 +6,9 @@ import { ALLOW_WHILE_SUSPENDED_KEY } from '../decorators/allow-while-suspended.d
 describe('SupabaseAuthGuard', () => {
   let guard: SupabaseAuthGuard;
   let reflector: { getAllAndOverride: jest.Mock };
-  let supabaseAdmin: { auth: { getUser: jest.Mock } };
+  let supabaseAdmin: { auth: { getUser: jest.Mock }; withRetry: jest.Mock };
   let prisma: { user: { findUnique: jest.Mock } };
+  let cache: { get: jest.Mock; set: jest.Mock };
 
   const confirmedSupabaseUser = {
     id: 'supabase-uid-1',
@@ -47,13 +48,21 @@ describe('SupabaseAuthGuard', () => {
           .fn()
           .mockResolvedValue({ data: { user: confirmedSupabaseUser }, error: null }),
       },
+      withRetry: jest.fn((fn: () => unknown) => fn()),
     };
     prisma = {
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1', accountStatus: 'ACTIVE' }),
       },
     };
-    guard = new SupabaseAuthGuard(reflector as never, supabaseAdmin as never, prisma as never);
+    // Cache toujours miss dans les tests (on vérifie le chemin réseau normal)
+    cache = { get: jest.fn().mockReturnValue(null), set: jest.fn() };
+    guard = new SupabaseAuthGuard(
+      reflector as never,
+      supabaseAdmin as never,
+      prisma as never,
+      cache as never,
+    );
   });
 
   it('laisse passer sans token les routes marquées @Public()', async () => {

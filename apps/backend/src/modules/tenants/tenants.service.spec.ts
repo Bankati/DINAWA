@@ -9,7 +9,7 @@ describe('TenantsService', () => {
     property: { findUnique: jest.Mock };
     mandate: { findFirst: jest.Mock };
     lease: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
-    user: { findUnique: jest.Mock };
+    user: { findUnique: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
     tenantPropertyBlock: { findUnique: jest.Mock; create: jest.Mock };
   };
 
@@ -36,7 +36,7 @@ describe('TenantsService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
-      user: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
       tenantPropertyBlock: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
     };
 
@@ -238,9 +238,27 @@ describe('TenantsService', () => {
         tenantUserId: 'tenant-1',
         OR: [
           { ownerId: 'owner-1' },
-          { property: { mandates: { some: { managerId: 'owner-1' } } } },
+          { property: { mandates: { some: { managerId: 'owner-1', status: 'ACTIVE' } } } },
         ],
       });
+    });
+
+    // Un mandat PENDING ou REVOKED ne donne aucun droit — seul un mandat
+    // ACTIVE ouvre l'accès à l'historique (voir /review unité 32 : ce
+    // filtre ne vérifiait pas le statut avant correction, faille invisible
+    // tant qu'aucune ligne Mandate réelle n'existait en production).
+    it("un gestionnaire dont le mandat n'est pas ACTIVE (refusé ou révoqué) n'a aucun accès", async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(makeTenant());
+      prisma.lease.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.getTenantLeasesHistory(manager, 'tenant-1', {})).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      const [findFirstArgs] = prisma.lease.findFirst.mock.calls[0] as [
+        { where: { OR: [unknown, { property: { mandates: { some: { status: string } } } }] } },
+      ];
+      expect(findFirstArgs.where.OR[1].property.mandates.some.status).toBe('ACTIVE');
     });
 
     it('un ADMIN voit tous les baux du locataire, sans filtre de relation', async () => {
@@ -266,6 +284,129 @@ describe('TenantsService', () => {
         { where: { tenantUserId: string } },
       ];
       expect(findManyArgs.where).toEqual({ tenantUserId: 'tenant-1' });
+    });
+  });
+
+  describe('getTenantById', () => {
+    it('lève NotFoundException si le locataire est introuvable', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      await expect(service.getTenantById(owner, 'tenant-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('retourne activeLease imbriqué sous property, avec id/monthlyRent/startDate', async () => {
+      const startDate = new Date('2026-01-01');
+      prisma.user.findFirst.mockResolvedValueOnce({
+        ...makeTenant(),
+        email: 'awa@example.com',
+        phone: '90000000',
+        accountStatus: 'ACTIVE',
+        createdAt: startDate,
+        updatedAt: startDate,
+        leasesAsTenant: [
+          {
+            id: 'lease-1',
+            monthlyRent: 150000,
+            startDate,
+            property: { id: 'prop-1', address: 'Rue 1', neighborhood: 'Bè', city: 'Lomé' },
+          },
+        ],
+      });
+
+      const result = await service.getTenantById(owner, 'tenant-1');
+
+      expect(result.activeLease).toEqual({
+        id: 'lease-1',
+        monthlyRent: 150000,
+        startDate,
+        property: { id: 'prop-1', address: 'Rue 1', neighborhood: 'Bè', city: 'Lomé' },
+      });
+    });
+
+    it('retourne activeLease null quand aucun bail actif', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        ...makeTenant(),
+        email: null,
+        phone: null,
+        accountStatus: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        leasesAsTenant: [],
+      });
+
+      const result = await service.getTenantById(owner, 'tenant-1');
+      expect(result.activeLease).toBeNull();
+    });
+  });
+
+  describe('listInvitedTenants', () => {
+    it('retourne activeLease imbriqué sous property pour chaque locataire', async () => {
+      const startDate = new Date('2026-02-01');
+      prisma.user.findMany.mockResolvedValueOnce([
+        {
+          ...makeTenant(),
+          email: 'awa@example.com',
+          phone: '90000000',
+          accountStatus: 'ACTIVE',
+          createdAt: startDate,
+          updatedAt: startDate,
+          leasesAsTenant: [
+            {
+              id: 'lease-2',
+              monthlyRent: 80000,
+              startDate,
+              property: { id: 'prop-2', address: 'Rue 2', neighborhood: 'Adidogomé', city: 'Lomé' },
+            },
+          ],
+        },
+      ]);
+
+      const [result] = await service.listInvitedTenants(owner);
+
+      expect(result.activeLease).toEqual({
+        id: 'lease-2',
+        monthlyRent: 80000,
+        startDate,
+        property: { id: 'prop-2', address: 'Rue 2', neighborhood: 'Adidogomé', city: 'Lomé' },
+      });
+    });
+
+    // Parité gestionnaire (2026-08-09) : un gestionnaire doit voir les
+    // locataires déjà installés sur les biens sous mandat ACTIVE, même
+    // invités par le propriétaire avant la délégation — pas seulement ceux
+    // qu'il a personnellement invités.
+    it("inclut, en plus des locataires invités par l'appelant, ceux dont le bail actif porte sur un bien sous mandat ACTIVE", async () => {
+      prisma.user.findMany.mockResolvedValueOnce([]);
+
+      await service.listInvitedTenants(manager);
+
+      const [findManyArgs] = prisma.user.findMany.mock.calls[0] as [
+        {
+          where: {
+            OR: [
+              { tenantProfile: { invitedByUserId: string } },
+              {
+                leasesAsTenant: {
+                  some: {
+                    status: string;
+                    property: { mandates: { some: { managerId: string; status: string } } };
+                  };
+                };
+              },
+            ];
+          };
+        },
+      ];
+      expect(findManyArgs.where.OR).toEqual([
+        { tenantProfile: { invitedByUserId: 'manager-1' } },
+        {
+          leasesAsTenant: {
+            some: {
+              status: 'ACTIVE',
+              property: { mandates: { some: { managerId: 'manager-1', status: 'ACTIVE' } } },
+            },
+          },
+        },
+      ]);
     });
   });
 });

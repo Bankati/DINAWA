@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AccountStatus,
   LeaseStatus,
   PaymentFrequency,
   Prisma,
@@ -48,6 +49,28 @@ export type PaginatedLeaseHistory = {
   total: number;
 };
 
+export type TenantSummary = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  role: 'TENANT';
+  accountStatus: AccountStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  // `id`/`monthlyRent`/`startDate` nécessaires pour que le frontend puisse
+  // résilier ce bail précis (POST /leases/:id/terminate) ou afficher le
+  // loyer/la date sans requête supplémentaire — `property` imbriqué pour
+  // rester cohérent avec LeaseHistoryEntry.property (voir plus bas).
+  activeLease: {
+    id: string;
+    monthlyRent: number;
+    startDate: Date;
+    property: { id: string; address: string; neighborhood: string; city: string };
+  } | null;
+};
+
 @Injectable()
 export class TenantsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -69,23 +92,29 @@ export class TenantsService {
     const access = await canActOnProperty(this.prisma, user, property);
     if (!access.canMutate) throw new ForbiddenException('Accès refusé à ce bien');
 
-    const tenant = await this.prisma.user.findUnique({ where: { id: tenantUserId } });
+    const [tenant, unterminatedLease, alreadyBlocked] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: tenantUserId },
+        select: { id: true, role: true },
+      }),
+      this.prisma.lease.findFirst({
+        where: { propertyId, tenantUserId, status: { in: ['ACTIVE', 'EXPIRED'] } },
+        select: { id: true },
+      }),
+      this.prisma.tenantPropertyBlock.findUnique({
+        where: { propertyId_tenantUserId: { propertyId, tenantUserId } },
+        select: { id: true },
+      }),
+    ]);
+
     if (!tenant || tenant.role !== 'TENANT') {
       throw new NotFoundException('Locataire introuvable');
     }
-
-    const unterminatedLease = await this.prisma.lease.findFirst({
-      where: { propertyId, tenantUserId, status: { in: ['ACTIVE', 'EXPIRED'] } },
-    });
     if (unterminatedLease) {
       throw new ConflictException(
         "Impossible de bloquer ce locataire — un bail non résilié existe encore sur ce bien, résiliez-le d'abord",
       );
     }
-
-    const alreadyBlocked = await this.prisma.tenantPropertyBlock.findUnique({
-      where: { propertyId_tenantUserId: { propertyId, tenantUserId } },
-    });
     if (alreadyBlocked) {
       throw new ConflictException('Ce locataire est déjà bloqué pour ce bien');
     }
@@ -113,6 +142,59 @@ export class TenantsService {
     }
   }
 
+  // Retourne le profil d'un locataire unique accessible par le proprio/gestionnaire courant.
+  async getTenantById(user: AuthenticatedUser, tenantUserId: string): Promise<TenantSummary> {
+    const tenant = await this.prisma.user.findFirst({
+      where: {
+        id: tenantUserId,
+        role: 'TENANT',
+        tenantProfile: { invitedByUserId: user.id },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        accountStatus: true,
+        createdAt: true,
+        updatedAt: true,
+        leasesAsTenant: {
+          where: { status: 'ACTIVE' },
+          select: {
+            id: true,
+            monthlyRent: true,
+            startDate: true,
+            property: { select: { id: true, address: true, neighborhood: true, city: true } },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!tenant) throw new NotFoundException('Locataire introuvable');
+
+    return {
+      id: tenant.id,
+      firstName: tenant.firstName,
+      lastName: tenant.lastName,
+      email: tenant.email,
+      phone: tenant.phone,
+      role: 'TENANT' as const,
+      accountStatus: tenant.accountStatus,
+      createdAt: tenant.createdAt,
+      updatedAt: tenant.updatedAt,
+      activeLease: tenant.leasesAsTenant[0]
+        ? {
+            id: tenant.leasesAsTenant[0].id,
+            monthlyRent: tenant.leasesAsTenant[0].monthlyRent,
+            startDate: tenant.leasesAsTenant[0].startDate,
+            property: tenant.leasesAsTenant[0].property,
+          }
+        : null,
+    };
+  }
+
   // Historique des baux d'un bien — aucun bilan financier pour l'instant
   // (module Payment pas encore construit, voir /architect unité 14) : la
   // forme de réponse est pensée pour accueillir ces données plus tard sans
@@ -127,6 +209,76 @@ export class TenantsService {
     if (!access.canRead) throw new ForbiddenException('Accès refusé à ce bien');
 
     return this.paginateLeaseHistory({ propertyId }, query);
+  }
+
+  // Liste les locataires invités par l'utilisateur courant (via
+  // TenantProfile.invitedByUserId) OU dont le bail actif porte sur un bien
+  // sous mandat ACTIVE de l'appelant (voir /architect parité gestionnaire,
+  // 2026-08-09) — un gestionnaire doit voir les locataires déjà installés
+  // sur les biens qui lui sont confiés, même invités par le propriétaire
+  // avant la délégation. Sans impact pour un OWNER (jamais managerId d'un
+  // mandat). Retourne également les locataires sans bail actif, ce que
+  // l'approche par historique de baux ne permettait pas.
+  async listInvitedTenants(user: AuthenticatedUser): Promise<TenantSummary[]> {
+    const tenants = await this.prisma.user.findMany({
+      where: {
+        role: 'TENANT',
+        anonymizedAt: null,
+        OR: [
+          { tenantProfile: { invitedByUserId: user.id } },
+          {
+            leasesAsTenant: {
+              some: {
+                status: 'ACTIVE',
+                property: { mandates: { some: { managerId: user.id, status: 'ACTIVE' } } },
+              },
+            },
+          },
+        ],
+      },
+      take: 100,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        accountStatus: true,
+        createdAt: true,
+        updatedAt: true,
+        leasesAsTenant: {
+          where: { status: 'ACTIVE' },
+          select: {
+            id: true,
+            monthlyRent: true,
+            startDate: true,
+            property: { select: { id: true, address: true, neighborhood: true, city: true } },
+          },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return tenants.map((t) => ({
+      id: t.id,
+      firstName: t.firstName,
+      lastName: t.lastName,
+      email: t.email,
+      phone: t.phone,
+      role: 'TENANT' as const,
+      accountStatus: t.accountStatus,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      activeLease: t.leasesAsTenant[0]
+        ? {
+            id: t.leasesAsTenant[0].id,
+            monthlyRent: t.leasesAsTenant[0].monthlyRent,
+            startDate: t.leasesAsTenant[0].startDate,
+            property: t.leasesAsTenant[0].property,
+          }
+        : null,
+    }));
   }
 
   // Historique des baux d'un locataire, tous biens confondus — accessible
@@ -151,7 +303,10 @@ export class TenantsService {
     const isSelf = user.id === tenantUserId;
 
     const relationFilter: Prisma.LeaseWhereInput = {
-      OR: [{ ownerId: user.id }, { property: { mandates: { some: { managerId: user.id } } } }],
+      OR: [
+        { ownerId: user.id },
+        { property: { mandates: { some: { managerId: user.id, status: 'ACTIVE' } } } },
+      ],
     };
 
     if (!isAdmin && !isSelf) {

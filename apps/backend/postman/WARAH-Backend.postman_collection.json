@@ -1,0 +1,614 @@
+{
+  "info": {
+    "_postman_id": "6f2b6b3a-6b1d-4e2a-9d3b-warah-backend-01",
+    "name": "WARAH Backend — Scénario complet (auth, biens, baux, paiements)",
+    "description": "Scénario séquentiel prêt à exécuter avec le Collection Runner. Chaque requête capture automatiquement les IDs/tokens nécessaires à la suivante (accessToken, propertyId, leaseId, scheduleEntryId, paymentId...).\n\n**Prérequis** : le backend doit tourner en local (`npm run dev` dans apps/backend, port 3001 par défaut).\n\n**Variables à remplir toi-même avant de lancer (jamais committées)** : `supabaseUrl` et `supabaseServiceRoleKey` — copier `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` depuis `apps/backend/.env`. Utilisées uniquement en local par les requêtes 01b/01c pour confirmer l'email du compte propriétaire (Supabase exige la confirmation email pour `signup/owner`, contrairement à `invite/tenant` qui auto-confirme).\n\n**Point de blocage connu — vérification d'identité** : `POST /properties` (requête 06) est refusé (403) tant que `OwnerProfile.idVerificationStatus` n'est pas `VERIFIED`. Deux options :\n1. Exécuter la requête 05 `[MANUEL] Vérifier CNI Owner` avec de vraies images de CNI togolaise (recto+verso) et espérer que l'OCR passe.\n2. Plus simple pour du test : après la requête 01, ouvrir `npx prisma studio` (ou l'éditeur SQL Supabase) et forcer `idVerificationStatus = 'VERIFIED'` sur la ligne `owner_profiles` dont `userId = {{ownerId}}` (valeur capturée automatiquement). Requête SQL équivalente :\n```sql\nUPDATE owner_profiles SET \"idVerificationStatus\"='VERIFIED' WHERE \"userId\"='<coller ownerId ici>';\n```\nCeci est un contournement de test uniquement, jamais à faire en production.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3001/api", "type": "string" },
+    { "key": "supabaseUrl", "value": "", "type": "string" },
+    { "key": "supabaseServiceRoleKey", "value": "", "type": "string" },
+    { "key": "ownerSupabaseId", "value": "", "type": "string" },
+    { "key": "ownerPassword", "value": "TestPassword123!", "type": "string" },
+    { "key": "tenantPassword", "value": "TenantPassword123!", "type": "string" },
+    { "key": "ownerEmail", "value": "", "type": "string" },
+    { "key": "ownerPhone", "value": "", "type": "string" },
+    { "key": "ownerId", "value": "", "type": "string" },
+    { "key": "ownerToken", "value": "", "type": "string" },
+    { "key": "propertyId", "value": "", "type": "string" },
+    { "key": "tenantEmail", "value": "", "type": "string" },
+    { "key": "tenantPhone", "value": "", "type": "string" },
+    { "key": "tenantUserId", "value": "", "type": "string" },
+    { "key": "tenantToken", "value": "", "type": "string" },
+    { "key": "leaseId", "value": "", "type": "string" },
+    { "key": "activationToken", "value": "", "type": "string" },
+    { "key": "leaseStartDate", "value": "", "type": "string" },
+    { "key": "scheduleEntryId1", "value": "", "type": "string" },
+    { "key": "scheduleEntryId2", "value": "", "type": "string" },
+    { "key": "scheduleEntryId3", "value": "", "type": "string" },
+    { "key": "scheduleEntryId4", "value": "", "type": "string" },
+    { "key": "paymentId", "value": "", "type": "string" },
+    { "key": "declarationPaymentId", "value": "", "type": "string" },
+    { "key": "rejectPaymentId", "value": "", "type": "string" },
+    { "key": "cancelPaymentId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "01 - Signup Owner",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const suffix = Date.now();",
+              "pm.collectionVariables.set('ownerEmail', `owner-${suffix}@warah-test.tg`);",
+              "pm.collectionVariables.set('ownerPhone', `90${String(suffix).slice(-6)}`);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.expect(pm.response.code).to.eql(201));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('ownerId', body.user.id);",
+              "console.log('ownerId =', body.user.id, '| copier pour le flip SQL si besoin');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\",\n  \"firstName\": \"Jean\",\n  \"lastName\": \"Testeur\",\n  \"phone\": \"{{ownerPhone}}\",\n  \"city\": \"Lomé\",\n  \"residenceCountry\": \"TG\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/signup/owner",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "signup", "owner"]
+        },
+        "description": "Crée le compte propriétaire. CNI facultative à l'inscription — aucun fichier envoyé ici."
+      }
+    },
+    {
+      "name": "01b - [MANUEL] Trouver l'utilisateur Supabase de l'owner",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "const match = (body.users || []).find(u => u.email === pm.collectionVariables.get('ownerEmail'));",
+              "if (!match) { console.error('Utilisateur Supabase introuvable pour', pm.collectionVariables.get('ownerEmail'), '— vérifier supabaseUrl/supabaseServiceRoleKey'); }",
+              "else { pm.collectionVariables.set('ownerSupabaseId', match.id); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "apikey", "value": "{{supabaseServiceRoleKey}}" },
+          { "key": "Authorization", "value": "Bearer {{supabaseServiceRoleKey}}" }
+        ],
+        "url": {
+          "raw": "{{supabaseUrl}}/auth/v1/admin/users?per_page=200",
+          "host": ["{{supabaseUrl}}"],
+          "path": ["auth", "v1", "admin", "users"],
+          "query": [{ "key": "per_page", "value": "200" }]
+        },
+        "description": "Nécessite `supabaseUrl`/`supabaseServiceRoleKey` remplies (voir description de la collection). Appel direct à l'API Admin Supabase, hors backend WARAH."
+      }
+    },
+    {
+      "name": "01c - [MANUEL] Confirmer l'email Owner (bypass Supabase)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "apikey", "value": "{{supabaseServiceRoleKey}}" },
+          { "key": "Authorization", "value": "Bearer {{supabaseServiceRoleKey}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"email_confirm\": true\n}" },
+        "url": {
+          "raw": "{{supabaseUrl}}/auth/v1/admin/users/{{ownerSupabaseId}}",
+          "host": ["{{supabaseUrl}}"],
+          "path": ["auth", "v1", "admin", "users", "{{ownerSupabaseId}}"]
+        },
+        "description": "Sans cette étape, la requête 02 (Login Owner) échoue avec EMAIL_NOT_CONFIRMED — Supabase exige un clic sur le lien de confirmation envoyé par email, cette requête le simule pour les besoins du test."
+      }
+    },
+    {
+      "name": "02 - Login Owner",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200/201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('ownerToken', body.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "login"]
+        },
+        "description": "Nécessite que l'email soit confirmé côté Supabase Auth (lien de confirmation envoyé par email — cliquer le lien reçu, ou confirmer manuellement via le dashboard Supabase/Prisma Studio en environnement de test)."
+      }
+    },
+    {
+      "name": "03 - Get Me (Owner)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "url": { "raw": "{{base_url}}/auth/me", "host": ["{{base_url}}"], "path": ["auth", "me"] }
+      }
+    },
+    {
+      "name": "04 - [MANUEL] Vérifier CNI Owner (optionnel)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "image", "type": "file", "src": [] },
+            { "key": "imageBack", "type": "file", "src": [] }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/identity/verify",
+          "host": ["{{base_url}}"],
+          "path": ["identity", "verify"]
+        },
+        "description": "Sélectionner manuellement recto (`image`) et verso (`imageBack`) d'une vraie CNI togolaise dans l'onglet Body avant d'envoyer. Renvoie 202, résultat asynchrone (quelques secondes) — vérifier via GET /identity/status. Si vous n'avez pas de CNI de test sous la main, voir la note de contournement dans la description de la collection."
+      }
+    },
+    {
+      "name": "05 - Create Property",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  const body = pm.response.json();",
+              "  pm.collectionVariables.set('propertyId', body.id);",
+              "  pm.test('201 Created', () => true);",
+              "} else {",
+              "  console.warn('Création du bien refusée (' + pm.response.code + ') — probablement idVerificationStatus != VERIFIED. Voir la note de contournement dans la description de la collection.');",
+              "  pm.test('201 Created (voir note CNI si échec)', () => pm.expect(pm.response.code).to.eql(201));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"APARTMENT\",\n  \"address\": \"12 Rue du Test, Lomé\",\n  \"neighborhood\": \"Bè\",\n  \"city\": \"Lomé\",\n  \"surfaceArea\": 45,\n  \"roomsCount\": 2,\n  \"monthlyRent\": 50000,\n  \"monthlyCharges\": 5000,\n  \"description\": \"Appartement de test Postman\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/properties",
+          "host": ["{{base_url}}"],
+          "path": ["properties"]
+        }
+      }
+    },
+    {
+      "name": "06 - List Properties",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "url": {
+          "raw": "{{base_url}}/properties?page=1&limit=20",
+          "host": ["{{base_url}}"],
+          "path": ["properties"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "07 - Get Property By Id",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "url": {
+          "raw": "{{base_url}}/properties/{{propertyId}}",
+          "host": ["{{base_url}}"],
+          "path": ["properties", "{{propertyId}}"]
+        }
+      }
+    },
+    {
+      "name": "08 - Invite Tenant + Create Lease",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const suffix = Date.now();",
+              "pm.collectionVariables.set('tenantEmail', `tenant-${suffix}@warah-test.tg`);",
+              "pm.collectionVariables.set('tenantPhone', `91${String(suffix).slice(-6)}`);",
+              "pm.collectionVariables.set('leaseStartDate', new Date().toISOString().slice(0, 10));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.expect(pm.response.code).to.eql(201));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('leaseId', body.lease.id);",
+              "pm.collectionVariables.set('tenantUserId', body.user.id);",
+              "if (body.invitationUrl) {",
+              "  const token = body.invitationUrl.split('token=')[1];",
+              "  pm.collectionVariables.set('activationToken', token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"email\": \"{{tenantEmail}}\",\n  \"phone\": \"{{tenantPhone}}\",\n  \"firstName\": \"Ama\",\n  \"lastName\": \"Testeuse\",\n  \"monthlyRent\": 50000,\n  \"monthlyCharges\": 5000,\n  \"paymentFrequency\": \"MONTHLY\",\n  \"startDate\": \"{{leaseStartDate}}\",\n  \"securityDeposit\": 100000\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/invite/tenant",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "invite", "tenant"]
+        },
+        "description": "Fusionne invitation locataire + création du bail (génère l'échéancier, passe le bien à OCCUPIED). MONTHLY sans endDate → 12 échéances glissantes."
+      }
+    },
+    {
+      "name": "09 - Activate Tenant Account",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"password\": \"{{tenantPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/signup/tenant?token={{activationToken}}",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "signup", "tenant"],
+          "query": [{ "key": "token", "value": "{{activationToken}}" }]
+        }
+      }
+    },
+    {
+      "name": "10 - Login Tenant",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200/201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('tenantToken', body.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{tenantEmail}}\",\n  \"password\": \"{{tenantPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "11 - Get Lease Schedule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.expect(pm.response.code).to.eql(200));",
+              "const entries = pm.response.json();",
+              "if (entries[0]) pm.collectionVariables.set('scheduleEntryId1', entries[0].id);",
+              "if (entries[1]) pm.collectionVariables.set('scheduleEntryId2', entries[1].id);",
+              "if (entries[2]) pm.collectionVariables.set('scheduleEntryId3', entries[2].id);",
+              "if (entries[3]) pm.collectionVariables.set('scheduleEntryId4', entries[3].id);",
+              "console.log(entries.length + ' échéances trouvées');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "url": {
+          "raw": "{{base_url}}/leases/{{leaseId}}/schedule",
+          "host": ["{{base_url}}"],
+          "path": ["leases", "{{leaseId}}", "schedule"]
+        }
+      }
+    },
+    {
+      "name": "12 - Manual Payment (échéance 1)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created, status PAID', () => {",
+              "  pm.expect(pm.response.code).to.eql(201);",
+              "  pm.expect(pm.response.json().status).to.eql('PAID');",
+              "});",
+              "pm.collectionVariables.set('paymentId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduleEntryId\": \"{{scheduleEntryId1}}\",\n  \"paidAmount\": 55000,\n  \"paidAt\": \"{{$isoTimestamp}}\",\n  \"paymentMethod\": \"CASH\",\n  \"note\": \"Paiement test Postman\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/payments/manual",
+          "host": ["{{base_url}}"],
+          "path": ["payments", "manual"]
+        },
+        "description": "Saisie directe par le propriétaire — passe l'échéance à PAID immédiatement, déclenche l'envoi de quittance (payment.confirmed)."
+      }
+    },
+    {
+      "name": "13 - List Payments",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "url": {
+          "raw": "{{base_url}}/payments?propertyId={{propertyId}}",
+          "host": ["{{base_url}}"],
+          "path": ["payments"],
+          "query": [{ "key": "propertyId", "value": "{{propertyId}}" }]
+        }
+      }
+    },
+    {
+      "name": "14 - Download Receipt PDF",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "url": {
+          "raw": "{{base_url}}/payments/{{paymentId}}/receipt.pdf",
+          "host": ["{{base_url}}"],
+          "path": ["payments", "{{paymentId}}", "receipt.pdf"]
+        },
+        "description": "Réponse binaire (application/pdf) — Postman propose de la prévisualiser/télécharger. Généré à la volée, jamais stocké."
+      }
+    },
+    {
+      "name": "15 - Create Payment Declaration (échéance 2)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created, status PENDING_CONFIRMATION', () => {",
+              "  pm.expect(pm.response.code).to.eql(201);",
+              "  pm.expect(pm.response.json().status).to.eql('PENDING_CONFIRMATION');",
+              "});",
+              "pm.collectionVariables.set('declarationPaymentId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduleEntryId\": \"{{scheduleEntryId2}}\",\n  \"declaredAmount\": 55000,\n  \"declaredAt\": \"{{$isoTimestamp}}\",\n  \"declaredMethod\": \"BANK_TRANSFER\",\n  \"note\": \"Virement effectué ce matin\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/payment-declarations",
+          "host": ["{{base_url}}"],
+          "path": ["payment-declarations"]
+        },
+        "description": "Déclaration par le locataire — reste PENDING_CONFIRMATION tant que le propriétaire ne confirme pas (requête 17)."
+      }
+    },
+    {
+      "name": "16 - Update Payment Declaration",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"declaredAmount\": 56000,\n  \"note\": \"Correction : frais bancaires inclus\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/payment-declarations/{{declarationPaymentId}}",
+          "host": ["{{base_url}}"],
+          "path": ["payment-declarations", "{{declarationPaymentId}}"]
+        }
+      }
+    },
+    {
+      "name": "17 - Confirm Payment (déclaration)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+        "body": { "mode": "raw", "raw": "" },
+        "url": {
+          "raw": "{{base_url}}/payments/{{declarationPaymentId}}/confirm",
+          "host": ["{{base_url}}"],
+          "path": ["payments", "{{declarationPaymentId}}", "confirm"]
+        },
+        "description": "Passe la déclaration à PAID — émet payment.confirmed (quittance envoyée aux deux parties)."
+      }
+    },
+    {
+      "name": "18 - Create Payment Declaration (échéance 3, pour rejet)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.collectionVariables.set('rejectPaymentId', pm.response.json().id);"]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduleEntryId\": \"{{scheduleEntryId3}}\",\n  \"declaredAmount\": 55000,\n  \"declaredAt\": \"{{$isoTimestamp}}\",\n  \"declaredMethod\": \"CASH\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/payment-declarations",
+          "host": ["{{base_url}}"],
+          "path": ["payment-declarations"]
+        }
+      }
+    },
+    {
+      "name": "19 - Reject Payment (déclaration)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rejectionReason\": \"Justificatif illisible\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/payments/{{rejectPaymentId}}/reject",
+          "host": ["{{base_url}}"],
+          "path": ["payments", "{{rejectPaymentId}}", "reject"]
+        },
+        "description": "Notifie le locataire (template payment-rejected) — l'échéance redevient déclarable."
+      }
+    },
+    {
+      "name": "20 - Create Payment Declaration (échéance 4, pour annulation)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.collectionVariables.set('cancelPaymentId', pm.response.json().id);"]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduleEntryId\": \"{{scheduleEntryId4}}\",\n  \"declaredAmount\": 55000,\n  \"declaredAt\": \"{{$isoTimestamp}}\",\n  \"declaredMethod\": \"CASH\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/payment-declarations",
+          "host": ["{{base_url}}"],
+          "path": ["payment-declarations"]
+        }
+      }
+    },
+    {
+      "name": "21 - Cancel Payment Declaration",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tenantToken}}" }],
+        "url": {
+          "raw": "{{base_url}}/payment-declarations/{{cancelPaymentId}}",
+          "host": ["{{base_url}}"],
+          "path": ["payment-declarations", "{{cancelPaymentId}}"]
+        }
+      }
+    },
+    {
+      "name": "22 - Terminate Lease",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"terminationReason\": \"Test Postman terminé\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/leases/{{leaseId}}/terminate",
+          "host": ["{{base_url}}"],
+          "path": ["leases", "{{leaseId}}", "terminate"]
+        },
+        "description": "Libère le bien (VACANT), purge les échéances futures non payées (les 12-4=8 restantes)."
+      }
+    }
+  ]
+}

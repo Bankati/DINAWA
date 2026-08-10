@@ -118,4 +118,40 @@ describe('AccountActivationService', () => {
       expect(prisma.user.update).toHaveBeenCalled();
     });
   });
+
+  describe('resolveStatus', () => {
+    it('renvoie un statut ACTIVE sans motif ni condition de déblocage', () => {
+      expect(service.resolveStatus({ accountStatus: 'ACTIVE', role: 'OWNER' })).toEqual({
+        accountStatus: 'ACTIVE',
+        suspendedReason: null,
+        unblockCondition: null,
+      });
+    });
+
+    it('propose « enregistrer un bien » comme condition de déblocage pour un OWNER suspendu', () => {
+      const result = service.resolveStatus({
+        accountStatus: 'SUSPENDED_INACTIVITY',
+        role: 'OWNER',
+      });
+      expect(result.accountStatus).toBe('SUSPENDED_INACTIVITY');
+      expect(result.suspendedReason).not.toBeNull();
+      expect(result.unblockCondition).toContain('bien');
+      expect(result.unblockCondition).not.toContain('mandat');
+    });
+
+    it('propose aussi « accepter un mandat » comme condition de déblocage pour un MANAGER suspendu', () => {
+      const result = service.resolveStatus({
+        accountStatus: 'SUSPENDED_INACTIVITY',
+        role: 'MANAGER',
+      });
+      expect(result.unblockCondition).toContain('mandat');
+    });
+
+    it('renvoie un motif générique pour un compte SUSPENDED_PAYMENT', () => {
+      const result = service.resolveStatus({ accountStatus: 'SUSPENDED_PAYMENT', role: 'OWNER' });
+      expect(result.accountStatus).toBe('SUSPENDED_PAYMENT');
+      expect(result.suspendedReason).not.toBeNull();
+      expect(result.unblockCondition).not.toBeNull();
+    });
+  });
 });

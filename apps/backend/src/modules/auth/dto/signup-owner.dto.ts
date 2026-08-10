@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class SignupOwnerDto {
   @ApiProperty()
@@ -15,10 +15,12 @@ export class SignupOwnerDto {
 
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
   firstName!: string;
 
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
   lastName!: string;
 
   @ApiProperty({ example: '90330557' })
@@ -30,6 +32,7 @@ export class SignupOwnerDto {
   // inscription owner/manager).
   @ApiProperty({ example: 'Lomé' })
   @IsString()
+  @MaxLength(100)
   city!: string;
 
   // Code ISO 3166-1 alpha-2 (ex. "TG" pour un résident togolais, tout autre
