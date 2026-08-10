@@ -15,10 +15,10 @@ FROM node:22.12.0-alpine AS builder
 # ("Could not parse schema engine response").
 RUN apk add --no-cache openssl
 
-# OpenSSL explicite — sans ça, le moteur Prisma échoue à détecter la
-# version d'OpenSSL sur cette image Alpine et plante au démarrage
-# ("Could not parse schema engine response").
-RUN apk add --no-cache openssl
+# Requis : le stage runner copie depuis /app (voir COPY --from=builder
+# /app ci-dessous) — sans ce WORKDIR, COPY . . atterrit à la racine du
+# conteneur et /app n'existe jamais dans ce stage.
+WORKDIR /app
 
 COPY . .
 
