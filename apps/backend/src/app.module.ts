@@ -4,7 +4,8 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { CacheModule } from './common/cache/cache.module';
 import { validate } from './config/env.validation';
 import { pinoConfig } from './config/logger.config';
@@ -32,12 +33,16 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ManagerReportsModule } from './modules/manager-reports/manager-reports.module';
 import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
-import { ExportsModule } from './modules/exports/exports.module';
+import { ContactModule } from './modules/contact/contact.module';
 import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
   imports: [
+    // Sentry — doit être enregistré tôt (voir docs Sentry). L'init réelle vit
+    // dans src/instrument.ts, importé en tout premier dans main.ts.
+    SentryModule.forRoot(),
+
     // Validation des variables d'environnement au démarrage — crash immédiat si invalide
     ConfigModule.forRoot({
       isGlobal: true,
@@ -143,10 +148,17 @@ import { RolesGuard } from './common/guards/roles.guard';
     // pas encore obtenus
     SubscriptionsModule,
 
-    // Exports PDF (paiements, biens, locataires, rapport financier)
-    ExportsModule,
+    // Formulaire de contact public — endpoint minimal appelant EmailService,
+    // aucune persistance en base
+    ContactModule,
   ],
   providers: [
+    // Capture toute exception non gérée vers Sentry — doit être avant tout
+    // autre filtre (aucun autre filtre global n'existe actuellement).
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
