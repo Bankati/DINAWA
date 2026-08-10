@@ -24,5 +24,6 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "types": ["node", "jest", "express", "multer", "supertest", "web-push", "pdfkit"]
-  }
+  },
+  "exclude": ["node_modules", "dist", "scripts", "test"]
 }
