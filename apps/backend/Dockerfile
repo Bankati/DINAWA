@@ -1,10 +1,12 @@
 # ════════════════════════════════════════════════════════════════
 # Stage 1 — Builder
-# Monorepo npm workspaces (package.json racine, réintroduit le
-# 2026-08-09 pour turborepo) — npm ci se fait depuis la racine avec
-# le lockfile racine, jamais depuis apps/backend/ isolément : son
-# propre package-lock.json n'est plus mis à jour depuis l'ajout des
-# workspaces et est périmé (voir contexte/progress-tracker.md).
+# Installe, génère Prisma, compile, puis élague les dépendances de
+# dev — tout en une seule étape séquentielle. Auparavant, le stage
+# runner relançait son propre `npm ci` indépendant, exécuté par
+# BuildKit en parallèle du builder ; sur le builder Railway ("Metal
+# builder") ça provoquait une erreur intermittente et non
+# reproductible en local ("No workspaces found"). En supprimant le
+# second `npm ci` indépendant, on élimine ce risque de concurrence.
 # ════════════════════════════════════════════════════════════════
 FROM node:22.12.0-alpine AS builder
 
@@ -13,23 +15,16 @@ FROM node:22.12.0-alpine AS builder
 # ("Could not parse schema engine response").
 RUN apk add --no-cache openssl
 
-WORKDIR /app
+# OpenSSL explicite — sans ça, le moteur Prisma échoue à détecter la
+# version d'OpenSSL sur cette image Alpine et plante au démarrage
+# ("Could not parse schema engine response").
+RUN apk add --no-cache openssl
 
-# Manifests seuls d'abord (les 3 du monorepo — npm ci vérifie que
-# package-lock.json est en phase avec TOUS les workspaces déclarés,
-# pas seulement celui qu'on construit) — cette couche reste en cache
-# tant que les dépendances ne changent pas, même si le code applicatif
-# change.
-COPY package.json package-lock.json ./
-COPY apps/backend/package.json apps/backend/package.json
-COPY apps/frontend/package.json apps/frontend/package.json
-RUN npm ci
+COPY . .
 
-COPY apps/backend/ apps/backend/
-
-WORKDIR /app/apps/backend
-RUN npx prisma generate
-RUN npm run build
+RUN npm ci --workspace=apps/backend
+RUN cd apps/backend && npx prisma generate
+RUN cd apps/backend && npm run build
 RUN npm prune --omit=dev
 
 
