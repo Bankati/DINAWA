@@ -25,8 +25,9 @@ import { FakeSupabaseAdminService } from './support/fake-supabase-admin.service'
 // compris. Le token Bearer envoyé par chaque requête EST le `supabaseId` de
 // l'utilisateur Prisma seedé.
 //
-// Nécessite Docker en cours d'exécution localement (Docker Desktop) — pas de
-// CI branchée sur ce test dans cette passe, voir progress-tracker.md.
+// Nécessite Docker en cours d'exécution localement (Docker Desktop). Tourne
+// aussi en CI (voir .github/workflows/ci.yml, job backend-ci, étape "e2e
+// tests") — les runners ubuntu-latest ont Docker nativement.
 describe('Mandates (e2e)', () => {
   jest.setTimeout(120_000);
 

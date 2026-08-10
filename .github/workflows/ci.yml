@@ -48,8 +48,11 @@ jobs:
         run: npm run test --workspace=apps/backend
 
       # testcontainers démarre un vrai Postgres jetable via le démon
-      # Docker déjà présent sur les runners ubuntu-latest — aucune
-      # configuration de service supplémentaire nécessaire.
+      # Docker déjà présent sur les runners ubuntu-latest. Les variables
+      # d'environnement requises par env.validation.ts (placeholders,
+      # jamais de vrais secrets) sont fournies par test/env-setup.ts
+      # (setupFiles Jest) — même fichier utilisé en local, voir ce
+      # fichier pour le détail.
       - name: e2e tests
         run: npm run test:e2e --workspace=apps/backend
 
