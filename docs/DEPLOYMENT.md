@@ -31,22 +31,21 @@ Comptes déjà créés :
 
 Comptes à créer (voir section 2) :
 
-- [ ] **Sentry** — monitoring d'erreurs
+- [x] **Sentry** — monitoring d'erreurs (câblé et actif des deux côtés depuis le 2026-08-10, organisation `athena-ju` — backend via `@sentry/nestjs`, frontend projet `javascript-nextjs`, voir 2a)
 - [ ] **Cashpay / Semoa** — paiements mobile money
 
 ---
 
 ## 2. Créer les comptes manquants
 
-### 2a. Sentry
+### 2a. Sentry — déjà fait (2026-08-10)
 
-1. Aller sur [sentry.io](https://sentry.io) → Sign Up
-2. Créer une **Organisation** (ex. `warah`)
-3. Créer **deux projets** :
-   - Projet `warah-backend` (plateforme : Node.js)
-   - Projet `warah-frontend` (plateforme : Next.js)
-4. Pour chaque projet, copier le **DSN** (Settings → Client Keys → DSN)
-5. Configurer les alertes recommandées (voir section 9)
+Organisation Sentry : `athena-ju`. Deux projets créés :
+
+- Backend — `SENTRY_DSN` dans `apps/backend/.env` (câblé via `@sentry/nestjs`, voir `src/instrument.ts`)
+- Frontend — projet `javascript-nextjs`, `NEXT_PUBLIC_SENTRY_DSN` dans `apps/frontend/.env.local` (câblé via `@sentry/nextjs`, voir `instrumentation-client.ts`/`instrumentation.ts`)
+
+Les deux DSN sont à reporter dans Railway/Vercel lors du déploiement (section 4b/5b) — ne jamais les committer en clair ailleurs que dans les fichiers `.env*` locaux (gitignorés). Reste à faire : configurer les alertes recommandées (voir section 9a).
 
 ### 2b. Cashpay / Semoa (Mobile Money)
 
@@ -181,11 +180,14 @@ Si le health check échoue, le déploiement est marqué en erreur.
 
 Dans Vercel → Project → Settings → Environment Variables :
 
-| Variable              | Valeur                                     |
-| --------------------- | ------------------------------------------ |
-| `NEXT_PUBLIC_API_URL` | `https://votre-service.up.railway.app/api` |
+| Variable                 | Valeur                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`    | `https://votre-service.up.railway.app/api`                                                              |
+| `NEXT_PUBLIC_SENTRY_DSN` | DSN du projet Sentry `javascript-nextjs` (voir 2a, déjà créé) — optionnel, Sentry reste inactif si vide |
 
-D'autres variables (Sentry, VAPID) seront à ajouter ici si/quand ces intégrations sont câblées côté frontend — non utilisées actuellement.
+VAPID (notifications push) reste à ajouter ici si/quand cette clé devient nécessaire côté frontend — non utilisée actuellement (la clé publique est servie dynamiquement par le backend via `GET /push/vapid-public-key`).
+
+**Sentry câblé et actif côté frontend** (`instrumentation-client.ts`, `instrumentation.ts`, `app/global-error.tsx`) — capture les erreurs client (React, navigation) et serveur (Server Components/Route Handlers), vérifié en conditions réelles le 2026-08-10 (événement de test capturé et transmis avec succès). Pas d'upload de source maps configuré (nécessiterait un `SENTRY_AUTH_TOKEN` et `withSentryConfig` dans `next.config.ts`, volontairement laissé de côté pour ne pas risquer de casser le build Turbopack — les stack traces resteront minifiées tant que ce n'est pas fait).
 
 Ces variables sont injectées **à la compilation** par Next.js (préfixe `NEXT_PUBLIC_` obligatoire pour être exposées au navigateur).
 

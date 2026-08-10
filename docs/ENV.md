@@ -73,9 +73,9 @@ Sans elles, les endpoints de paiement retournent `503 Service Unavailable`.
 
 ### Sentry (monitoring)
 
-| Variable     | Obligatoire | Description                                                                                             |
-| ------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `SENTRY_DSN` | ➖          | DSN du projet `warah-backend` dans Sentry. Si absent, Sentry est désactivé (comportement normal en dev) |
+| Variable     | Obligatoire | Description                                                                                                                                               |
+| ------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN` | ➖          | DSN backend dans Sentry (org `athena-ju`), câblé via `@sentry/nestjs` (`src/instrument.ts`). Si absent, Sentry est désactivé (comportement normal en dev) |
 
 ### CORS
 
@@ -157,6 +157,6 @@ Ne pas générer soi-même, utiliser la valeur fournie par Supabase.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **`.env` local** (dev) | Toutes les variables backend (copier `.env.example`)                                                          |
 | **Railway**            | `NODE_ENV`, `DATABASE_URL`, `SUPABASE_*`, `RESEND_*`, `VAPID_*`, `CASHPAY_*`, `SENTRY_DSN`, `ALLOWED_ORIGINS` |
-| **Vercel**             | `NG_APP_API_URL`, `NG_APP_SENTRY_DSN`, `NG_APP_VAPID_PUBLIC_KEY`                                              |
+| **Vercel**             | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SENTRY_DSN`                                                               |
 | **GitHub Secrets**     | `RAILWAY_TOKEN`                                                                                               |
 | **GitHub Variables**   | `RAILWAY_SERVICE_NAME`                                                                                        |
