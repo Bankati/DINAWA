@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useApi, TTL } from '@/lib/use-api';
 import { initiales } from '@/lib/format';
+import { PageHeader, Card, CardBody, Field, Input, Button, Badge, NotificationToggle } from '@/components/ui';
 
 interface UserProfile {
   id: string;
@@ -18,24 +19,15 @@ interface UserProfile {
   createdAt: string;
 }
 
-const HERO: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)',
-  borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden',
-};
-
 const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Propriétaire', MANAGER: 'Gestionnaire', TENANT: 'Locataire', ADMIN: 'Administrateur',
 };
-const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }> = {
-  ACTIVE: { label: 'Actif', bg: '#DCFCE7', color: '#15803D' },
-  SUSPENDED_INACTIVITY: { label: 'Suspendu (inactivité)', bg: '#FEE2E2', color: '#DC2626' },
-  SUSPENDED_ADMIN: { label: 'Suspendu (admin)', bg: '#FEE2E2', color: '#DC2626' },
-  SUSPENDED_PAYMENT: { label: 'Suspendu (paiement)', bg: '#FEE2E2', color: '#DC2626' },
+const STATUS_TONE: Record<string, 'success' | 'error'> = {
+  ACTIVE: 'success', SUSPENDED_INACTIVITY: 'error', SUSPENDED_ADMIN: 'error', SUSPENDED_PAYMENT: 'error',
 };
-
-function ipt(): React.CSSProperties {
-  return { width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '10px 12px', fontSize: 13.5, boxSizing: 'border-box', color: '#111827' };
-}
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Actif', SUSPENDED_INACTIVITY: 'Suspendu (inactivité)', SUSPENDED_ADMIN: 'Suspendu (admin)', SUSPENDED_PAYMENT: 'Suspendu (paiement)',
+};
 
 export default function ProfilPage() {
   const { data: profile, loading } = useApi<UserProfile>('/profile', TTL.STABLE);
@@ -72,89 +64,82 @@ export default function ProfilPage() {
     } finally { setSaving(false); }
   }
 
-  const st = profile ? (STATUS_LABELS[profile.accountStatus] ?? { label: profile.accountStatus, bg: '#F3F4F6', color: '#6B7280' }) : null;
-
   return (
-    <div style={{ padding: '24px 28px' }}>
-      {/* Hero */}
-      <div style={HERO}>
-        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
-        <div>
-          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Mon profil</h1>
-          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>Gérez vos informations personnelles</p>
-        </div>
-      </div>
+    <div>
+      <PageHeader title="Mon profil" subtitle="Gérez vos informations personnelles" />
 
       {loading ? (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Chargement…</div>
+        <Card><CardBody><div className="text-center text-gray-400 py-8">Chargement…</div></CardBody></Card>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 24, alignItems: 'start' }}>
-
-          {/* Carte identité */}
-          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 28, textAlign: 'center' }}>
-            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #0A2650, #0F4C81)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 28, margin: '0 auto 16px' }}>
-              {initiales(profile?.firstName, profile?.lastName)}
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 18, color: '#111827', marginBottom: 4 }}>
-              {profile?.firstName} {profile?.lastName}
-            </div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>{profile?.email}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-              <span style={{ background: '#EFF6FF', color: '#0F4C81', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700 }}>
-                {profile ? (ROLE_LABELS[profile.role] ?? profile.role) : '—'}
-              </span>
-              {st && <span style={{ background: st.bg, color: st.color, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700 }}>{st.label}</span>}
-            </div>
-            {profile?.createdAt && (
-              <div style={{ marginTop: 16, fontSize: 12, color: '#9CA3AF' }}>
-                Membre depuis {new Date(profile.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-              </div>
-            )}
-          </div>
-
-          {/* Formulaire */}
-          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 28 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: '0 0 20px' }}>Informations personnelles</h2>
-
-            {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#DC2626', marginBottom: 16 }}>{error}</div>}
-            {success && <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#15803D', fontWeight: 600, marginBottom: 16 }}>✓ {success}</div>}
-
-            <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Prénom *</label>
-                  <input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required style={ipt()} />
+        <div className="grid gap-6 items-start" style={{ gridTemplateColumns: '300px 1fr' }}>
+          <Card>
+            <CardBody>
+              <div className="flex flex-col items-center text-center">
+                <div className="w-20 h-20 rounded-full flex items-center justify-center text-white font-extrabold text-2xl mb-4" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)' }}>
+                  {initiales(profile?.firstName, profile?.lastName)}
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Nom *</label>
-                  <input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required style={ipt()} />
+                <div className="font-bold text-lg text-gray-900 mb-1">{profile?.firstName} {profile?.lastName}</div>
+                <div className="text-sm text-gray-500 mb-3">{profile?.email}</div>
+                <div className="flex flex-col gap-2 items-center">
+                  <Badge tone="info">{profile ? (ROLE_LABELS[profile.role] ?? profile.role) : '—'}</Badge>
+                  {profile && (
+                    <Badge tone={STATUS_TONE[profile.accountStatus] ?? 'neutral'}>
+                      {STATUS_LABELS[profile.accountStatus] ?? profile.accountStatus}
+                    </Badge>
+                  )}
                 </div>
+                {profile?.createdAt && (
+                  <div className="mt-4 text-xs text-gray-400">
+                    Membre depuis {new Date(profile.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                  </div>
+                )}
               </div>
+            </CardBody>
+          </Card>
 
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Adresse email</label>
-                <input value={profile?.email ?? ''} disabled style={{ ...ipt(), background: '#F9FAFB', color: '#9CA3AF', cursor: 'not-allowed' }} />
-                <p style={{ fontSize: 11.5, color: '#9CA3AF', margin: '4px 0 0' }}>L'email est géré par Supabase Auth et ne peut pas être modifié ici.</p>
-              </div>
+          <div className="flex flex-col gap-5">
+            <Card>
+              <CardBody>
+                <h2 className="text-base font-bold text-gray-900 mb-5">Informations personnelles</h2>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Téléphone</label>
-                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" style={ipt()} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Ville</label>
-                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" style={ipt()} />
-                </div>
-              </div>
+                {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600 mb-4">{error}</div>}
+                {success && <div className="bg-green-50 border border-green-200 rounded-lg px-3.5 py-2.5 text-sm text-green-700 font-semibold mb-4">✓ {success}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
-                <button type="submit" disabled={saving}
-                  style={{ background: saving ? '#93C5FD' : '#0F4C81', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 28px', fontWeight: 700, fontSize: 13.5, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                  {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
-                </button>
-              </div>
-            </form>
+                <form onSubmit={save} className="flex flex-col gap-4">
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <Field label="Prénom" required>
+                      <Input required value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
+                    </Field>
+                    <Field label="Nom" required>
+                      <Input required value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
+                    </Field>
+                  </div>
+
+                  <Field label="Adresse email" hint="L'email est géré par Supabase Auth et ne peut pas être modifié ici.">
+                    <Input value={profile?.email ?? ''} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+                  </Field>
+
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <Field label="Téléphone">
+                      <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
+                    </Field>
+                    <Field label="Ville">
+                      <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
+                    </Field>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <Button type="submit" loading={saving}>Enregistrer les modifications</Button>
+                  </div>
+                </form>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody>
+                <NotificationToggle />
+              </CardBody>
+            </Card>
           </div>
         </div>
       )}

@@ -38,9 +38,13 @@ const TYPE_LABEL: Record<string, string> = {
   VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Local commercial',
 };
 
-const BACK_ROUTE = '/dashboard/paiements';
+// Le gestionnaire a les mêmes droits que le propriétaire sur les biens sous
+// mandat ACTIVE (canActOnProperty()) — POST /payments/manual accepte déjà
+// son rôle, et /properties?status=OCCUPIED est déjà scopé (biens propres +
+// sous mandat) par propertyVisibilityWhere() côté backend.
+const BACK_ROUTE = '/gestionnaire/paiements';
 
-export default function PaiementManualPage() {
+export default function GestionnairePaiementManualPage() {
   const { data: propsRes, loading: loadingProps } =
     useApi<{ data: Property[]; total: number }>('/properties?status=OCCUPIED&limit=50', TTL.LIST);
   const properties = propsRes?.data ?? [];
@@ -154,7 +158,7 @@ export default function PaiementManualPage() {
           ) : properties.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <div className="font-semibold text-gray-700 mb-2">Aucun bien occupé</div>
-              <div className="text-sm">Invitez un locataire pour créer un bail avant d&apos;enregistrer un paiement.</div>
+              <div className="text-sm">Aucun bail actif sur vos biens propres ou sous mandat pour l&apos;instant.</div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-5">

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { AdminUser } from '@/lib/admin';
 import { useApi, TTL } from '@/lib/use-api';
 import { initiales } from '@/lib/format';
-import './page.css';
+import { PageHeader, Card, Badge, DataTable, type DataTableColumn, Input } from '@/components/ui';
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: 'Propriétaire',
@@ -58,104 +58,87 @@ export default function ComptesPage() {
 
   const totalActifs = useMemo(() => users.filter((u) => u.accountStatus === 'ACTIVE').length, [users]);
 
-  return (
-    <div>
-      {error && (
-        <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 16px', borderRadius: 10, marginBottom: 16, fontSize: 13.5 }}>
-          {error}
+  const columns: DataTableColumn<AdminUser>[] = [
+    { key: 'membre', header: 'Membre', render: (u) => (
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0" style={{ background: AVATAR_COLORS[u.role] ?? '#6B7280' }}>
+          {initiales(u.firstName, u.lastName)}
         </div>
-      )}
-      <div className="panel">
-        <div className="panel-head">
-          <h1 className="panel-title">Comptes</h1>
-          <div className="panel-actions">
-            <div className="search-wrap" style={{ width: 240 }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input
-                type="text" className="search-input"
-                placeholder="Nom, email..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="tabs-row">
-          <div className="tabs">
-            {TABS.map((t) => (
-              <button key={t.key} className={`tab-btn${activeTab === t.key ? ' active' : ''}`} onClick={() => setActiveTab(t.key)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="stats-inline">
-            Total : <strong>{total}</strong> · Actifs : <strong>{totalActifs}</strong>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table className="comptes-table">
-            <thead>
-              <tr>
-                <th>Membre</th>
-                <th>Email</th>
-                <th>Ville</th>
-                <th>Biens / Baux</th>
-                <th>Inscription</th>
-                <th>Statut</th>
-                <th style={{ textAlign: 'center' }}>Voir</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr className="empty-row"><td colSpan={7}>Chargement…</td></tr>
-              ) : users.length === 0 ? (
-                <tr className="empty-row"><td colSpan={7}>Aucun compte trouvé.</td></tr>
-              ) : (
-                users.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div className="cell-member">
-                        <div className="member-avatar" style={{ background: AVATAR_COLORS[u.role] ?? '#6B7280' }}>
-                          {initiales(u.firstName, u.lastName)}
-                        </div>
-                        <div>
-                          <div className="member-name">{u.firstName} {u.lastName}</div>
-                          <div className="member-role">{ROLE_LABEL[u.role] ?? u.role}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12.5, color: '#6B7280' }}>{u.email ?? '—'}</td>
-                    <td style={{ fontSize: 12.5 }}>{u.city ?? '—'}</td>
-                    <td style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
-                      {u.role === 'OWNER' || u.role === 'MANAGER'
-                        ? `${u._count.ownedProperties} bien${u._count.ownedProperties !== 1 ? 's' : ''}`
-                        : `${u._count.leasesAsTenant} bail${u._count.leasesAsTenant !== 1 ? 's' : ''}`}
-                    </td>
-                    <td style={{ fontSize: 12, color: '#9CA3AF' }}>
-                      {new Date(u.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td>
-                      <span className={`status-badge status-${u.accountStatus === 'ACTIVE' ? 'actif' : 'suspendu'}`}>
-                        {STATUS_LABEL[u.accountStatus] ?? u.accountStatus}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <Link href={`/admin/comptes/${u.id}`} className="icon-btn" title="Voir le profil" aria-label="Voir le profil">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                          <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div>
+          <div className="font-semibold text-sm text-gray-900">{u.firstName} {u.lastName}</div>
+          <div className="text-xs text-gray-400">{ROLE_LABEL[u.role] ?? u.role}</div>
         </div>
       </div>
+    ) },
+    { key: 'email', header: 'Email', render: (u) => <span className="text-xs text-gray-500">{u.email ?? '—'}</span> },
+    { key: 'ville', header: 'Ville', render: (u) => <span className="text-xs text-gray-700">{u.city ?? '—'}</span> },
+    { key: 'biens', header: 'Biens / Baux', render: (u) => (
+      <span className="text-xs text-gray-700 tabular-nums">
+        {u.role === 'OWNER' || u.role === 'MANAGER'
+          ? `${u._count.ownedProperties} bien${u._count.ownedProperties !== 1 ? 's' : ''}`
+          : `${u._count.leasesAsTenant} bail${u._count.leasesAsTenant !== 1 ? 's' : ''}`}
+      </span>
+    ) },
+    { key: 'inscription', header: 'Inscription', render: (u) => (
+      <span className="text-xs text-gray-400">{new Date(u.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+    ) },
+    { key: 'statut', header: 'Statut', render: (u) => (
+      <Badge tone={u.accountStatus === 'ACTIVE' ? 'success' : 'error'}>{STATUS_LABEL[u.accountStatus] ?? u.accountStatus}</Badge>
+    ) },
+    { key: 'voir', header: '', className: 'text-center', render: (u) => (
+      <Link href={`/admin/comptes/${u.id}`} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-primary hover:bg-primary-50" title="Voir le profil" aria-label="Voir le profil">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+        </svg>
+      </Link>
+    ) },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Comptes"
+        subtitle="Tous les comptes de la plateforme"
+        actions={
+          <div className="relative">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nom, email…" className="!pl-9 !w-60" />
+          </div>
+        }
+      />
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">{error}</div>
+      )}
+
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`rounded-md py-2 px-3.5 text-sm font-bold transition-colors ${activeTab === t.key ? 'bg-white text-primary shadow-sm' : 'bg-transparent text-gray-500'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="text-sm text-gray-500">
+          Total : <strong className="text-gray-900">{total}</strong> · Actifs : <strong className="text-gray-900">{totalActifs}</strong>
+        </div>
+      </div>
+
+      <Card>
+        <DataTable
+          columns={columns}
+          data={users}
+          rowKey={(u) => u.id}
+          loading={loading}
+          empty={{ title: 'Aucun compte trouvé' }}
+        />
+      </Card>
     </div>
   );
 }

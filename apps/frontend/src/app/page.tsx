@@ -116,6 +116,18 @@ export default function LandingPage() {
     startSlider();
     AOS.init({ duration: 700, easing: 'ease-out-cubic', once: true, offset: 60 });
 
+    // Les grandes photos du hero chargent après ce premier AOS.init() — la
+    // page s'allonge une fois chargées, ce qui invalide les positions de
+    // déclenchement déjà calculées par AOS et laisse certaines sections en
+    // opacité 0 pour toujours. `refreshHard()` recalcule tout une fois que
+    // toutes les ressources (images) sont réellement chargées.
+    const handleLoad = (): void => AOS.refreshHard();
+    if (document.readyState === 'complete') {
+      handleLoad();
+    } else {
+      window.addEventListener('load', handleLoad);
+    }
+
     let observer: IntersectionObserver | undefined;
     if (impactRef.current) {
       observer = new IntersectionObserver(
@@ -136,6 +148,7 @@ export default function LandingPage() {
     return () => {
       if (slideTimerRef.current) clearInterval(slideTimerRef.current);
       observer?.disconnect();
+      window.removeEventListener('load', handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

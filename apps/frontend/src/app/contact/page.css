@@ -37,6 +37,11 @@
 }
 .cf-field textarea { resize: vertical; min-height: 110px; }
 
+.cf-error {
+  background: #FEF2F2; border: 1px solid #FECACA; color: var(--color-error);
+  border-radius: 10px; padding: 10px 14px; font-size: 13.5px; margin: 0;
+}
+
 .cf-submit {
   display: inline-flex; align-items: center; gap: 10px;
   background: var(--color-primary); color: #fff; font-size: 15px; font-weight: 700;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth-context";
 import { GlobalProgressBar } from "@/components/global-progress-bar";
+import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="fr" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <GlobalProgressBar />
+        <Toaster />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

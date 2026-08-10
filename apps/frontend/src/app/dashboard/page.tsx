@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth-context';
 import {
   getKPIs, getRevenusMensuels, getAlertes, getDerniersPaiements, getDerniersBiens,
   getDashboardStale, fcfa,
   type DashboardKPI, type RevenuMensuel, type Alerte, type DernierPaiement, type DernierBien,
 } from '@/lib/dashboard';
-import { initiales } from '@/lib/format';
 import './page.css';
 
 const CHART_W = 540;
@@ -83,8 +81,6 @@ function svgLinePath(pts: ChartPoint[]): string {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-
   const [kpis, setKpis] = useState<DashboardKPI>(EMPTY_KPI);
   const [revenus, setRevenus] = useState<RevenuMensuel[]>([]);
   const [alertes, setAlertes] = useState<Alerte[]>([]);
@@ -100,7 +96,6 @@ export default function DashboardPage() {
   const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
   const [error, setError] = useState(false);
 
-  const [dateCourante] = useState(() => new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
   const anneeEnCours = new Date().getFullYear();
 
   useEffect(() => {
@@ -126,9 +121,6 @@ export default function DashboardPage() {
     getDerniersBiens().then((d) => { setDerniersBiens(d); setLoadingBiens(false); }).catch(() => { setLoadingBiens(false); onError(); });
   }, []);
 
-  const utilisateurPrenom = user?.firstName || 'Propriétaire';
-  const userInitiales = user ? initiales(user.firstName, user.lastName, 'P') : 'P';
-
   const maxRevenu = revenus.length ? Math.max(...revenus.map((r) => r.montant)) : 1000000;
   const totalRevenus = revenus.reduce((s, r) => s + r.montant, 0);
   const moyenneRevenu = revenus.length ? totalRevenus / revenus.length : 0;
@@ -145,35 +137,14 @@ export default function DashboardPage() {
   const yGridLabels = [1, 0.75, 0.5, 0.25, 0].map((p) => (p === 0 ? '0' : `${Math.round((maxRevenu * p) / 1000)}k`));
 
   return (
-    <div className="dash-page">
-      {/* ── Hero banner FACAM ── */}
-      <div className="dash-hero">
-        <div className="hero-meta">
-          <span className="hero-date-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            {dateCourante}
-          </span>
-          <span className="hero-role-badge">Propriétaire</span>
+    <div className="dash-body">
+      {error && (
+        <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 16px', borderRadius: 10, fontSize: 13.5 }}>
+          Certaines données n&apos;ont pas pu être chargées. Réessayez plus tard.
         </div>
-        <h1 className="hero-greeting">Bonjour, {utilisateurPrenom} !</h1>
-        <p className="hero-subtitle">Voici un aperçu de votre portefeuille immobilier</p>
-        <div className="hero-actions">
-          <Link href="/dashboard/notifications" className={`hero-notif-btn${alertes.length > 0 ? ' has-alertes' : ''}`}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            {alertes.length > 0 && <span className="hero-notif-badge">{alertes.length}</span>}
-          </Link>
-          <div className="hero-avatar">{userInitiales}</div>
-        </div>
-      </div>
+      )}
 
-      <div className="dash-body">
-        {error && (
-          <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '10px 16px', borderRadius: 10, fontSize: 13.5 }}>
-            Certaines données n&apos;ont pas pu être chargées. Réessayez plus tard.
-          </div>
-        )}
-
-        {/* ── KPI 4 colonnes FACAM ── */}
+      {/* ── KPI 4 colonnes ── */}
         <div className="kpi-grid">
           {loadingKPIs ? (
             <>
@@ -450,6 +421,5 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    </div>
   );
 }

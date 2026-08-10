@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { api } from '@/lib/api';
 import PublicNavbar from '@/components/public-navbar';
 import PublicFooter from '@/components/public-footer';
 import './page.css';
@@ -17,22 +18,48 @@ interface ContactForm {
 
 const EMPTY_FORM: ContactForm = { nom: '', role: '', email: '', telephone: '', ville: '', sujet: '', message: '' };
 
+const ROLE_LABELS: Record<string, string> = {
+  proprietaire: 'Propriétaire', gestionnaire: 'Gestionnaire immobilier', locataire: 'Locataire', autre: 'Autre',
+};
+const SUJET_LABELS: Record<string, string> = {
+  question: 'Question générale', support: 'Support technique', partenariat: 'Partenariat', presse: 'Presse',
+};
+
 export default function ContactPage() {
   const [form, setForm] = useState<ContactForm>(EMPTY_FORM);
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   function set<K extends keyof ContactForm>(key: K, value: ContactForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    setSending(true); setError('');
+    try {
+      await api.post('/contact', {
+        name: form.nom,
+        ...(form.role ? { role: ROLE_LABELS[form.role] ?? form.role } : {}),
+        email: form.email,
+        ...(form.telephone ? { phone: form.telephone } : {}),
+        ...(form.ville ? { city: form.ville } : {}),
+        subject: SUJET_LABELS[form.sujet] ?? form.sujet,
+        message: form.message,
+      });
+      setSubmitted(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Erreur lors de l'envoi — réessayez.");
+    } finally {
+      setSending(false);
+    }
   }
 
   function resetForm() {
     setForm(EMPTY_FORM);
     setSubmitted(false);
+    setError('');
   }
 
   const isValid = form.nom && form.email && form.sujet && form.message;
@@ -129,8 +156,10 @@ export default function ContactPage() {
                   <textarea id="message" name="message" required rows={5} placeholder="Décrivez votre demande..." value={form.message} onChange={(e) => set('message', e.target.value)} />
                 </div>
 
-                <button type="submit" className="cf-submit" disabled={!isValid}>
-                  Envoyer le message
+                {error && <p className="cf-error">{error}</p>}
+
+                <button type="submit" className="cf-submit" disabled={!isValid || sending}>
+                  {sending ? 'Envoi…' : 'Envoyer le message'}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
                 </button>
               </form>

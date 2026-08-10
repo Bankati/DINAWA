@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useApi, TTL } from '@/lib/use-api';
 import { initiales } from '@/lib/format';
-import '../locataire.css';
+import { PageHeader, Card, CardBody, Field, Input, Button, Badge, NotificationToggle } from '@/components/ui';
 
 interface UserProfile {
   id: string;
@@ -25,10 +25,6 @@ export default function LocataireProfilPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  const [dateCourante] = useState(() =>
-    new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  );
 
   useEffect(() => {
     if (profile) {
@@ -54,91 +50,70 @@ export default function LocataireProfilPage() {
   }
 
   return (
-    <div className="loc-page">
-      {/* Hero */}
-      <div className="loc-hero">
-        <div className="loc-hero-meta">
-          <span className="loc-date-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            {dateCourante}
-          </span>
-          <span className="loc-role-badge">Locataire</span>
-        </div>
-        <h1 className="loc-hero-title">Mon profil</h1>
-        <p className="loc-hero-sub">Gérez vos informations personnelles</p>
-      </div>
+    <div>
+      <PageHeader title="Mon profil" subtitle="Gérez vos informations personnelles" />
 
-      <div className="loc-body">
-        {loading ? (
-          <div className="loc-card" style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Chargement…</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Carte identité */}
-            <div className="loc-card" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-              <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #0A2650, #0F4C81)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 24, flexShrink: 0 }}>
-                {initiales(profile?.firstName, profile?.lastName)}
+      {loading ? (
+        <Card><CardBody><div className="text-center text-gray-400 py-8">Chargement…</div></CardBody></Card>
+      ) : (
+        <div className="flex flex-col gap-5">
+          <Card>
+            <CardBody>
+              <div className="flex items-center gap-5">
+                <div className="w-18 h-18 rounded-full flex items-center justify-center text-white font-extrabold text-2xl shrink-0" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)', width: 72, height: 72 }}>
+                  {initiales(profile?.firstName, profile?.lastName)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-lg text-gray-900">{profile?.firstName} {profile?.lastName}</div>
+                  <div className="text-sm text-gray-500 mt-0.5">{profile?.email}</div>
+                  {profile?.city && <div className="text-sm text-gray-400 mt-0.5">📍 {profile.city}</div>}
+                </div>
+                <Badge tone="info">Locataire</Badge>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 18, color: '#0A2650' }}>{profile?.firstName} {profile?.lastName}</div>
-                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 3 }}>{profile?.email}</div>
-                {profile?.city && <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>📍 {profile.city}</div>}
-              </div>
-              <div>
-                <span style={{ background: '#EFF6FF', color: '#0F4C81', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700 }}>Locataire</span>
-              </div>
-            </div>
+            </CardBody>
+          </Card>
 
-            {/* Formulaire */}
-            <div className="loc-card">
-              <div className="loc-card-header">
-                <h2 className="loc-card-title">Modifier mes informations</h2>
-              </div>
+          <Card>
+            <CardBody>
+              <h2 className="text-base font-bold text-gray-900 mb-5">Modifier mes informations</h2>
 
-              {error && (
-                <div className="loc-alert loc-alert-error" style={{ margin: '0 0 16px' }}>
-                  <span>{error}</span>
-                  <button onClick={() => setError('')}>×</button>
-                </div>
-              )}
-              {success && (
-                <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#15803D', fontWeight: 600, marginBottom: 16 }}>✓ {success}</div>
-              )}
+              {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600 mb-4">{error}</div>}
+              {success && <div className="bg-green-50 border border-green-200 rounded-lg px-3.5 py-2.5 text-sm text-green-700 font-semibold mb-4">✓ {success}</div>}
 
-              <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Prénom *</label>
-                    <input className="loc-input" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Nom *</label>
-                    <input className="loc-input" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required />
-                  </div>
+              <form onSubmit={save} className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3.5">
+                  <Field label="Prénom" required>
+                    <Input required value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
+                  </Field>
+                  <Field label="Nom" required>
+                    <Input required value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
+                  </Field>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Email (lecture seule)</label>
-                  <input className="loc-input" value={profile?.email ?? ''} disabled style={{ background: '#F9FAFB', color: '#9CA3AF', cursor: 'not-allowed' }} />
+                <Field label="Email (lecture seule)">
+                  <Input value={profile?.email ?? ''} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3.5">
+                  <Field label="Téléphone">
+                    <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
+                  </Field>
+                  <Field label="Ville">
+                    <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
+                  </Field>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Téléphone</label>
-                    <input className="loc-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Ville</label>
-                    <input className="loc-input" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="submit" disabled={saving} className="loc-dl-btn" style={{ background: saving ? '#93C5FD' : '#0F4C81', fontSize: 14, padding: '10px 28px', cursor: saving ? 'not-allowed' : 'pointer' }}>
-                    {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
-                  </button>
+                <div className="flex justify-end">
+                  <Button type="submit" loading={saving}>Enregistrer les modifications</Button>
                 </div>
               </form>
-            </div>
-          </div>
-        )}
-      </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <NotificationToggle />
+            </CardBody>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { paymentsApi, type Payment } from '@/lib/payments';
 import { useApi, TTL } from '@/lib/use-api';
-import '../../locataire.css';
+import { PageHeader, Card, Button, Badge, EmptyState, Skeleton, toast } from '@/components/ui';
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'En attente',
@@ -16,14 +15,14 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_CONFIRMATION: 'À confirmer',
 };
 
-const STATUS_CLASS: Record<string, string> = {
-  PAID: 'loc-badge-paid',
-  PENDING: 'loc-badge-pending',
-  PENDING_CONFIRMATION: 'loc-badge-pending',
-  PARTIAL: 'loc-badge-pending',
-  LATE: 'loc-badge-pending',
-  OVERDUE: 'loc-badge-rejected',
-  REJECTED: 'loc-badge-rejected',
+const STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
+  PAID: 'success',
+  PENDING: 'warning',
+  PENDING_CONFIRMATION: 'warning',
+  PARTIAL: 'warning',
+  LATE: 'warning',
+  OVERDUE: 'error',
+  REJECTED: 'error',
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -44,15 +43,10 @@ function formatMontant(n: number) {
 }
 
 export default function PaymentHistoryPage() {
-  const [error, setError] = useState('');
-  const { data: res, loading: isLoading } = useApi<{ data: Payment[]; total: number }>('/payments', TTL.LIST);
+  const { data: res, loading } = useApi<{ data: Payment[]; total: number }>('/payments', TTL.LIST);
   const payments = res?.data ?? [];
 
-  const [dateCourante] = useState(() =>
-    new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  );
-
-  const downloadReceipt = async (paymentId: string) => {
+  async function downloadReceipt(paymentId: string) {
     try {
       const blob = await paymentsApi.downloadReceipt(paymentId);
       const url = window.URL.createObjectURL(blob);
@@ -63,97 +57,70 @@ export default function PaymentHistoryPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (e: any) {
-      setError(e.message || 'Erreur lors du téléchargement');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors du téléchargement');
     }
-  };
+  }
 
   return (
-    <div className="loc-page">
-      {/* ── Hero ── */}
-      <div className="loc-hero">
-        <div className="loc-hero-meta">
-          <span className="loc-date-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            {dateCourante}
-          </span>
-          <span className="loc-role-badge">Locataire</span>
-        </div>
-        <h1 className="loc-hero-title">Historique des paiements</h1>
-        <p className="loc-hero-sub">Consultez et téléchargez vos quittances de loyer</p>
-      </div>
+    <div>
+      <PageHeader
+        title="Historique des paiements"
+        subtitle="Consultez et téléchargez vos quittances de loyer"
+        actions={<Link href="/locataire/paiements/declaration"><Button>Déclarer un paiement</Button></Link>}
+      />
 
-      <div className="loc-body">
-        {error && (
-          <div className="loc-alert loc-alert-error">
-            <span>{error}</span>
-            <button onClick={() => setError('')}>×</button>
+      <Card>
+        {loading ? (
+          <div className="p-2"><Skeleton /><Skeleton /><Skeleton /></div>
+        ) : payments.length === 0 ? (
+          <EmptyState
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            }
+            title="Aucun paiement enregistré"
+            description="Votre historique de paiements apparaîtra ici."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {['Date', 'Bien', 'Montant', 'Mode', 'Statut', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-[11.5px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p, i) => (
+                  <tr key={p.id} className={i < payments.length - 1 ? 'border-b border-gray-50' : ''}>
+                    <td className="px-4 py-3.5 text-xs text-gray-500">{formatDate(p.createdAt)}</td>
+                    <td className="px-4 py-3.5 text-sm font-medium text-gray-900">{p.lease?.property?.address || '—'}</td>
+                    <td className="px-4 py-3.5 text-sm font-bold text-primary-dark tabular-nums">{formatMontant(p.paidAmount)}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-500">{METHOD_LABELS[p.paymentMethod] || p.paymentMethod}</td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={STATUS_TONE[p.status] ?? 'neutral'} dot>{STATUS_LABELS[p.status] || p.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {p.status === 'PAID' && (
+                        <button
+                          onClick={() => downloadReceipt(p.id)}
+                          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-dark"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                          Quittance
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-
-        <div className="loc-card">
-          <div className="loc-card-header">
-            <h2 className="loc-card-title">Mes paiements</h2>
-            <Link href="/locataire/paiements/declaration" className="loc-dl-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Déclarer un paiement
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <><div className="loc-sk" /><div className="loc-sk" /><div className="loc-sk" /></>
-          ) : payments.length === 0 ? (
-            <div className="loc-empty">
-              <svg className="loc-empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
-              </svg>
-              <p className="loc-empty-title">Aucun paiement enregistré</p>
-              <p className="loc-empty-desc">Votre historique de paiements apparaîtra ici.</p>
-            </div>
-          ) : (
-            <div className="loc-table-wrap">
-              <table className="loc-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Bien</th>
-                    <th>Montant</th>
-                    <th>Mode</th>
-                    <th>Statut</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => (
-                    <tr key={p.id}>
-                      <td style={{ color: '#6B7280', fontSize: 12 }}>{formatDate(p.createdAt)}</td>
-                      <td style={{ fontWeight: 500 }}>{p.lease?.property?.address || '—'}</td>
-                      <td style={{ fontWeight: 700, color: '#0A2650', fontVariantNumeric: 'tabular-nums' }}>
-                        {formatMontant(p.paidAmount)}
-                      </td>
-                      <td style={{ color: '#6B7280' }}>{METHOD_LABELS[p.paymentMethod] || p.paymentMethod}</td>
-                      <td>
-                        <span className={`loc-badge ${STATUS_CLASS[p.status] ?? 'loc-badge-default'}`}>
-                          <span className="loc-badge-dot" />
-                          {STATUS_LABELS[p.status] || p.status}
-                        </span>
-                      </td>
-                      <td>
-                        {p.status === 'PAID' && (
-                          <button className="loc-dl-btn" onClick={() => downloadReceipt(p.id)}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Quittance
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      </Card>
     </div>
   );
 }
