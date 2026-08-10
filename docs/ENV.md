@@ -8,7 +8,7 @@ organisée par couche de déploiement.
 ## Table des matières
 
 1. [Backend — `.env` local / Railway](#1-backend--env-local--railway)
-2. [Frontend — Variables Vercel (`NG_APP_*`)](#2-frontend--variables-vercel-ng_app_)
+2. [Frontend — Variables Vercel (`NEXT_PUBLIC_*`)](#2-frontend--variables-vercel-next_public_)
 3. [GitHub Actions — Secrets et Variables](#3-github-actions--secrets-et-variables)
 4. [Comment générer les secrets](#4-comment-générer-les-secrets)
 
@@ -132,7 +132,7 @@ npx web-push generate-vapid-keys
 # Private Key: ...
 ```
 
-Stocker `Public Key` dans `VAPID_PUBLIC_KEY` (Railway) et `NG_APP_VAPID_PUBLIC_KEY` (Vercel).
+Stocker `Public Key` dans `VAPID_PUBLIC_KEY` (Railway). Non utilisée côté frontend actuellement (voir note §2).
 Stocker `Private Key` dans `VAPID_PRIVATE_KEY` (Railway uniquement).
 
 ### Secret HMAC Cashpay

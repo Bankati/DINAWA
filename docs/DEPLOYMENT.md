@@ -319,7 +319,7 @@ Pour chaque projet (backend + frontend), configurer dans Sentry → Alerts → A
 1. Vercel → Project → Settings → Domains → Add
 2. Ajouter votre domaine (ex. `warah.tg` et `www.warah.tg`)
 3. Configurer les DNS selon les instructions Vercel (CNAME ou A record)
-4. Mettre à jour `NG_APP_API_URL` si l'URL Railway change aussi
+4. Mettre à jour `NEXT_PUBLIC_API_URL` si l'URL Railway change aussi
 
 > **Temporaire :** En attendant un domaine custom, utiliser les URLs générées :
 >
