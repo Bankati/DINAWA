@@ -11,7 +11,7 @@ export type PublicListingSummary = {
   type: PropertyType;
   neighborhood: string;
   city: string;
-  surfaceArea: number;
+  surfaceArea: number | null;
   roomsCount: number | null;
   monthlyRent: number;
   monthlyCharges: number;

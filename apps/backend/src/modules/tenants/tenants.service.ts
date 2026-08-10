@@ -13,7 +13,6 @@ import {
   TenantPropertyBlock,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { canActOnProperty } from '../../common/permissions/property-access';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { BlockTenantDto } from './dto/block-tenant.dto';
@@ -60,15 +59,21 @@ export type TenantSummary = {
   accountStatus: AccountStatus;
   createdAt: Date;
   updatedAt: Date;
-  activeLease: { propertyId: string; address: string; neighborhood: string; city: string } | null;
+  // `id`/`monthlyRent`/`startDate` nécessaires pour que le frontend puisse
+  // résilier ce bail précis (POST /leases/:id/terminate) ou afficher le
+  // loyer/la date sans requête supplémentaire — `property` imbriqué pour
+  // rester cohérent avec LeaseHistoryEntry.property (voir plus bas).
+  activeLease: {
+    id: string;
+    monthlyRent: number;
+    startDate: Date;
+    property: { id: string; address: string; neighborhood: string; city: string };
+  } | null;
 };
 
 @Injectable()
 export class TenantsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly supabaseAdmin: SupabaseAdminService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // Blocage scopé à (propertyId, tenantUserId) — voir /architect unité 14.
   // Jamais global au compte, jamais à l'échelle du propriétaire. Refusé si
@@ -157,8 +162,10 @@ export class TenantsService {
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
           select: {
-            propertyId: true,
-            property: { select: { address: true, neighborhood: true, city: true } },
+            id: true,
+            monthlyRent: true,
+            startDate: true,
+            property: { select: { id: true, address: true, neighborhood: true, city: true } },
           },
           take: 1,
         },
@@ -179,10 +186,10 @@ export class TenantsService {
       updatedAt: tenant.updatedAt,
       activeLease: tenant.leasesAsTenant[0]
         ? {
-            propertyId: tenant.leasesAsTenant[0].propertyId,
-            address: tenant.leasesAsTenant[0].property.address,
-            neighborhood: tenant.leasesAsTenant[0].property.neighborhood,
-            city: tenant.leasesAsTenant[0].property.city,
+            id: tenant.leasesAsTenant[0].id,
+            monthlyRent: tenant.leasesAsTenant[0].monthlyRent,
+            startDate: tenant.leasesAsTenant[0].startDate,
+            property: tenant.leasesAsTenant[0].property,
           }
         : null,
     };
@@ -204,15 +211,30 @@ export class TenantsService {
     return this.paginateLeaseHistory({ propertyId }, query);
   }
 
-  // Liste tous les locataires invités par l'utilisateur courant (via TenantProfile.invitedByUserId).
-  // Retourne également les locataires sans bail actif, ce que l'approche par
-  // historique de baux ne permettait pas.
+  // Liste les locataires invités par l'utilisateur courant (via
+  // TenantProfile.invitedByUserId) OU dont le bail actif porte sur un bien
+  // sous mandat ACTIVE de l'appelant (voir /architect parité gestionnaire,
+  // 2026-08-09) — un gestionnaire doit voir les locataires déjà installés
+  // sur les biens qui lui sont confiés, même invités par le propriétaire
+  // avant la délégation. Sans impact pour un OWNER (jamais managerId d'un
+  // mandat). Retourne également les locataires sans bail actif, ce que
+  // l'approche par historique de baux ne permettait pas.
   async listInvitedTenants(user: AuthenticatedUser): Promise<TenantSummary[]> {
     const tenants = await this.prisma.user.findMany({
       where: {
         role: 'TENANT',
-        tenantProfile: { invitedByUserId: user.id },
         anonymizedAt: null,
+        OR: [
+          { tenantProfile: { invitedByUserId: user.id } },
+          {
+            leasesAsTenant: {
+              some: {
+                status: 'ACTIVE',
+                property: { mandates: { some: { managerId: user.id, status: 'ACTIVE' } } },
+              },
+            },
+          },
+        ],
       },
       take: 100,
       select: {
@@ -227,8 +249,10 @@ export class TenantsService {
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
           select: {
-            propertyId: true,
-            property: { select: { address: true, neighborhood: true, city: true } },
+            id: true,
+            monthlyRent: true,
+            startDate: true,
+            property: { select: { id: true, address: true, neighborhood: true, city: true } },
           },
           take: 1,
         },
@@ -248,10 +272,10 @@ export class TenantsService {
       updatedAt: t.updatedAt,
       activeLease: t.leasesAsTenant[0]
         ? {
-            propertyId: t.leasesAsTenant[0].propertyId,
-            address: t.leasesAsTenant[0].property.address,
-            neighborhood: t.leasesAsTenant[0].property.neighborhood,
-            city: t.leasesAsTenant[0].property.city,
+            id: t.leasesAsTenant[0].id,
+            monthlyRent: t.leasesAsTenant[0].monthlyRent,
+            startDate: t.leasesAsTenant[0].startDate,
+            property: t.leasesAsTenant[0].property,
           }
         : null,
     }));
@@ -343,57 +367,6 @@ export class TenantsService {
     }));
 
     return { data, page, limit, total };
-  }
-
-  async removeTenant(owner: AuthenticatedUser, tenantId: string): Promise<{ message: string }> {
-    // Vérifier que ce locataire appartient bien au propriétaire courant
-    const tenant = await this.prisma.user.findFirst({
-      where: { id: tenantId, role: 'TENANT', tenantProfile: { invitedByUserId: owner.id } },
-      select: { id: true, supabaseId: true, email: true },
-    });
-
-    if (!tenant) throw new ForbiddenException('Locataire introuvable ou non autorisé');
-
-    // Résilier tous les baux actifs sur les biens du propriétaire
-    await this.prisma.lease.updateMany({
-      where: { tenantUserId: tenantId, status: 'ACTIVE', property: { ownerId: owner.id } },
-      data: {
-        status: 'TERMINATED',
-        terminatedAt: new Date(),
-        terminationReason: 'Compte supprimé par le propriétaire',
-      },
-    });
-
-    // Supprimer de Supabase Auth
-    if (tenant.supabaseId) {
-      await this.supabaseAdmin.withRetry(() =>
-        this.supabaseAdmin.auth.admin.deleteUser(tenant.supabaseId!),
-      );
-    } else if (tenant.email) {
-      const { data } = await this.supabaseAdmin.auth.admin.listUsers();
-      const match = data?.users?.find((u) => u.email === tenant.email);
-      if (match) {
-        await this.supabaseAdmin.withRetry(() =>
-          this.supabaseAdmin.auth.admin.deleteUser(match.id),
-        );
-      }
-    }
-
-    // Anonymiser en base
-    await this.prisma.user.update({
-      where: { id: tenantId },
-      data: {
-        email: null,
-        phone: null,
-        firstName: 'Compte',
-        lastName: 'Supprimé',
-        profilePhotoPath: null,
-        supabaseId: null,
-        anonymizedAt: new Date(),
-      },
-    });
-
-    return { message: 'Locataire supprimé' };
   }
 
   private async getPropertyOrThrow(id: string): Promise<Property> {

@@ -366,6 +366,24 @@ export class AuthService {
       );
     }
 
+    // `email`/`phone` sont uniques globalement sur `User` (tous rôles
+    // confondus, voir schema.prisma) — la recherche doit donc porter sur
+    // n'importe quel rôle, pas seulement TENANT. Sinon un email déjà utilisé
+    // par un compte OWNER/MANAGER/ADMIN n'est jamais détecté ici, et
+    // l'appel Supabase plus bas échoue avec un "email déjà utilisé" trompeur
+    // (l'appelant croit à raison qu'aucun locataire n'a jamais eu cet email).
+    const existingUser = await this.prisma.user.findFirst({
+      where: { OR: [{ email: dto.email }, { phone: dto.phone }] },
+    });
+
+    if (existingUser && existingUser.role !== 'TENANT') {
+      throw new ConflictException(
+        existingUser.email === dto.email
+          ? 'Cette adresse email est déjà utilisée par un autre compte WARAH (non locataire)'
+          : 'Ce numéro de téléphone est déjà utilisé par un autre compte WARAH (non locataire)',
+      );
+    }
+
     // Rejet immédiat et explicite si ce locataire a été bloqué sur CE bien
     // précis (voir build-plan.md unité 14, /architect) — vérifié dès
     // l'invitation plutôt qu'attendu à la création du bail (unité 15), pour
@@ -373,9 +391,7 @@ export class AuthService {
     // a explicitement écarté de ce bien. Recherche par email OU téléphone :
     // un locataire déjà connu de la plateforme ne doit pas pouvoir
     // contourner un blocage avec un email différent mais le même téléphone.
-    const existingTenant = await this.prisma.user.findFirst({
-      where: { role: 'TENANT', OR: [{ email: dto.email }, { phone: dto.phone }] },
-    });
+    const existingTenant = existingUser;
     if (existingTenant) {
       await assertTenantNotBlocked(this.prisma, dto.propertyId, existingTenant.id);
     }
@@ -386,6 +402,12 @@ export class AuthService {
       throw new BadRequestException('La date de fin doit être postérieure à la date de début');
     }
     const scheduleEndDate = endDate ?? addMonths(startDate, ROLLING_WINDOW_MONTHS);
+
+    // Absent du DTO → reprend le loyer/charges actuels du bien, figés sur ce
+    // bail au moment de la création (voir /architect : ne suit jamais un
+    // changement ultérieur du prix affiché sur le bien).
+    const effectiveMonthlyRent = dto.monthlyRent ?? property.monthlyRent;
+    const effectiveMonthlyCharges = dto.monthlyCharges ?? property.monthlyCharges;
 
     let user: User;
     let lease: Lease;
@@ -402,6 +424,8 @@ export class AuthService {
             startDate,
             endDate,
             scheduleEndDate,
+            effectiveMonthlyRent,
+            effectiveMonthlyCharges,
           );
           return { user: existingTenant, lease: createdLease };
         });
@@ -454,6 +478,8 @@ export class AuthService {
             startDate,
             endDate,
             scheduleEndDate,
+            effectiveMonthlyRent,
+            effectiveMonthlyCharges,
           );
           return { user: created, lease: createdLease };
         });
@@ -483,7 +509,7 @@ export class AuthService {
           propertyAddress: property.address,
           ownerName: `${inviter.firstName} ${inviter.lastName}`,
           startDate: format(startDate, 'dd/MM/yyyy'),
-          monthlyAmount: dto.monthlyRent + dto.monthlyCharges,
+          monthlyAmount: effectiveMonthlyRent + effectiveMonthlyCharges,
           ...(invitationUrl ? { invitationUrl } : {}),
         },
       });
@@ -505,14 +531,16 @@ export class AuthService {
     startDate: Date,
     endDate: Date | null,
     scheduleEndDate: Date,
+    monthlyRent: number,
+    monthlyCharges: number,
   ): Promise<Lease> {
     const lease = await tx.lease.create({
       data: {
         propertyId: property.id,
         ownerId: property.ownerId,
         tenantUserId,
-        monthlyRent: dto.monthlyRent,
-        monthlyCharges: dto.monthlyCharges,
+        monthlyRent,
+        monthlyCharges,
         paymentFrequency: dto.paymentFrequency,
         startDate,
         endDate,
@@ -528,8 +556,8 @@ export class AuthService {
       startDate,
       scheduleEndDate,
       dto.paymentFrequency,
-      dto.monthlyRent,
-      dto.monthlyCharges,
+      monthlyRent,
+      monthlyCharges,
     );
     if (entries.length > 0) {
       await tx.paymentScheduleEntry.createMany({ data: entries });

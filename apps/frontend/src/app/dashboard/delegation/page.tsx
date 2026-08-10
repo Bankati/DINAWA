@@ -4,23 +4,15 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 import { useApi, TTL } from '@/lib/use-api';
 import { cacheInvalidate } from '@/lib/cache';
+import { formatFcfa } from '@/lib/format';
+import type { MandateWithParties } from '@/lib/api-types';
+import { PageHeader, Button, Card, Modal, Field, Input, Select, EmptyState, Badge, toast } from '@/components/ui';
 
-interface Manager {
-  id: string; firstName: string; lastName: string; email: string | null; phone: string | null;
-}
+interface ManagerSummary { id: string; firstName: string; lastName: string; }
 interface Property {
   id: string; address: string; neighborhood: string; city: string; status: string;
 }
-interface Mandate {
-  id: string;
-  status: 'ACTIVE' | 'PENDING';
-  feeType: 'PERCENTAGE' | 'FLAT';
-  feeValue: number;
-  startDate: string;
-  endDate: string | null;
-  property: { id: string; address: string; neighborhood: string; city: string };
-  manager: Manager;
-}
+type Mandate = MandateWithParties;
 
 const STATUS_LABELS: Record<string, string> = { OCCUPIED: 'Occupé', VACANT: 'Vacant', RENOVATION: 'En travaux' };
 
@@ -33,7 +25,9 @@ const EMPTY_FORM = {
 
 export default function DelegationPage() {
   const { data: mandatesRaw, reload } = useApi<Mandate[]>('/mandates', TTL.LIST);
-  const mandates = mandatesRaw ?? [];
+  // GET /mandates renvoie aussi les mandats REVOKED/EXPIRED (historique) —
+  // seuls PENDING/ACTIVE comptent comme "délégation en cours" ici.
+  const mandates = (mandatesRaw ?? []).filter(m => m.status === 'ACTIVE' || m.status === 'PENDING');
   const { data: propsRes } = useApi<{ data: Property[]; total: number } | Property[]>('/properties?limit=200', TTL.LIST);
   const allProps: Property[] = Array.isArray(propsRes) ? propsRes : (propsRes?.data ?? []);
 
@@ -43,8 +37,6 @@ export default function DelegationPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [revoking, setRevoking] = useState<string | null>(null);
-  const [revokeError, setRevokeError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   // Biens déjà délégués
   const delegatedIds = new Set(mandates.map(m => m.property.id));
@@ -67,8 +59,16 @@ export default function DelegationPage() {
     if (selected.length === 0) { setFormError('Sélectionnez au moins un bien'); return; }
     setSaving(true); setFormError('');
     try {
+      // POST /mandates attend un managerId, jamais un email/téléphone
+      // directement (voir CreateMandateDto) — on résout d'abord l'identité
+      // via GET /managers/search.
+      const found = await api.get<ManagerSummary[]>(`/managers/search?email=${encodeURIComponent(form.managerEmail)}`);
+      if (found.length === 0) {
+        setFormError('Aucun gestionnaire trouvé avec cet email — il doit déjà avoir un compte WARAH (rôle Gestionnaire).');
+        return;
+      }
       await api.post('/mandates', {
-        managerEmail: form.managerEmail,
+        managerId: found[0].id,
         propertyIds: selected,
         feeType: form.feeType,
         feeValue: Number(form.feeValue),
@@ -78,229 +78,161 @@ export default function DelegationPage() {
       cacheInvalidate('/mandates');
       reload();
       setShowForm(false);
-      setSuccessMsg(`${selected.length} bien${selected.length > 1 ? 's' : ''} délégué${selected.length > 1 ? 's' : ''} avec succès`);
-      setTimeout(() => setSuccessMsg(''), 5000);
+      toast.success(`${selected.length} bien${selected.length > 1 ? 's' : ''} délégué${selected.length > 1 ? 's' : ''} à ${found[0].firstName} ${found[0].lastName}`);
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Erreur lors de la délégation');
     } finally { setSaving(false); }
   }
 
   async function handleRevoke(id: string) {
-    setRevoking(id); setRevokeError('');
+    setRevoking(id);
     try {
-      await api.delete(`/mandates/${id}`);
+      await api.post(`/mandates/${id}/revoke`, {});
       cacheInvalidate('/mandates');
       reload();
+      toast.success('Délégation révoquée');
     } catch (err: unknown) {
-      setRevokeError(err instanceof Error ? err.message : 'Erreur lors de la révocation');
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la révocation');
     } finally { setRevoking(null); }
   }
 
   // Regrouper les mandats par gestionnaire
-  const byManager: Record<string, { manager: Manager; mandates: Mandate[] }> = {};
+  const byManager: Record<string, { manager: Mandate['manager']; mandates: Mandate[] }> = {};
   for (const m of mandates) {
     if (!byManager[m.manager.id]) byManager[m.manager.id] = { manager: m.manager, mandates: [] };
     byManager[m.manager.id].mandates.push(m);
   }
 
   return (
-    <div style={{ padding: '24px 28px' }}>
-      {/* En-tête */}
-      <div style={{ background: 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)', borderRadius: 14, padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.06, fontWeight: 900, color: '#fff', letterSpacing: -4, userSelect: 'none', pointerEvents: 'none' }}>WARAH</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Délégation</h1>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, margin: '4px 0 0' }}>
-              Confiez la gestion de vos biens à un gestionnaire
-            </p>
-          </div>
-          <button onClick={openForm} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#C9982E', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 15, height: 15 }}>
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    <div>
+      <PageHeader
+        title="Délégation"
+        subtitle="Confiez la gestion de vos biens à un gestionnaire"
+        actions={
+          <Button variant="accent" onClick={openForm}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             Nouvelle délégation
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      {successMsg && (
-        <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 16px', marginBottom: 16, color: '#15803D', fontSize: 13, fontWeight: 600 }}>
-          ✓ {successMsg}
-        </div>
-      )}
-      {revokeError && (
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 16px', marginBottom: 16, color: '#DC2626', fontSize: 13 }}>
-          {revokeError}
-        </div>
-      )}
-
-      {/* Mandats actuels */}
       {mandates.length === 0 ? (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '48px 32px', textAlign: 'center' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: 52, height: 52, margin: '0 auto 16px', display: 'block', color: '#C9982E' }}>
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-          <div style={{ fontWeight: 700, fontSize: 17, color: '#111827', marginBottom: 8 }}>Aucune délégation active</div>
-          <div style={{ fontSize: 13.5, color: '#6B7280', maxWidth: 380, margin: '0 auto' }}>
-            Vous n'avez confié aucun bien à un gestionnaire pour le moment.
-          </div>
-        </div>
+        <Card>
+          <EmptyState
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            }
+            title="Aucune délégation active"
+            description="Vous n'avez confié aucun bien à un gestionnaire pour le moment."
+          />
+        </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-4">
           {Object.values(byManager).map(({ manager, mandates: ms }) => (
-            <div key={manager.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
-              {/* Header gestionnaire */}
-              <div style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg, #0A2650, #0F4C81)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+            <Card key={manager.id}>
+              <div className="bg-gray-50 border-b border-gray-200 px-5 py-3.5 flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)' }}>
                   {manager.firstName[0]}{manager.lastName[0]}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111827' }}>{manager.firstName} {manager.lastName}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>{manager.email} {manager.phone ? `· ${manager.phone}` : ''}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm text-gray-900">{manager.firstName} {manager.lastName}</div>
+                  <div className="text-xs text-gray-500">{manager.email} {manager.phone ? `· ${manager.phone}` : ''}</div>
                 </div>
-                <div style={{ background: '#EFF6FF', color: '#0F4C81', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>
-                  {ms.length} bien{ms.length > 1 ? 's' : ''} délégué{ms.length > 1 ? 's' : ''}
-                </div>
+                <Badge tone="info">{ms.length} bien{ms.length > 1 ? 's' : ''} délégué{ms.length > 1 ? 's' : ''}</Badge>
               </div>
-              {/* Liste des biens délégués */}
               <div>
                 {ms.map((m, i) => (
-                  <div key={m.id} style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, borderTop: i > 0 ? '1px solid #F3F4F6' : undefined }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13.5, color: '#111827' }}>{m.property.address}</div>
-                      <div style={{ fontSize: 12, color: '#6B7280' }}>
+                  <div key={m.id} className={`px-5 py-3.5 flex items-center gap-3.5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                    <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-gray-900">{m.property.address}</div>
+                      <div className="text-xs text-gray-500">
                         {m.property.neighborhood}, {m.property.city}
-                        {' · '}
-                        Commission : {m.feeType === 'PERCENTAGE' ? `${m.feeValue}%` : `${m.feeValue.toLocaleString('fr-FR')} FCFA`}
-                        {' · '}
-                        Depuis le {new Date(m.startDate).toLocaleDateString('fr-FR')}
+                        {' · '}Commission : {m.feeType === 'PERCENTAGE' ? `${m.feeValue}%` : formatFcfa(m.feeValue)}
+                        {' · '}Depuis le {new Date(m.startDate).toLocaleDateString('fr-FR')}
                         {m.endDate ? ` → ${new Date(m.endDate).toLocaleDateString('fr-FR')}` : ''}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleRevoke(m.id)}
-                      disabled={revoking === m.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: revoking === m.id ? '#F3F4F6' : '#FEF2F2', color: revoking === m.id ? '#9CA3AF' : '#DC2626', border: '1px solid', borderColor: revoking === m.id ? '#E5E7EB' : '#FECACA', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: revoking === m.id ? 'not-allowed' : 'pointer' }}
-                    >
-                      {revoking === m.id ? 'Révocation…' : 'Révoquer'}
-                    </button>
+                    <Button variant="danger" size="sm" onClick={() => handleRevoke(m.id)} loading={revoking === m.id}>
+                      Révoquer
+                    </Button>
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Modal nouvelle délégation */}
-      {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }} onClick={() => setShowForm(false)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: 0 }}>Nouvelle délégation</h2>
-              <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9CA3AF' }}>×</button>
-            </div>
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nouvelle délégation" maxWidth={600}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Field label="Email du gestionnaire" required hint="Le gestionnaire doit déjà avoir un compte WARAH avec le rôle Gestionnaire.">
+            <Input type="email" required placeholder="gestionnaire@exemple.com" value={form.managerEmail} onChange={e => setForm(f => ({ ...f, managerEmail: e.target.value }))} />
+          </Field>
 
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {/* Email gestionnaire */}
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                  Email du gestionnaire <span style={{ color: '#DC2626' }}>*</span>
-                </label>
-                <input type="email" value={form.managerEmail} onChange={e => setForm(f => ({ ...f, managerEmail: e.target.value }))}
-                  placeholder="gestionnaire@exemple.com" required
-                  style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13, boxSizing: 'border-box' }} />
-                <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 4 }}>Le gestionnaire doit déjà avoir un compte WARAH avec le rôle Gestionnaire.</div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Biens à déléguer <span className="text-red-600">*</span>
+              <span className="text-xs font-normal text-gray-400 ml-2">(sélectionnez un ou plusieurs)</span>
+            </label>
+            {availableProps.length === 0 ? (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg px-3.5 py-3 text-sm text-orange-800">
+                Tous vos biens sont déjà délégués.
               </div>
-
-              {/* Sélection des biens */}
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
-                  Biens à déléguer <span style={{ color: '#DC2626' }}>*</span>
-                  <span style={{ fontSize: 11, fontWeight: 400, color: '#9CA3AF', marginLeft: 8 }}>(sélectionnez un ou plusieurs)</span>
-                </label>
-                {availableProps.length === 0 ? (
-                  <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 9, padding: '12px 14px', fontSize: 13, color: '#9A3412' }}>
-                    Tous vos biens sont déjà délégués.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto', border: '1px solid #E5E7EB', borderRadius: 9, padding: 12 }}>
-                    {availableProps.map(p => (
-                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 8px', borderRadius: 7, background: selected.includes(p.id) ? '#EFF6FF' : 'transparent', border: '1px solid', borderColor: selected.includes(p.id) ? '#BFDBFE' : 'transparent' }}>
-                        <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} style={{ width: 16, height: 16, flexShrink: 0, accentColor: '#0F4C81' }} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: '#111827' }}>{p.address}</div>
-                          <div style={{ fontSize: 11.5, color: '#6B7280' }}>{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {selected.length > 0 && (
-                  <div style={{ fontSize: 12, color: '#0F4C81', marginTop: 6, fontWeight: 600 }}>
-                    {selected.length} bien{selected.length > 1 ? 's' : ''} sélectionné{selected.length > 1 ? 's' : ''}
-                  </div>
-                )}
-              </div>
-
-              {/* Commission */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Type de commission</label>
-                  <select value={form.feeType} onChange={e => setForm(f => ({ ...f, feeType: e.target.value as 'PERCENTAGE' | 'FLAT' }))}
-                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13 }}>
-                    <option value="PERCENTAGE">Pourcentage (%)</option>
-                    <option value="FLAT">Montant fixe (FCFA)</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                    {form.feeType === 'PERCENTAGE' ? 'Taux (%)' : 'Montant (FCFA)'}
+            ) : (
+              <div className="flex flex-col gap-2 max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                {availableProps.map(p => (
+                  <label key={p.id} className={`flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md border ${selected.includes(p.id) ? 'bg-blue-50 border-blue-200' : 'border-transparent'}`}>
+                    <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} className="w-4 h-4 shrink-0 accent-primary" />
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900">{p.address}</div>
+                      <div className="text-xs text-gray-500">{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
+                    </div>
                   </label>
-                  <input type="number" min="0" value={form.feeValue} onChange={e => setForm(f => ({ ...f, feeValue: e.target.value }))}
-                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
+                ))}
               </div>
-
-              {/* Dates */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Date de début <span style={{ color: '#DC2626' }}>*</span></label>
-                  <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} required
-                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Date de fin <span style={{ fontSize: 11, fontWeight: 400, color: '#9CA3AF' }}>(optionnel)</span></label>
-                  <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                    style={{ width: '100%', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 12px', fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
+            )}
+            {selected.length > 0 && (
+              <div className="text-xs text-primary font-semibold mt-1.5">
+                {selected.length} bien{selected.length > 1 ? 's' : ''} sélectionné{selected.length > 1 ? 's' : ''}
               </div>
-
-              {formError && (
-                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#DC2626' }}>
-                  {formError}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 4 }}>
-                <button type="button" onClick={() => setShowForm(false)}
-                  style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 9, padding: '10px 20px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-                  Annuler
-                </button>
-                <button type="submit" disabled={saving || availableProps.length === 0}
-                  style={{ background: saving ? '#93C5FD' : '#0F4C81', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 24px', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                  {saving ? 'Enregistrement…' : 'Confirmer la délégation'}
-                </button>
-              </div>
-            </form>
+            )}
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Type de commission">
+              <Select value={form.feeType} onChange={e => setForm(f => ({ ...f, feeType: e.target.value as 'PERCENTAGE' | 'FLAT' }))}>
+                <option value="PERCENTAGE">Pourcentage (%)</option>
+                <option value="FLAT">Montant fixe (FCFA)</option>
+              </Select>
+            </Field>
+            <Field label={form.feeType === 'PERCENTAGE' ? 'Taux (%)' : 'Montant (FCFA)'}>
+              <Input type="number" min="0" value={form.feeValue} onChange={e => setForm(f => ({ ...f, feeValue: e.target.value }))} />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Date de début" required>
+              <Input type="date" required value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+            </Field>
+            <Field label="Date de fin" hint="Optionnel">
+              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+            </Field>
+          </div>
+
+          {formError && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{formError}</div>}
+
+          <div className="flex gap-2.5 justify-end pt-1">
+            <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Annuler</Button>
+            <Button type="submit" loading={saving} disabled={availableProps.length === 0}>Confirmer la délégation</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

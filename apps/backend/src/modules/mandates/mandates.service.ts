@@ -24,6 +24,23 @@ export interface ManagerSummary {
 
 export type MandateWithProperty = Mandate & { property: Property };
 
+export interface MandatePartySummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+}
+
+// Utilisé par GET /mandates (findAllForUser) — visible aux deux parties, qui
+// ont chacune besoin de l'identité de l'autre (le propriétaire pour afficher
+// son gestionnaire dans dashboard/delegation, le gestionnaire pour afficher
+// le propriétaire mandant dans gestionnaire/dashboard et /portefeuille).
+export type MandateWithParties = MandateWithProperty & {
+  owner: MandatePartySummary;
+  manager: MandatePartySummary;
+};
+
 // Gestion des liens propriétaire ↔ gestionnaire ↔ bien (voir build-plan.md
 // unité 31). canActOnProperty()/resolveResponsibleUserId() (property-access.ts)
 // lisent déjà les mandats ACTIVE — ce service ne fait que produire/modifier
@@ -206,13 +223,14 @@ export class MandatesService {
   async findAllForUser(
     user: AuthenticatedUser,
     status?: MandateStatus,
-  ): Promise<MandateWithProperty[]> {
+  ): Promise<MandateWithParties[]> {
+    const partySelect = { id: true, firstName: true, lastName: true, email: true, phone: true };
     return this.prisma.mandate.findMany({
       where: {
         OR: [{ ownerId: user.id }, { managerId: user.id }],
         ...(status ? { status } : {}),
       },
-      include: { property: true },
+      include: { property: true, owner: { select: partySelect }, manager: { select: partySelect } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

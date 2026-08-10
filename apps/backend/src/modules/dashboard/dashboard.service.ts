@@ -100,7 +100,13 @@ export class DashboardService {
           },
         },
       }),
-      this.prisma.payment.count({ where: { ...leaseWhere, status: 'OVERDUE' } }),
+      // `Payment.status` ne prend jamais la valeur OVERDUE (posée uniquement
+      // sur `PaymentScheduleEntry.status` par le cron overdue.task.ts) — une
+      // échéance jamais payée n'a simplement aucune ligne Payment. Même
+      // requête que DashboardManagerService.getAlerts().
+      this.prisma.paymentScheduleEntry.count({
+        where: { status: 'OVERDUE', lease: { property: propWhere } },
+      }),
       this.prisma.payment.findMany({
         where: {
           ...leaseWhere,

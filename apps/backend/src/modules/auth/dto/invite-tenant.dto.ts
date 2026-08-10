@@ -47,17 +47,29 @@ export class InviteTenantDto {
   @MaxLength(100)
   lastName!: string;
 
-  @ApiProperty()
+  // Optionnel — décision /architect : redemander le loyer déjà connu du bien
+  // n'a pas de sens pour l'usage courant. Absent = reprend automatiquement
+  // le loyer/charges actuels du bien au moment de la création du bail
+  // (valeur figée sur ce bail, ne suit jamais un changement ultérieur du
+  // prix affiché — voir AuthService.inviteTenant()). Reste modifiable pour
+  // le cas où ce bail précis diverge du prix affiché (loyer négocié).
+  @ApiPropertyOptional({
+    description: 'Absent = reprend le loyer actuel du bien',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  monthlyRent!: number;
+  monthlyRent?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description: 'Absent = reprend les charges actuelles du bien',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  monthlyCharges!: number;
+  monthlyCharges?: number;
 
   @ApiProperty({ enum: PaymentFrequency })
   @IsEnum(PaymentFrequency)

@@ -1,14 +1,15 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Mandate, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowWhileSuspended } from '../../common/decorators/allow-while-suspended.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
-import { MandatesService, MandateWithProperty } from './mandates.service';
+import { MandatesService, MandateWithProperty, MandateWithParties } from './mandates.service';
 import { CreateMandateDto } from './dto/create-mandate.dto';
 import { RevokeMandateDto } from './dto/revoke-mandate.dto';
 import { ListMandatesQueryDto } from './dto/list-mandates-query.dto';
+import { MandateWithPartiesDto } from './dto/mandate-with-parties.dto';
 
 @ApiTags('Mandates')
 @ApiBearerAuth()
@@ -35,10 +36,11 @@ export class MandatesController {
     summary:
       'Liste les mandats où l’appelant est propriétaire mandant ou gestionnaire destinataire',
   })
+  @ApiOkResponse({ type: MandateWithPartiesDto, isArray: true })
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: ListMandatesQueryDto,
-  ): Promise<MandateWithProperty[]> {
+  ): Promise<MandateWithParties[]> {
     return this.mandatesService.findAllForUser(user, query.status);
   }
 

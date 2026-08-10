@@ -60,6 +60,10 @@ class EnvironmentVariables {
   @IsOptional()
   RESEND_FROM_NAME?: string = 'WARAH';
 
+  // Adresse recevant les messages du formulaire de contact public (/contact)
+  @IsEmail()
+  CONTACT_RECIPIENT_EMAIL!: string;
+
   // VAPID (Web Push)
   @IsString()
   VAPID_PUBLIC_KEY!: string;

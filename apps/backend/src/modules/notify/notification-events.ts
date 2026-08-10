@@ -3,11 +3,13 @@ import { TemplateVariables } from '../email/templates/types';
 import { PushPayload } from '../push/web-push.service';
 
 // Même vocabulaire que les templates email (Unité 04) — un seul identifiant
-// partout, sauf les 2 emails d'authentification qui ne passent jamais par
-// NotifyService (voir architecture.md, invariant #7).
+// partout, sauf les 2 emails d'authentification et le message de contact qui
+// ne passent jamais par NotifyService (voir architecture.md, invariant #7 ;
+// contact-message est envoyé en direct par ContactService, jamais à un
+// utilisateur WARAH via notifyUser()).
 export type NotificationEvent = Exclude<
   EmailTemplate,
-  'signup-confirmation' | 'password-reset-otp'
+  'signup-confirmation' | 'password-reset-otp' | 'contact-message'
 >;
 
 type PushContentTemplate = { title: string; body: string; url: string };

@@ -193,29 +193,6 @@ export class PropertiesService {
     return { ...rest, photos, activeListing };
   }
 
-  async publishListing(user: AuthenticatedUser, propertyId: string): Promise<ActiveListing> {
-    const property = await this.getPropertyOrThrow(propertyId);
-    const access = await canActOnProperty(this.prisma, user, property);
-    if (!access.canMutate) throw new ForbiddenException('Accès refusé à ce bien');
-
-    const listing = await this.prisma.$transaction(async (tx) => {
-      await this.listings.deactivateForProperty(tx, propertyId);
-      return this.listings.publishForProperty(tx, property, user.id);
-    });
-
-    return { id: listing.id, slug: listing.slug, publishedAt: listing.publishedAt };
-  }
-
-  async unpublishListing(user: AuthenticatedUser, propertyId: string): Promise<void> {
-    const property = await this.getPropertyOrThrow(propertyId);
-    const access = await canActOnProperty(this.prisma, user, property);
-    if (!access.canMutate) throw new ForbiddenException('Accès refusé à ce bien');
-
-    await this.prisma.$transaction(async (tx) => {
-      await this.listings.deactivateForProperty(tx, propertyId);
-    });
-  }
-
   async update(user: AuthenticatedUser, id: string, dto: UpdatePropertyDto): Promise<Property> {
     const property = await this.getPropertyOrThrow(id);
     const access = await canActOnProperty(this.prisma, user, property);

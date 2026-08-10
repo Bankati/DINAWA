@@ -301,7 +301,7 @@ model Property {
   address        String
   neighborhood   String
   city           String
-  surfaceArea    Float
+  surfaceArea    Float?
   roomsCount     Int?
   monthlyRent    Int
   monthlyCharges Int            @default(0)

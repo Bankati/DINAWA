@@ -532,7 +532,7 @@ describe('AuthService', () => {
     // l'invitation, pas seulement à la création du bail (unité 15).
     describe('blocage locataire↔bien (unité 14)', () => {
       it('rejette avec 403 et le motif si le locataire (email ou téléphone déjà connu) est bloqué sur ce bien', async () => {
-        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1' });
+        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
         prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce({
           id: 'block-1',
           reason: 'Dégâts constatés',
@@ -544,14 +544,14 @@ describe('AuthService', () => {
         expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
       });
 
-      it("recherche l'utilisateur existant par email OU téléphone parmi les locataires uniquement", async () => {
+      it("recherche l'utilisateur existant par email OU téléphone, tous rôles confondus (email/phone uniques globalement)", async () => {
         prisma.user.findFirst.mockResolvedValueOnce(null);
         await service.inviteTenant(owner as never, inviteDto);
 
         const [findFirstArgs] = prisma.user.findFirst.mock.calls[0] as [
-          { where: { role: string; OR: [{ email: string }, { phone: string }] } },
+          { where: { OR: [{ email: string }, { phone: string }] } },
         ];
-        expect(findFirstArgs.where.role).toBe('TENANT');
+        expect(findFirstArgs.where).not.toHaveProperty('role');
         expect(findFirstArgs.where.OR).toEqual([
           { email: inviteDto.email },
           { phone: inviteDto.phone },
@@ -565,9 +565,39 @@ describe('AuthService', () => {
       });
 
       it("laisse passer normalement un utilisateur existant qui n'est pas bloqué sur ce bien", async () => {
-        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1' });
+        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
         prisma.tenantPropertyBlock.findUnique.mockResolvedValueOnce(null);
         await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toBeDefined();
+      });
+
+      // Bug réel corrigé le 2026-08-09 : l'ancienne recherche filtrait
+      // `role: 'TENANT'`, donc un email déjà pris par un compte
+      // OWNER/MANAGER/ADMIN n'était jamais détecté ici — l'appel Supabase
+      // plus bas échouait alors avec un "email déjà utilisé" trompeur,
+      // jamais vu côté locataire par l'appelant.
+      it("rejette avec 409 explicite si l'email appartient déjà à un compte non-TENANT (ex: OWNER)", async () => {
+        prisma.user.findFirst.mockResolvedValueOnce({
+          id: 'owner-9',
+          role: 'OWNER',
+          email: inviteDto.email,
+          phone: 'autre-numero',
+        });
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
+          ConflictException,
+        );
+        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+      });
+
+      it('rejette avec 409 explicite si le téléphone appartient déjà à un compte non-TENANT', async () => {
+        prisma.user.findFirst.mockResolvedValueOnce({
+          id: 'manager-9',
+          role: 'MANAGER',
+          email: 'autre-email@example.com',
+          phone: inviteDto.phone,
+        });
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
+          'Ce numéro de téléphone est déjà utilisé par un autre compte WARAH',
+        );
       });
     });
 
