@@ -676,6 +676,11 @@ model Notification {
   payload   Json?
   error     String?
   createdAt DateTime                   @default(now()) @db.Timestamptz(6)
+  // Ajouté le 2026-08-11 pour le popover de notifications — null = non lue.
+  // Les lignes déjà en base au moment de la migration sont rétro-remplies à
+  // leur createdAt (voir migration.sql) pour ne pas faire apparaître tout
+  // l'historique comme "non lu" au premier déploiement.
+  readAt    DateTime?                  @db.Timestamptz(6)
 
   @@index([userId])
   @@index([event])

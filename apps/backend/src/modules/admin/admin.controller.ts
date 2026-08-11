@@ -18,8 +18,11 @@ export class AdminController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Statistiques globales plateforme (super admin)' })
-  getStats() {
-    return this.adminService.getStats();
+  getStats(@Query('annee') annee?: number, @Query('mois') mois?: number) {
+    return this.adminService.getStats(
+      annee ? Number(annee) : undefined,
+      mois ? Number(mois) : undefined,
+    );
   }
 
   @Get('users')

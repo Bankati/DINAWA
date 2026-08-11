@@ -87,6 +87,25 @@ describe('StorageService', () => {
         InternalServerErrorException,
       );
     });
+
+    // Bug réel corrigé le 2026-08-11 : le cache gardait une URL 55 min alors
+    // que Supabase la révoque après `expiresIn` (900s) — le cache doit
+    // expirer AVANT (ou au plus tard au moment où) l'URL réelle expire,
+    // jamais après.
+    it("n'expose jamais une URL en cache plus longtemps que sa durée de vie réelle (expiresIn)", async () => {
+      const createSignedUrl = jest
+        .fn()
+        .mockResolvedValue({ data: { signedUrl: 'https://x/signed' }, error: null });
+      fromMock.mockReturnValue({ createSignedUrl });
+
+      const before = Date.now();
+      await service.getSignedUrl('property-photos', 'p1/x.webp', 900);
+      const cached = (
+        service as unknown as { urlCache: Map<string, { expiresAt: number }> }
+      ).urlCache.get('property-photos:p1/x.webp')!;
+
+      expect(cached.expiresAt).toBeLessThanOrEqual(before + 900 * 1000);
+    });
   });
 
   describe('getSignedUrls', () => {
@@ -107,6 +126,25 @@ describe('StorageService', () => {
       const result = await service.getSignedUrls('property-photos', []);
       expect(result.size).toBe(0);
       expect(supabase.withRetry).not.toHaveBeenCalled();
+    });
+
+    // Même bug que getSignedUrl (voir ci-dessus) — c'est cette méthode
+    // qu'utilisent ListingsService.findAllPublic()/findOnePublic(), donc
+    // celle directement responsable des photos cassées sur /annonces.
+    it("n'expose jamais une URL en cache plus longtemps que sa durée de vie réelle (expiresIn)", async () => {
+      const createSignedUrls = jest.fn().mockResolvedValue({
+        data: [{ path: 'p1/a.webp', signedUrl: 'https://x/a' }],
+        error: null,
+      });
+      fromMock.mockReturnValue({ createSignedUrls });
+
+      const before = Date.now();
+      await service.getSignedUrls('property-photos', ['p1/a.webp'], 900);
+      const cached = (
+        service as unknown as { urlCache: Map<string, { expiresAt: number }> }
+      ).urlCache.get('property-photos:p1/a.webp')!;
+
+      expect(cached.expiresAt).toBeLessThanOrEqual(before + 900 * 1000);
     });
   });
 

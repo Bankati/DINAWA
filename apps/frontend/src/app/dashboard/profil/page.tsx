@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useApi, TTL } from '@/lib/use-api';
+import { useAuth } from '@/lib/auth-context';
 import { initiales } from '@/lib/format';
-import { PageHeader, Card, CardBody, Field, Input, Button, Badge, NotificationToggle } from '@/components/ui';
+import { PageHeader, Card, CardBody, Field, Input, Button, Badge, NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
 
 interface UserProfile {
   id: string;
@@ -14,7 +15,7 @@ interface UserProfile {
   lastName: string;
   role: string;
   city: string | null;
-  profilePhotoPath: string | null;
+  profilePhotoUrl: string | null;
   accountStatus: string;
   createdAt: string;
 }
@@ -30,11 +31,14 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function ProfilPage() {
-  const { data: profile, loading } = useApi<UserProfile>('/profile', TTL.STABLE);
+  const { refreshProfile } = useAuth();
+  const { data: profile, loading, reload } = useApi<UserProfile>('/profile', TTL.STABLE);
   const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', city: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -47,6 +51,20 @@ export default function ProfilPage() {
     }
   }, [profile]);
 
+  // Aperçu local immédiat (blob:) avant tout envoi réseau — révoqué à chaque
+  // remplacement pour ne pas fuir de mémoire.
+  useEffect(() => {
+    return () => { if (photoPreview) URL.revokeObjectURL(photoPreview); };
+  }, [photoPreview]);
+
+  function selectPhoto(files: File[]) {
+    const file = files[0];
+    if (!file) return;
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setError(''); setSuccess('');
@@ -56,7 +74,12 @@ export default function ProfilPage() {
       fd.append('lastName', form.lastName);
       if (form.phone) fd.append('phone', form.phone);
       if (form.city) fd.append('city', form.city);
+      if (photoFile) fd.append('photo', photoFile);
       await api.patch('/profile', fd);
+      setPhotoFile(null);
+      if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
+      reload();
+      refreshProfile();
       setSuccess('Profil mis à jour avec succès');
       setTimeout(() => setSuccess(''), 4000);
     } catch (err: unknown) {
@@ -75,8 +98,16 @@ export default function ProfilPage() {
           <Card>
             <CardBody>
               <div className="flex flex-col items-center text-center">
-                <div className="w-20 h-20 rounded-full flex items-center justify-center text-white font-extrabold text-2xl mb-4" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)' }}>
-                  {initiales(profile?.firstName, profile?.lastName)}
+                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-2xl mb-3" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)' }}>
+                  {photoPreview || profile?.profilePhotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob:) ou URL signée Supabase temporaire
+                    <img src={photoPreview ?? profile!.profilePhotoUrl!} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    initiales(profile?.firstName, profile?.lastName)
+                  )}
+                </div>
+                <div className="mb-4 w-full max-w-[220px]">
+                  <PhotoUploadZone onSelect={selectPhoto} label={photoFile ? 'Photo sélectionnée' : 'Changer la photo'} multiple={false} />
                 </div>
                 <div className="font-bold text-lg text-gray-900 mb-1">{profile?.firstName} {profile?.lastName}</div>
                 <div className="text-sm text-gray-500 mb-3">{profile?.email}</div>
@@ -115,7 +146,7 @@ export default function ProfilPage() {
                     </Field>
                   </div>
 
-                  <Field label="Adresse email" hint="L'email est géré par Supabase Auth et ne peut pas être modifié ici.">
+                  <Field label="Adresse email" hint="Contactez le support pour changer votre adresse email.">
                     <Input value={profile?.email ?? ''} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
                   </Field>
 
@@ -138,6 +169,12 @@ export default function ProfilPage() {
             <Card>
               <CardBody>
                 <NotificationToggle />
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody>
+                <ChangePasswordCard />
               </CardBody>
             </Card>
           </div>

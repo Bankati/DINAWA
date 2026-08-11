@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -17,7 +18,7 @@ export default function AnnonceDetailPage() {
   const [annonce, setAnnonce] = useState<PublicListingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [photoPrincipale, setPhotoPrincipale] = useState('');
+  const [photoIndex, setPhotoIndex] = useState(0);
   const [lienCopie, setLienCopie] = useState(false);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function AnnonceDetailPage() {
     getPublicListingBySlug(params.slug)
       .then((data) => {
         setAnnonce(data);
-        setPhotoPrincipale(data.photos?.[0] ?? '');
+        setPhotoIndex(0);
         setLoading(false);
         const titre = `${PROPERTY_TYPE_LABELS[data.type]} — ${data.neighborhood} — ${data.city} | WARAH`;
         document.title = titre;
@@ -37,6 +38,11 @@ export default function AnnonceDetailPage() {
         setNotFound(true);
       });
   }, [params.slug]);
+
+  const photos = annonce?.photos ?? [];
+  const photoPrincipale = photos[photoIndex] ?? '';
+  function photoPrecedente() { setPhotoIndex((i) => (i - 1 + photos.length) % photos.length); }
+  function photoSuivante() { setPhotoIndex((i) => (i + 1) % photos.length); }
 
   const typeLabel = annonce ? PROPERTY_TYPE_LABELS[annonce.type] : '';
   const titreAffiche = annonce ? `${typeLabel} — ${annonce.neighborhood}` : '';
@@ -122,42 +128,66 @@ export default function AnnonceDetailPage() {
         </div>
       ) : annonce ? (
         <>
-          {/* Hero image */}
-          <div className="detail-hero">
-            {annonce.photos && annonce.photos.length > 0 ? (
-              <img src={photoPrincipale} alt={titreAffiche} className="detail-hero-img" />
-            ) : (
-              <div className="detail-hero-placeholder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                </svg>
-              </div>
-            )}
-            {annonce.photos && annonce.photos.length > 1 && (
-              <div className="photo-thumbs">
-                {annonce.photos.map((photo, i) => (
-                  <button
-                    key={photo}
-                    className={`thumb-btn${photoPrincipale === photo ? ' thumb-active' : ''}`}
-                    onClick={() => setPhotoPrincipale(photo)}
-                  >
-                    <img src={photo} alt={`Photo ${i + 1}`} className="thumb-img" />
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Fil d'Ariane */}
+          <div className="breadcrumb-bar">
+            <div className="breadcrumb-inner">
+              <Link href="/">Accueil</Link>
+              <span className="bc-sep">/</span>
+              <Link href="/annonces">Annonces</Link>
+              <span className="bc-sep">/</span>
+              <span className="bc-current">{titreAffiche}</span>
+            </div>
           </div>
 
           {/* Contenu principal */}
           <div className="detail-body">
             <div className="detail-grid">
               <div className="detail-main">
+                {/* Galerie */}
+                <div className="gallery-card">
+                  <div className="gallery-main">
+                    {photoPrincipale ? (
+                      <img src={photoPrincipale} alt={titreAffiche} className="gallery-main-img" />
+                    ) : (
+                      <div className="gallery-placeholder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                        </svg>
+                      </div>
+                    )}
+                    {photos.length > 1 && (
+                      <>
+                        <button className="gallery-nav gallery-nav-prev" onClick={photoPrecedente} aria-label="Photo précédente">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                        </button>
+                        <button className="gallery-nav gallery-nav-next" onClick={photoSuivante} aria-label="Photo suivante">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                        </button>
+                        <span className="gallery-counter">{photoIndex + 1} / {photos.length}</span>
+                      </>
+                    )}
+                  </div>
+                  {photos.length > 1 && (
+                    <div className="photo-thumbs">
+                      {photos.map((photo, i) => (
+                        <button
+                          key={photo}
+                          className={`thumb-btn${i === photoIndex ? ' thumb-active' : ''}`}
+                          onClick={() => setPhotoIndex(i)}
+                        >
+                          <img src={photo} alt={`Photo ${i + 1}`} className="thumb-img" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="detail-title-block">
-                  <div className="detail-badges">
-                    <span className="type-badge">{typeLabel}</span>
+                  <span className="eyebrow-label">{annonce.city} · {annonce.neighborhood}</span>
+                  <div className="title-row">
+                    <h1 className="detail-title">{titreAffiche}</h1>
                     <span className="dispo-badge">Disponible</span>
                   </div>
-                  <h1 className="detail-title">{titreAffiche}</h1>
                   <p className="detail-location">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -165,6 +195,23 @@ export default function AnnonceDetailPage() {
                     </svg>
                     {annonce.address}
                   </p>
+
+                  <div className="price-row">
+                    <div className="price-main">
+                      {formatNumber(annonce.monthlyRent)} <span className="price-currency">FCFA</span><span className="price-period">/mois</span>
+                    </div>
+                    {annonce.monthlyCharges > 0 && (
+                      <span className="price-charges">+ {formatFcfa(annonce.monthlyCharges)} charges</span>
+                    )}
+                  </div>
+
+                  <div className="meta-row">
+                    <span className="type-badge">{typeLabel}</span>
+                    <span className="meta-sep">·</span>
+                    <span>Publié le {new Date(annonce.publishedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                    <span className="meta-sep">·</span>
+                    <span>Réf. {annonce.slug}</span>
+                  </div>
                 </div>
 
                 {annonce.description && (
@@ -174,13 +221,16 @@ export default function AnnonceDetailPage() {
                   </div>
                 )}
 
+                {(annonce.surfaceArea != null || annonce.roomsCount || annonce.monthlyCharges > 0) && (
                 <div className="detail-section">
                   <h2 className="section-title">Caractéristiques</h2>
                   <div className="caract-grid">
-                    <div className="caract-item">
-                      <span className="caract-label">Surface</span>
-                      <span className="caract-value">{annonce.surfaceArea} m²</span>
-                    </div>
+                    {annonce.surfaceArea != null && (
+                      <div className="caract-item">
+                        <span className="caract-label">Surface</span>
+                        <span className="caract-value">{annonce.surfaceArea} m²</span>
+                      </div>
+                    )}
                     {annonce.roomsCount && (
                       <div className="caract-item">
                         <span className="caract-label">Pièces</span>
@@ -195,14 +245,10 @@ export default function AnnonceDetailPage() {
                     )}
                   </div>
                 </div>
+                )}
               </div>
 
               <div className="detail-aside">
-                <div className="aside-card price-card">
-                  <div className="price-amount">{formatNumber(annonce.monthlyRent)} <span className="price-currency">FCFA</span></div>
-                  <div className="price-period">par mois</div>
-                </div>
-
                 <div className="aside-card">
                   <h3 className="aside-card-title">Contact</h3>
                   <div className="owner-row">

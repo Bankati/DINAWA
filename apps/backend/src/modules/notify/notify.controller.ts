@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Patch, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NotificationChannel, NotificationDispatchStatus, Prisma } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -14,19 +14,25 @@ export type NotificationSummary = {
   status: NotificationDispatchStatus;
   payload: Prisma.JsonValue;
   createdAt: Date;
+  unread: boolean;
 };
 
+// Doit couvrir exactement NotificationEvent (notification-events.ts) — 12
+// valeurs. Complété le 2026-08-11 : 'payment-rejected' et 'mandate-created'
+// manquaient, l'API retombait sur l'event brut comme titre.
 const EVENT_LABELS: Record<string, string> = {
   receipt: 'Quittance disponible',
   'payment-reminder': 'Rappel de loyer',
   'overdue-alert': 'Loyer impayé',
   'payment-declaration-pending': 'Paiement à confirmer',
+  'payment-rejected': 'Déclaration rejetée',
   'monthly-report': 'Rapport mensuel disponible',
   'inactivity-warning': 'Compte bientôt suspendu',
   'account-suspended': 'Compte suspendu',
   'account-reactivated': 'Compte réactivé',
   'tenant-invitation': 'Invitation envoyée',
   'lease-created': 'Nouveau bail',
+  'mandate-created': 'Proposition de mandat',
 };
 
 @ApiTags('Notifications')
@@ -58,6 +64,7 @@ export class NotifyController {
           status: true,
           payload: true,
           createdAt: true,
+          readAt: true,
         },
       });
 
@@ -69,17 +76,53 @@ export class NotifyController {
         status: n.status,
         payload: n.payload,
         createdAt: n.createdAt,
+        unread: n.readAt === null,
       }));
     });
   }
 
+  // Corrigé le 2026-08-11 : remplace l'heuristique "créée dans les dernières
+  // 24h" (approximative, jamais décroissante par action utilisateur) par un
+  // vrai compteur basé sur readAt — cohérent avec les endpoints
+  // marquer-comme-lu ci-dessous.
   @Get('unread-count')
-  @ApiOperation({ summary: 'Nombre de notifications non lues (dernières 24h)' })
+  @ApiOperation({ summary: 'Nombre de notifications non lues' })
   async getUnreadCount(@CurrentUser() user: AuthenticatedUser): Promise<{ count: number }> {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const count = await this.prisma.notification.count({
-      where: { userId: user.id, createdAt: { gte: since } },
+      where: { userId: user.id, readAt: null },
     });
     return { count };
+  }
+
+  @Patch(':id/read')
+  @ApiOperation({ summary: 'Marque une notification comme lue' })
+  async markAsRead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<{ message: string }> {
+    const { count } = await this.prisma.notification.updateMany({
+      where: { id, userId: user.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    // count = 0 si déjà lue OU si elle n'appartient pas à l'appelant — pas de
+    // distinction (404 générique, jamais confirmer l'existence d'une
+    // notification d'un tiers).
+    if (count === 0) {
+      const exists = await this.prisma.notification.findFirst({ where: { id, userId: user.id } });
+      if (!exists) throw new NotFoundException('Notification introuvable');
+    }
+    this.cache.delByPrefix(`notifs:${user.id}:`);
+    return { message: 'Notification marquée comme lue' };
+  }
+
+  @Patch('read-all')
+  @ApiOperation({ summary: 'Marque toutes les notifications comme lues' })
+  async markAllAsRead(@CurrentUser() user: AuthenticatedUser): Promise<{ message: string }> {
+    await this.prisma.notification.updateMany({
+      where: { userId: user.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    this.cache.delByPrefix(`notifs:${user.id}:`);
+    return { message: 'Toutes les notifications ont été marquées comme lues' };
   }
 }

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { initiales } from '@/lib/format';
+import { NotificationBell } from '@/components/ui';
 import './app-shell.css';
 
 type NavIcon =
@@ -71,6 +72,12 @@ const ADMIN_NAV: NavSection[] = [
 ];
 
 const TENANT_NAV: NavSection[] = [
+  {
+    label: 'Aperçu',
+    items: [
+      { icon: 'dashboard', label: 'Tableau de bord', route: '/locataire', exact: true },
+    ],
+  },
   {
     label: 'Paiements',
     items: [
@@ -150,16 +157,17 @@ function AccountBanner({ isManager, isTenant }: { isManager: boolean; isTenant: 
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, profileVersion } = useAuth();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const isManager = user?.role === 'MANAGER';
   const isTenant = user?.role === 'TENANT';
   const isAdmin = user?.role === 'ADMIN';
   const navSections = isAdmin ? ADMIN_NAV : isManager ? MANAGER_NAV : isTenant ? TENANT_NAV : OWNER_NAV;
-  const homeRoute = isAdmin ? '/admin' : isManager ? '/gestionnaire/dashboard' : isTenant ? '/locataire/paiements/historique' : '/dashboard';
+  const homeRoute = isAdmin ? '/admin' : isManager ? '/gestionnaire/dashboard' : isTenant ? '/locataire' : '/dashboard';
   const notifRoute = isManager ? '/gestionnaire/notifications' : isTenant ? '/locataire/notifications' : '/dashboard/notifications';
   const roleLabel = user ? ROLE_LABELS[user.role] : '';
   const userInitiales = user ? initiales(user.firstName, user.lastName) : '';
@@ -167,6 +175,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     api.get<{ count: number }>('/notifications/unread-count').then((d) => setUnreadCount(d.count)).catch(() => {});
   }, [pathname]);
+
+  // Récupérée à chaque montage (jamais mise en cache dans localStorage) — les
+  // URLs signées Supabase expirent après 15 min, une valeur persistée irait
+  // vite casser l'avatar entre deux sessions.
+  useEffect(() => {
+    if (!user?.id) { setPhotoUrl(null); return; }
+    api.get<{ profilePhotoUrl: string | null }>('/profile').then((d) => setPhotoUrl(d.profilePhotoUrl)).catch(() => {});
+  }, [user?.id, profileVersion]);
 
   const dateCourante = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -235,14 +251,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <p className="topbar-date">{dateCourante}</p>
             </div>
             <div className="topbar-actions">
-              {!isAdmin && (
-                <Link href={notifRoute} className={`topbar-bell${unreadCount > 0 ? ' has-unread' : ''}`} aria-label="Notifications">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                  {unreadCount > 0 && <span className="topbar-bell-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
-                </Link>
-              )}
+              {!isAdmin && <NotificationBell seeAllRoute={notifRoute} />}
               <div className="topbar-user">
-                <div className="topbar-avatar">{userInitiales}</div>
+                <div className="topbar-avatar">
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- URL signée Supabase temporaire, next/image ajouterait peu ici
+                    <img src={photoUrl} alt="" className="topbar-avatar-img" />
+                  ) : userInitiales}
+                </div>
                 <div className="topbar-user-info">
                   <p className="topbar-user-name">{user?.firstName} {user?.lastName}</p>
                   <span className="topbar-user-role">{roleLabel}</span>

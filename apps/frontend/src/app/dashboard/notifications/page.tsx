@@ -1,38 +1,49 @@
 'use client';
 
+import { useState } from 'react';
+import { api } from '@/lib/api';
 import { useApi, TTL } from '@/lib/use-api';
-import { PageHeader, Card, Badge, EmptyState, Skeleton } from '@/components/ui';
-
-interface Notification {
-  id: string;
-  event: string;
-  titre?: string;
-  channel: 'PUSH' | 'EMAIL';
-  status: 'SENT' | 'FAILED';
-  payload?: Record<string, unknown> | null;
-  createdAt: string;
-}
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-const EVENT_ICONS: Record<string, string> = {
-  payment_received: '💳',
-  payment_overdue: '⚠️',
-  lease_expiring: '📋',
-  declaration_submitted: '📩',
-  declaration_confirmed: '✅',
-  declaration_rejected: '❌',
-};
+import { PageHeader, Card, Badge, Button, EmptyState, Skeleton } from '@/components/ui';
+import { notificationIcon, formatNotificationDate, type NotificationSummary } from '@/lib/notifications';
 
 export default function NotificationsPage() {
-  const { data: notifications, loading } = useApi<Notification[]>('/notifications?limit=50', TTL.LIST);
-  const list = notifications ?? [];
+  const { data, loading, reload } = useApi<NotificationSummary[]>('/notifications?limit=50', TTL.LIST);
+  const [markingAll, setMarkingAll] = useState(false);
+  const list = data ?? [];
+  const unreadCount = list.filter((n) => n.unread).length;
+
+  async function markAsRead(id: string) {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      reload();
+    } catch {
+      /* échec silencieux acceptable — juste un indicateur visuel de lecture */
+    }
+  }
+
+  async function markAllAsRead() {
+    setMarkingAll(true);
+    try {
+      await api.patch('/notifications/read-all');
+      reload();
+    } finally {
+      setMarkingAll(false);
+    }
+  }
 
   return (
     <div>
-      <PageHeader title="Notifications" subtitle="Vos 50 dernières alertes et mises à jour" />
+      <PageHeader
+        title="Notifications"
+        subtitle="Vos 50 dernières alertes et mises à jour"
+        actions={
+          unreadCount > 0 ? (
+            <Button variant="secondary" size="sm" onClick={markAllAsRead} loading={markingAll}>
+              Tout marquer comme lu
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Card>
         {loading ? (
@@ -50,23 +61,32 @@ export default function NotificationsPage() {
         ) : (
           <div>
             {list.map((n, i) => {
-              const icon = EVENT_ICONS[n.event] ?? '🔔';
+              const Icon = notificationIcon(n.event);
               return (
-                <div key={n.id} className={`px-5 py-4 flex items-start gap-4 ${i < list.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                  <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-xl shrink-0">
-                    {icon}
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => n.unread && markAsRead(n.id)}
+                  className={`w-full text-left px-5 py-4 flex items-start gap-4 border-none bg-transparent cursor-pointer transition-colors hover:bg-gray-50 ${i < list.length - 1 ? 'border-b border-gray-50' : ''}`}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${n.unread ? 'bg-primary-50 text-primary' : 'bg-gray-50 text-gray-400'}`}>
+                    <Icon className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm text-gray-900 mb-0.5">
-                      {n.titre ?? n.event.replace(/_/g, ' ')}
+                    <div className={`text-sm mb-0.5 ${n.unread ? 'font-bold text-gray-900' : 'font-semibold text-gray-600'}`}>
+                      {n.titre}
                     </div>
                     <div className="text-xs text-gray-400 flex items-center gap-2">
-                      {fmtDate(n.createdAt)}
+                      {formatNotificationDate(n.createdAt)}
                       <Badge tone={n.channel === 'EMAIL' ? 'info' : 'success'}>{n.channel}</Badge>
                     </div>
                   </div>
-                  <Badge tone={n.status === 'SENT' ? 'success' : 'error'}>{n.status === 'SENT' ? 'Envoyé' : 'Échec'}</Badge>
-                </div>
+                  {n.unread ? (
+                    <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" aria-label="Non lu" />
+                  ) : (
+                    <Badge tone={n.status === 'SENT' ? 'success' : 'error'}>{n.status === 'SENT' ? 'Envoyé' : 'Échec'}</Badge>
+                  )}
+                </button>
               );
             })}
           </div>

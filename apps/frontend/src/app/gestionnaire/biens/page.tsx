@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useApi, TTL } from '@/lib/use-api';
 import { cacheInvalidate } from '@/lib/cache';
@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   PageHeader, Button, Card, Badge, DataTable, type DataTableColumn,
   Modal, Field, Input, Select, Textarea, Skeleton, toast,
+  PhotoThumbnailGrid, PhotoUploadZone, type PhotoGridItem,
 } from '@/components/ui';
 
 type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
@@ -70,6 +71,7 @@ export default function GestionnaireBiensPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [newPropertyPhotos, setNewPropertyPhotos] = useState<File[]>([]);
+  const [newPhotoPreviews, setNewPhotoPreviews] = useState<PhotoGridItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState('');
   const [archiving, setArchiving] = useState<string | null>(null);
@@ -82,6 +84,28 @@ export default function GestionnaireBiensPage() {
   const [photosLoading, setPhotosLoading] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [photosErr, setPhotosErr] = useState('');
+
+  // Aperçus locaux des photos pas encore envoyées (création) — générés via
+  // URL.createObjectURL et révoqués à chaque changement pour éviter les
+  // fuites mémoire (voir cleanup de l'effet).
+  useEffect(() => {
+    const previews = newPropertyPhotos.map((file, i) => ({
+      id: `${file.name}-${file.lastModified}-${i}`,
+      url: URL.createObjectURL(file),
+    }));
+    setNewPhotoPreviews(previews);
+    return () => previews.forEach((p) => URL.revokeObjectURL(p.url));
+  }, [newPropertyPhotos]);
+
+  function addNewPhotos(files: File[]) {
+    setNewPropertyPhotos((current) => [...current, ...files].slice(0, 10));
+  }
+
+  function removeNewPhoto(id: string) {
+    const index = newPhotoPreviews.findIndex((p) => p.id === id);
+    if (index === -1) return;
+    setNewPropertyPhotos((current) => current.filter((_, i) => i !== index));
+  }
 
   async function openEdit(p: Property) {
     setEditing(p);
@@ -135,12 +159,12 @@ export default function GestionnaireBiensPage() {
     } finally { setEditSaving(false); }
   }
 
-  async function uploadPhotos(files: FileList | null) {
-    if (!files || files.length === 0 || !editing) return;
+  async function uploadPhotos(files: File[]) {
+    if (files.length === 0 || !editing) return;
     setUploadingPhotos(true); setPhotosErr('');
     try {
       const formData = new FormData();
-      Array.from(files).forEach(file => formData.append('photos', file));
+      files.forEach(file => formData.append('photos', file));
       const uploaded = await api.post<PropertyPhoto[]>(`/properties/${editing.id}/photos`, formData);
       setPhotos(current => [...current, ...uploaded]);
       cacheInvalidate(url);
@@ -347,17 +371,17 @@ export default function GestionnaireBiensPage() {
           <Field label="Description">
             <Textarea rows={3} placeholder="Description optionnelle du bien..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </Field>
-          <Field label="Photos (10 max, 5 Mo chacune)">
-            <input
-              type="file" accept="image/*" multiple
-              onChange={e => setNewPropertyPhotos(Array.from(e.target.files ?? []).slice(0, 10))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm box-border"
-            />
-            {newPropertyPhotos.length > 0 && (
-              <div className="text-xs text-gray-500 mt-1.5">
-                {newPropertyPhotos.length} photo{newPropertyPhotos.length > 1 ? 's' : ''} sélectionnée{newPropertyPhotos.length > 1 ? 's' : ''}
+          <Field label="Photos (10 max, 5 Mo chacune)" hint="Ajoutez vos photos puis retirez celles que vous ne voulez pas garder avant de valider.">
+            {newPhotoPreviews.length > 0 && (
+              <div className="mb-3">
+                <PhotoThumbnailGrid photos={newPhotoPreviews} onRemove={removeNewPhoto} />
               </div>
             )}
+            <PhotoUploadZone
+              onSelect={addNewPhotos}
+              disabled={newPropertyPhotos.length >= 10}
+              label={newPropertyPhotos.length >= 10 ? 'Limite de 10 photos atteinte' : 'Ajouter des photos'}
+            />
           </Field>
           {formErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{formErr}</div>}
           <div className="flex gap-2.5 justify-end">
@@ -424,40 +448,16 @@ export default function GestionnaireBiensPage() {
           {photosLoading ? (
             <div className="py-2"><Skeleton height={80} /></div>
           ) : (
-            <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
-              {photos.map(ph => (
-                <div key={ph.id} className="relative rounded-lg overflow-hidden bg-gray-100" style={{ aspectRatio: '1' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- URLs signées Supabase temporaires, next/image ajouterait peu ici */}
-                  <img src={ph.url} alt="" className="w-full h-full object-cover block" />
-                  <button
-                    onClick={() => removePhoto(ph.id)}
-                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white border-none text-sm cursor-pointer leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              {photos.length === 0 && (
-                <div className="col-span-full text-center py-6 text-gray-400 text-sm">Aucune photo pour l&apos;instant.</div>
-              )}
+            <div className="mb-5">
+              <PhotoThumbnailGrid photos={photos} onRemove={removePhoto} />
             </div>
           )}
 
-          <label
-            className={cn(
-              'flex items-center justify-center gap-2 border border-dashed border-gray-300 rounded-lg py-4 text-gray-700 text-sm font-semibold bg-gray-50',
-              photos.length >= 10 || uploadingPhotos ? 'cursor-not-allowed' : 'cursor-pointer',
-            )}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            {uploadingPhotos ? 'Envoi en cours…' : photos.length >= 10 ? 'Limite de 10 photos atteinte' : 'Ajouter des photos'}
-            <input
-              type="file" accept="image/*" multiple hidden disabled={photos.length >= 10 || uploadingPhotos}
-              onChange={e => { void uploadPhotos(e.target.files); e.target.value = ''; }}
-            />
-          </label>
+          <PhotoUploadZone
+            onSelect={(files) => void uploadPhotos(files)}
+            disabled={photos.length >= 10 || uploadingPhotos}
+            label={uploadingPhotos ? 'Envoi en cours…' : photos.length >= 10 ? 'Limite de 10 photos atteinte' : 'Ajouter des photos'}
+          />
         </div>
       </Modal>
     </div>

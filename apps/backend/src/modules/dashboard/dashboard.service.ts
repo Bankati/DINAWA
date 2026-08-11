@@ -17,9 +17,12 @@ export type DashboardKPI = {
 
 export type RevenuMensuel = { mois: string; montant: number; paiements: number };
 
+export type RepartitionType = { type: string; montant: number; nombreBiens: number };
+
 export type DashboardSummary = {
   kpis: DashboardKPI;
   revenusMensuels: RevenuMensuel[];
+  repartitionLoyersParType: RepartitionType[];
   derniersBiens: {
     id: string;
     type: string;
@@ -43,12 +46,14 @@ export type DashboardSummary = {
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSummary(user: AuthenticatedUser, annee: number): Promise<DashboardSummary> {
+  async getSummary(
+    user: AuthenticatedUser,
+    annee: number,
+    mois?: number,
+  ): Promise<DashboardSummary> {
     const yearStart = new Date(Date.UTC(annee, 0, 1));
     const yearEnd = new Date(Date.UTC(annee, 11, 31, 23, 59, 59));
-    const now = new Date();
-    const currentMonth = now.getUTCMonth();
-    const isCurrentYear = annee === now.getUTCFullYear();
+    const moisSelectionne = (mois ?? new Date().getUTCMonth() + 1) - 1;
 
     const propWhere = propertyVisibilityWhere(user);
     const leaseWhere: Prisma.PaymentWhereInput = { lease: { property: propWhere } };
@@ -62,6 +67,7 @@ export class DashboardService {
       paiementsRecents,
       overdueCount,
       paidPayments,
+      repartitionParType,
     ] = await Promise.all([
       this.prisma.property.count({ where: propWhere }),
       this.prisma.property.count({ where: { ...propWhere, status: 'OCCUPIED' } }),
@@ -115,14 +121,20 @@ export class DashboardService {
         },
         select: { paidAmount: true, paidAt: true },
       }),
+      // Composition du portefeuille par type — état courant, non filtré par
+      // mois/année (comme `impayes`), voir /architect refonte dashboard.
+      this.prisma.property.groupBy({
+        by: ['type'],
+        where: propWhere,
+        _sum: { monthlyRent: true },
+        _count: { _all: true },
+      }),
     ]);
 
     const revenusAnnuels = paidPayments.reduce((s, p) => s + p.paidAmount, 0);
-    const revenusMensuels = isCurrentYear
-      ? paidPayments
-          .filter((p) => p.paidAt && new Date(p.paidAt).getUTCMonth() === currentMonth)
-          .reduce((s, p) => s + p.paidAmount, 0)
-      : 0;
+    const revenusMensuels = paidPayments
+      .filter((p) => p.paidAt && new Date(p.paidAt).getUTCMonth() === moisSelectionne)
+      .reduce((s, p) => s + p.paidAmount, 0);
 
     return {
       kpis: {
@@ -136,6 +148,11 @@ export class DashboardService {
         tauxOccupation: totalBiens > 0 ? Math.round((biensOccupes / totalBiens) * 100) : 0,
       },
       revenusMensuels: this.bucketByMonth(paidPayments, annee),
+      repartitionLoyersParType: repartitionParType.map((r) => ({
+        type: r.type,
+        montant: r._sum.monthlyRent ?? 0,
+        nombreBiens: r._count._all,
+      })),
       derniersBiens: biensRecents.map((b) => ({
         id: b.id,
         type: b.type,

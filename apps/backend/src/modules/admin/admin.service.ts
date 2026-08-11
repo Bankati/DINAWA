@@ -58,9 +58,16 @@ export class AdminService {
     return { data: users, total, page, limit };
   }
 
-  async getStats() {
+  async getStats(
+    annee: number = new Date().getUTCFullYear(),
+    mois: number = new Date().getUTCMonth() + 1,
+  ) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const selectedMonthStart = new Date(Date.UTC(annee, mois - 1, 1));
+    const selectedMonthEnd = new Date(Date.UTC(annee, mois, 0, 23, 59, 59, 999));
+    const yearStart = new Date(Date.UTC(annee, 0, 1));
+    const yearEnd = new Date(Date.UTC(annee, 11, 31, 23, 59, 59, 999));
 
     const [
       totalUsers,
@@ -69,13 +76,15 @@ export class AdminService {
       revenusMonth,
       newUsersThisMonth,
       newUsersLastMonth,
+      repartitionParType,
+      paiementsAnnee,
     ] = await Promise.all([
       this.prisma.user.count({ where: { anonymizedAt: null } }),
       this.prisma.property.count(),
       this.prisma.lease.count({ where: { status: 'ACTIVE' } }),
       this.prisma.payment.aggregate({
         _sum: { paidAmount: true },
-        where: { status: 'PAID', paidAt: { gte: startOfMonth } },
+        where: { status: 'PAID', paidAt: { gte: selectedMonthStart, lte: selectedMonthEnd } },
       }),
       this.prisma.user.count({ where: { createdAt: { gte: startOfMonth }, anonymizedAt: null } }),
       this.prisma.user.count({
@@ -86,6 +95,18 @@ export class AdminService {
           },
           anonymizedAt: null,
         },
+      }),
+      // Composition du parc immobilier plateforme par type — même agrégation
+      // que DashboardService.getSummary() côté propriétaire, sans filtre de
+      // portefeuille (vue admin = toute la plateforme).
+      this.prisma.property.groupBy({
+        by: ['type'],
+        _sum: { monthlyRent: true },
+        _count: { _all: true },
+      }),
+      this.prisma.payment.findMany({
+        where: { status: 'PAID', paidAt: { gte: yearStart, lte: yearEnd } },
+        select: { paidAmount: true, paidAt: true },
       }),
     ]);
 
@@ -102,7 +123,29 @@ export class AdminService {
       commissionsMois: 0,
       nombreLitigesOuverts: 0,
       croissanceUtilisateursMois: croissance,
+      repartitionBiensParType: repartitionParType.map((r) => ({
+        type: r.type,
+        montant: r._sum.monthlyRent ?? 0,
+        nombreBiens: r._count._all,
+      })),
+      revenusMensuels: this.bucketByMonth(paiementsAnnee, annee),
     };
+  }
+
+  private bucketByMonth(
+    payments: { paidAmount: number; paidAt: Date | null }[],
+    annee: number,
+  ): { mois: string; montant: number }[] {
+    const buckets = new Map<string, number>();
+    for (let m = 0; m < 12; m++) {
+      buckets.set(`${annee}-${String(m + 1).padStart(2, '0')}`, 0);
+    }
+    for (const p of payments) {
+      if (!p.paidAt) continue;
+      const key = `${annee}-${String(new Date(p.paidAt).getUTCMonth() + 1).padStart(2, '0')}`;
+      buckets.set(key, (buckets.get(key) ?? 0) + p.paidAmount);
+    }
+    return Array.from(buckets.entries()).map(([mois, montant]) => ({ mois, montant }));
   }
 
   async getUserDetail(id: string) {

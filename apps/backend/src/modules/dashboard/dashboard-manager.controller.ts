@@ -7,6 +7,7 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { DashboardManagerService } from './dashboard-manager.service';
 import { RevenueQueryDto } from './dto/revenue-query.dto';
 import { ScopeQueryDto } from './dto/scope-query.dto';
+import { MonthlyRevenueQueryDto } from './dto/monthly-revenue-query.dto';
 import {
   DashboardScope,
   ManagerDashboardAlerts,
@@ -15,6 +16,8 @@ import {
   ManagerDashboardRevenue,
   ManagerDashboardSummary,
   ManagerDashboardUpcomingPayment,
+  ManagerMonthlyRevenue,
+  PropertyTypeBreakdown,
 } from './dashboard.types';
 
 @ApiTags('Dashboard')
@@ -74,6 +77,33 @@ export class DashboardManagerController {
     return this.dashboardManagerService.getUpcomingPayments(
       user,
       query.scope ?? DashboardScope.ALL,
+    );
+  }
+
+  @Get('property-types')
+  @ApiOperation({
+    summary: 'Répartition des loyers par type de bien (composition du portefeuille)',
+  })
+  getPropertyTypeBreakdown(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ScopeQueryDto,
+  ): Promise<PropertyTypeBreakdown[]> {
+    return this.dashboardManagerService.getPropertyTypeBreakdown(
+      user,
+      query.scope ?? DashboardScope.ALL,
+    );
+  }
+
+  @Get('monthly-revenue')
+  @ApiOperation({ summary: 'Encaissements mensuels janvier-décembre pour une année donnée' })
+  getMonthlyRevenue(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: MonthlyRevenueQueryDto,
+  ): Promise<ManagerMonthlyRevenue[]> {
+    return this.dashboardManagerService.getMonthlyRevenue(
+      user,
+      query.scope ?? DashboardScope.ALL,
+      query.year ?? new Date().getUTCFullYear(),
     );
   }
 
