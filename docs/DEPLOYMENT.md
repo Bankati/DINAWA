@@ -85,10 +85,6 @@ Dans Settings → API :
 - `SUPABASE_ANON_KEY` = `anon` `public`
 - `SUPABASE_SERVICE_ROLE_KEY` = `service_role` (⚠️ garder secret)
 
-Dans Settings → Auth → JWT :
-
-- `SUPABASE_JWT_SECRET` = JWT Secret
-
 Dans Settings → Database → Connection string → Transaction pooler :
 
 - `DATABASE_URL` = Connection string avec port **6543** (transaction pooler recommandé pour Railway)
@@ -107,12 +103,9 @@ Dans Storage, créer les 5 buckets suivants en mode **privé** :
 
 > **Rappel** : Aucun bucket ne doit contenir de PDFs générés (quittances, rapports). Ceux-ci sont générés à la volée.
 
-### 3d. Configurer Supabase Auth
-
-Dans Authentication → Providers :
-
-- Activer **Email** (désactiver la confirmation d'email pour les tests, réactiver en production)
-- URL de redirection : `https://votre-app.vercel.app/auth/callback`
+> **Supabase Auth non utilisé** — l'authentification (mots de passe,
+> sessions) est gérée entièrement côté NestJS depuis le 2026-08-11 (voir
+> `JWT_SECRET` en section 4b). Supabase ne sert que Postgres + Storage.
 
 ---
 
@@ -136,7 +129,7 @@ DATABASE_URL=postgresql://...
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
-SUPABASE_JWT_SECRET=...
+JWT_SECRET=...
 RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=noreply@warah.tg
 VAPID_PUBLIC_KEY=...

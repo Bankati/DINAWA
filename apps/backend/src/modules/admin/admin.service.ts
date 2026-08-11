@@ -139,19 +139,13 @@ export class AdminService {
 
     if (!user) throw new NotFoundException('Utilisateur introuvable');
 
+    // Compte Supabase legacy éventuel (authentification interne depuis le
+    // 2026-08-11 — un nouveau compte n'a plus jamais de supabaseId, voir
+    // architecture.md) — nettoyage best-effort, rien à faire sinon.
     if (user.supabaseId) {
       await this.supabaseAdmin.withRetry(() =>
         this.supabaseAdmin.auth.admin.deleteUser(user.supabaseId!),
       );
-    } else if (user.email) {
-      // supabaseId absent mais le compte Supabase Auth peut exister par email
-      const { data } = await this.supabaseAdmin.auth.admin.listUsers();
-      const match = data?.users?.find((u) => u.email === user.email);
-      if (match) {
-        await this.supabaseAdmin.withRetry(() =>
-          this.supabaseAdmin.auth.admin.deleteUser(match.id),
-        );
-      }
     }
 
     await this.prisma.user.update({

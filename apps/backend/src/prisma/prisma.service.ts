@@ -12,6 +12,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
   private keepaliveTimer?: ReturnType<typeof setInterval>;
 
+  // Omission globale de passwordHash — jamais renvoyé dans une réponse HTTP
+  // par erreur (signup, /auth/me, tout autre endpoint qui sérialise un User)
+  // sans avoir à y penser à chaque site d'appel. Seul AuthService.login() en
+  // a besoin, et l'y réactive explicitement via `omit: { passwordHash: false }`
+  // sur cette requête précise (voir modules/auth/auth.service.ts).
+  constructor() {
+    super({ omit: { user: { passwordHash: true } } });
+  }
+
   async onModuleInit(): Promise<void> {
     await this.wakeupSupabase();
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {

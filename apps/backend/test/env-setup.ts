@@ -26,3 +26,4 @@ process.env['VAPID_PRIVATE_KEY'] ??= 'nLMYh8CeJYviJNea4GWuyXZFIaXrb2lruNLDZF0ESm
 process.env['VAPID_SUBJECT'] ??= 'mailto:contact@warah.tg';
 process.env['FRONTEND_URL'] ??= 'https://placeholder.vercel.app';
 process.env['INVITATION_TOKEN_SECRET'] ??= 'e2e-test-invitation-token-secret';
+process.env['JWT_SECRET'] ??= 'e2e-test-jwt-secret';

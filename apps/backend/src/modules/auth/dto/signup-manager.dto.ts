@@ -6,8 +6,8 @@ export class SignupManagerDto {
   @IsEmail()
   email!: string;
 
-  // Politique de mot de passe déléguée à Supabase Auth (minimum 6
-  // caractères par défaut) — pas de règle locale supplémentaire.
+  // Politique de mot de passe interne (voir modules/auth/token.service.ts)
+  // — minimum 6 caractères, hashé en bcrypt avant stockage.
   @ApiProperty()
   @IsString()
   @MinLength(6)

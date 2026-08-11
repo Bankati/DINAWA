@@ -166,14 +166,14 @@ export class SupabaseAdminService {
 }
 ```
 
-### Guard de validation JWT
+### Guard de validation JWT (authentification interne depuis le 2026-08-11)
 
 ```typescript
-// src/common/guards/supabase-auth.guard.ts
+// src/common/guards/jwt-auth.guard.ts
 @Injectable()
-export class SupabaseAuthGuard implements CanActivate {
+export class JwtAuthGuard implements CanActivate {
   constructor(
-    private readonly supabase: SupabaseAdminService,
+    private readonly tokens: TokenService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -182,12 +182,14 @@ export class SupabaseAuthGuard implements CanActivate {
     const token = request.headers.authorization?.replace('Bearer ', '');
     if (!token) throw new UnauthorizedException('Token manquant');
 
-    const { data, error } = await this.supabase.client.auth.getUser(token);
-    if (error || !data.user) throw new UnauthorizedException('Token invalide');
+    let payload: { sub: string };
+    try {
+      payload = this.tokens.verifyAccessToken(token);
+    } catch {
+      throw new UnauthorizedException('Token invalide');
+    }
 
-    const user = await this.prisma.user.findUnique({
-      where: { supabaseId: data.user.id },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || user.accountStatus === 'SUSPENDED_ADMIN') {
       throw new UnauthorizedException('Compte indisponible');
     }
@@ -203,17 +205,11 @@ export class SupabaseAuthGuard implements CanActivate {
 ```typescript
 // src/modules/auth/auth.service.ts
 async signupOwner(dto: SignupOwnerDto, idDocumentBuffer: Buffer) {
-  const { data, error } = await this.supabase.client.auth.admin.createUser({
-    email: dto.email,
-    password: dto.password,
-    email_confirm: false,
-    user_metadata: { role: 'OWNER' },
-  });
-  if (error) throw new BadRequestException(error.message);
+  const passwordHash = await this.tokens.hashPassword(dto.password);
 
   return this.prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
-      data: { supabaseId: data.user.id, email: dto.email, role: 'OWNER' },
+      data: { passwordHash, email: dto.email, role: 'OWNER' },
     });
     await tx.ownerProfile.create({
       data: { userId: user.id, firstName: dto.firstName, lastName: dto.lastName, residenceCountry: dto.residenceCountry },
@@ -226,12 +222,12 @@ async signupOwner(dto: SignupOwnerDto, idDocumentBuffer: Buffer) {
 
 **Règles :**
 
-- Tout l'auth utilisateur passe par Supabase Auth — pas de hashage côté NestJS, pas de bcrypt, pas de table `password` locale
-- `SUPABASE_SERVICE_ROLE_KEY` ne quitte jamais le serveur — jamais exposée au client, jamais loggée
-- Connexion par email + mot de passe directe (pas de second facteur, pas d'OTP) — la session Supabase est ouverte côté client après authentification réussie
+- Mots de passe hashés en bcrypt (`TokenService.hashPassword()`/`comparePassword()`) — jamais en clair, jamais via un service externe
+- `SUPABASE_SERVICE_ROLE_KEY` ne quitte jamais le serveur — jamais exposée au client, jamais loggée (utilisée uniquement pour Storage désormais)
+- Connexion par email + mot de passe directe (pas de second facteur, pas d'OTP) — access token JWT + refresh token émis directement après authentification réussie
 - L'OTP ne sert que pour le reset de mot de passe (cas mot de passe oublié) — voir section Resend
-- Le `SupabaseAuthGuard` est appliqué sur tous les controllers métier — jamais `@Public()` sauf justification documentée (webhook Cashpay, endpoints publics d'annonces)
-- L'objet `request.user` injecté par le guard est l'`User` Prisma, pas l'`User` Supabase brut — toujours travailler avec l'utilisateur métier
+- Le `JwtAuthGuard` est appliqué sur tous les controllers métier — jamais `@Public()` sauf justification documentée (webhook Cashpay, endpoints publics d'annonces)
+- L'objet `request.user` injecté par le guard est directement l'`User` Prisma
 
 ---
 

@@ -32,8 +32,7 @@ export class AuthController {
   @HttpCode(201)
   @ApiOperation({
     summary: 'Inscription propriétaire',
-    description:
-      "Crée le compte Supabase Auth et le profil propriétaire, envoie l'email de confirmation WARAH.",
+    description: "Crée le compte et le profil propriétaire, envoie l'email de confirmation WARAH.",
   })
   async signupOwner(@Body() dto: SignupOwnerDto): Promise<SignupOwnerResponse> {
     return this.authService.signupOwner(dto);
@@ -44,8 +43,7 @@ export class AuthController {
   @HttpCode(201)
   @ApiOperation({
     summary: 'Inscription gestionnaire',
-    description:
-      "Crée le compte Supabase Auth et le profil gestionnaire, envoie l'email de confirmation WARAH.",
+    description: "Crée le compte et le profil gestionnaire, envoie l'email de confirmation WARAH.",
   })
   async signupManager(@Body() dto: SignupManagerDto): Promise<SignupManagerResponse> {
     return this.authService.signupManager(dto);
@@ -58,8 +56,8 @@ export class AuthController {
     summary: 'Invite un locataire sur un bien',
     description:
       'Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée ' +
-      "immédiatement le compte locataire (email confirmé d'office) et envoie le lien " +
-      "d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.",
+      "immédiatement le compte locataire et envoie le lien d'activation par email — le " +
+      "locataire n'aura plus qu'à poser un mot de passe.",
   })
   async inviteTenant(
     @CurrentUser() user: AuthenticatedUser,
@@ -88,9 +86,9 @@ export class AuthController {
   @ApiOperation({
     summary: 'Connexion par email et mot de passe',
     description:
-      'Route la connexion via NestJS (plutôt que directement Supabase côté client) pour ' +
-      'appliquer le blocage de 15 minutes après 5 tentatives échouées. Renvoie une session ' +
-      'Supabase valide en cas de succès.',
+      'Vérifie le mot de passe (bcrypt) et applique le blocage de 15 minutes après 5 ' +
+      'tentatives échouées. Renvoie un access token (JWT, 15 min) et un refresh token en cas ' +
+      'de succès.',
   })
   async login(@Body() dto: LoginDto): Promise<LoginResponse> {
     return this.authService.login(dto);

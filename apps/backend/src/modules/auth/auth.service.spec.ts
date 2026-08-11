@@ -43,16 +43,11 @@ describe('AuthService', () => {
     property: { update: jest.Mock };
   };
   let config: { getOrThrow: jest.Mock };
-  let supabaseAdmin: {
-    auth: {
-      admin: {
-        createUser: jest.Mock;
-        deleteUser: jest.Mock;
-        updateUserById: jest.Mock;
-      };
-    };
-    anonAuth: { signInWithPassword: jest.Mock; refreshSession: jest.Mock };
-    withRetry: jest.Mock;
+  let tokens: {
+    hashPassword: jest.Mock;
+    comparePassword: jest.Mock;
+    issueTokenPair: jest.Mock;
+    rotateRefreshToken: jest.Mock;
   };
   let emailService: { sendEmail: jest.Mock };
   let notify: { notifyUser: jest.Mock };
@@ -113,27 +108,15 @@ describe('AuthService', () => {
       },
     };
     config = { getOrThrow: jest.fn((key: string) => CONFIG_VALUES[key]) };
-    supabaseAdmin = {
-      auth: {
-        admin: {
-          createUser: jest
-            .fn()
-            .mockResolvedValue({ data: { user: { id: 'supabase-uid-1' } }, error: null }),
-          deleteUser: jest.fn().mockResolvedValue({ error: null }),
-          updateUserById: jest.fn().mockResolvedValue({ error: null }),
-        },
-      },
-      anonAuth: {
-        signInWithPassword: jest.fn().mockResolvedValue({
-          data: { session: { access_token: 'access-1', refresh_token: 'refresh-1' } },
-          error: null,
-        }),
-        refreshSession: jest.fn().mockResolvedValue({
-          data: { session: { access_token: 'access-2', refresh_token: 'refresh-2' } },
-          error: null,
-        }),
-      },
-      withRetry: jest.fn((fn: () => unknown) => fn()),
+    tokens = {
+      hashPassword: jest.fn().mockResolvedValue('hashed-password'),
+      comparePassword: jest.fn().mockResolvedValue(false),
+      issueTokenPair: jest
+        .fn()
+        .mockResolvedValue({ accessToken: 'access-1', refreshToken: 'refresh-1' }),
+      rotateRefreshToken: jest
+        .fn()
+        .mockResolvedValue({ accessToken: 'access-2', refreshToken: 'refresh-2' }),
     };
     emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
     notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
@@ -142,7 +125,7 @@ describe('AuthService', () => {
     service = new AuthService(
       prisma as never,
       config as never,
-      supabaseAdmin as never,
+      tokens as never,
       emailService as never,
       notify as never,
       listings as never,
@@ -154,35 +137,42 @@ describe('AuthService', () => {
     const activeUser = {
       id: 'user-1',
       email: loginDto.email,
+      passwordHash: 'stored-hash',
       accountStatus: 'ACTIVE',
       failedLoginAttempts: 0,
       lockedUntil: null,
     };
 
-    it("renvoie la session Supabase en cas de succès et remet le compteur à zéro (réponse à jour, pas l'instantané pré-connexion)", async () => {
+    it("renvoie les tokens en cas de succès et remet le compteur à zéro (réponse à jour, pas l'instantané pré-connexion)", async () => {
       prisma.user.findUnique.mockResolvedValue({ ...activeUser, failedLoginAttempts: 3 });
       prisma.user.update.mockResolvedValue({ ...activeUser, failedLoginAttempts: 0 });
+      tokens.comparePassword.mockResolvedValue(true);
 
       const result = await service.login(loginDto);
 
-      expect(supabaseAdmin.anonAuth.signInWithPassword).toHaveBeenCalledWith(loginDto);
+      expect(tokens.comparePassword).toHaveBeenCalledWith(loginDto.password, 'stored-hash');
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         data: { failedLoginAttempts: 0, lockedUntil: null },
       });
+      expect(tokens.issueTokenPair).toHaveBeenCalledWith({ ...activeUser, failedLoginAttempts: 0 });
+      // passwordHash ne doit jamais apparaître dans la réponse, même si
+      // `resetUser` le porte encore en interne (voir omit: { passwordHash:
+      // false } sur la requête de login) — trouvé et corrigé pendant un
+      // test en conditions réelles (fuite du hash bcrypt dans la réponse).
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { passwordHash: _omitted, ...activeUserWithoutHash } = activeUser;
       expect(result).toEqual({
         accessToken: 'access-1',
         refreshToken: 'refresh-1',
-        user: { ...activeUser, failedLoginAttempts: 0 },
+        user: { ...activeUserWithoutHash, failedLoginAttempts: 0 },
       });
+      expect(result.user).not.toHaveProperty('passwordHash');
     });
 
     it("incrémente le compteur d'échecs et rejette avec 401 générique", async () => {
       prisma.user.findUnique.mockResolvedValue(activeUser);
-      supabaseAdmin.anonAuth.signInWithPassword.mockResolvedValue({
-        data: { session: null },
-        error: { message: 'Invalid credentials' },
-      });
+      tokens.comparePassword.mockResolvedValue(false);
 
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
       expect(prisma.user.update).toHaveBeenCalledWith({
@@ -193,10 +183,7 @@ describe('AuthService', () => {
 
     it('bloque le compte 15 minutes après 5 échecs', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...activeUser, failedLoginAttempts: 4 });
-      supabaseAdmin.anonAuth.signInWithPassword.mockResolvedValue({
-        data: { session: null },
-        error: { message: 'Invalid credentials' },
-      });
+      tokens.comparePassword.mockResolvedValue(false);
 
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
 
@@ -207,23 +194,38 @@ describe('AuthService', () => {
       expect(updateArgs.data.lockedUntil).toBeInstanceOf(Date);
     });
 
-    it('rejette avec 403 si le compte est déjà bloqué', async () => {
+    it('rejette avec 403 si le compte est déjà bloqué, sans comparer le mot de passe', async () => {
       prisma.user.findUnique.mockResolvedValue({
         ...activeUser,
         lockedUntil: new Date(Date.now() + 5 * 60_000),
       });
 
       await expect(service.login(loginDto)).rejects.toThrow(ForbiddenException);
+      expect(tokens.comparePassword).not.toHaveBeenCalled();
     });
 
-    it("rejette avec 401 générique si Supabase réussit mais aucun User Prisma ne correspond (sans fuite d'info)", async () => {
+    it("rejette avec 401 générique si l'email est inconnu — compare quand même un hash factice (protection timing attack)", async () => {
       prisma.user.findUnique.mockResolvedValue(null);
+
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      expect(tokens.comparePassword).toHaveBeenCalledWith(
+        loginDto.password,
+        expect.stringMatching(/^\$2b\$12\$/),
+      );
     });
 
     it('rejette un compte SUSPENDED_ADMIN', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...activeUser, accountStatus: 'SUSPENDED_ADMIN' });
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('refreshSession', () => {
+    it('délègue la rotation à TokenService', async () => {
+      const result = await service.refreshSession('old-refresh-token');
+
+      expect(tokens.rotateRefreshToken).toHaveBeenCalledWith('old-refresh-token');
+      expect(result).toEqual({ accessToken: 'access-2', refreshToken: 'refresh-2' });
     });
   });
 
@@ -261,9 +263,10 @@ describe('AuthService', () => {
   describe('confirmPasswordReset', () => {
     const confirmDto = { email: 'jean.dupont@warah.tg', code: '123456', newPassword: 'newpass123' };
 
-    it('met à jour le mot de passe et marque le code comme utilisé', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 'user-1', supabaseId: 'supabase-uid-1' });
+    it('hash le nouveau mot de passe et marque le code comme utilisé', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
       prisma.passwordResetOtp.findFirst.mockResolvedValue({ id: 'otp-1' });
+      tokens.hashPassword.mockResolvedValue('new-hashed-password');
 
       const result = await service.confirmPasswordReset(confirmDto);
 
@@ -272,18 +275,20 @@ describe('AuthService', () => {
       ];
       expect(otpUpdateArgs.where).toEqual({ id: 'otp-1' });
       expect(otpUpdateArgs.data.usedAt).toBeInstanceOf(Date);
-      expect(supabaseAdmin.auth.admin.updateUserById).toHaveBeenCalledWith('supabase-uid-1', {
-        password: confirmDto.newPassword,
+      expect(tokens.hashPassword).toHaveBeenCalledWith(confirmDto.newPassword);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { passwordHash: 'new-hashed-password' },
       });
       expect(result.message).toContain('mis à jour');
     });
 
     it('rejette avec 400 si le code est invalide, expiré ou déjà utilisé', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 'user-1', supabaseId: 'supabase-uid-1' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
       prisma.passwordResetOtp.findFirst.mockResolvedValue(null);
 
       await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(BadRequestException);
-      expect(supabaseAdmin.auth.admin.updateUserById).not.toHaveBeenCalled();
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
     });
 
     it('rejette avec 400 si aucun compte ne correspond à cet email', async () => {
@@ -293,22 +298,15 @@ describe('AuthService', () => {
   });
 
   describe('signupOwner', () => {
-    it("crée le compte Supabase, le User+OwnerProfile (avec phone/city), envoie l'email de confirmation", async () => {
+    it("hash le mot de passe, crée le User+OwnerProfile (avec phone/city), envoie l'email de confirmation", async () => {
+      tokens.hashPassword.mockResolvedValue('hashed-owner-password');
+
       const result = await service.signupOwner(ownerDto);
 
-      // email_confirm: true — connexion immédiate sans clic dans un email de
-      // confirmation (voir /recover fusion auth.service.ts : fiabilité email
-      // variable au Togo, friction jugée plus coûteuse que le gain sécurité
-      // pour ce contexte B2B).
-      expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
-        email: ownerDto.email,
-        password: ownerDto.password,
-        email_confirm: true,
-        user_metadata: { role: 'OWNER' },
-      });
+      expect(tokens.hashPassword).toHaveBeenCalledWith(ownerDto.password);
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
-          supabaseId: 'supabase-uid-1',
+          passwordHash: 'hashed-owner-password',
           email: ownerDto.email,
           role: 'OWNER',
           firstName: ownerDto.firstName,
@@ -339,16 +337,7 @@ describe('AuthService', () => {
       expect(result).toEqual({ user: createdUser });
     });
 
-    it('convertit une erreur Supabase email_exists en 409, sans toucher à Prisma', async () => {
-      supabaseAdmin.auth.admin.createUser.mockResolvedValue({
-        data: null,
-        error: { code: 'email_exists', message: 'User already registered' },
-      });
-      await expect(service.signupOwner(ownerDto)).rejects.toThrow(ConflictException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('supprime le compte Supabase et convertit un conflit Prisma (P2002 email) en 409', async () => {
+    it('convertit un conflit Prisma (P2002 email) en 409', async () => {
       prisma.$transaction.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
           code: 'P2002',
@@ -357,13 +346,11 @@ describe('AuthService', () => {
         }),
       );
       await expect(service.signupOwner(ownerDto)).rejects.toThrow(ConflictException);
-      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
 
-    it("supprime le compte Supabase et relance l'erreur si la transaction échoue pour une autre raison", async () => {
+    it("relance l'erreur telle quelle si la transaction échoue pour une autre raison", async () => {
       prisma.$transaction.mockRejectedValue(new Error('DB down'));
       await expect(service.signupOwner(ownerDto)).rejects.toThrow('DB down');
-      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
   });
 
@@ -373,7 +360,7 @@ describe('AuthService', () => {
 
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
-          supabaseId: 'supabase-uid-1',
+          passwordHash: 'hashed-password',
           email: managerDto.email,
           role: 'MANAGER',
           firstName: managerDto.firstName,
@@ -415,17 +402,17 @@ describe('AuthService', () => {
       });
     });
 
-    it("crée le compte locataire (email confirmé), l'associe à l'inviteur, crée le bail et l'échéancier, envoie l'email avec l'adresse du bien", async () => {
+    it("crée le compte locataire avec un mot de passe placeholder, l'associe à l'inviteur, crée le bail et l'échéancier, envoie l'email avec l'adresse du bien", async () => {
+      tokens.hashPassword.mockResolvedValue('placeholder-hash');
+
       const result = await service.inviteTenant(owner as never, inviteDto);
 
-      expect(supabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
-        email: inviteDto.email,
-        email_confirm: true,
-        user_metadata: { role: 'TENANT' },
-      });
+      // Placeholder haché comme un vrai mot de passe (voir TIMING_SAFE_DUMMY_HASH
+      // pour le même principe) — jamais communiqué, remplacé à l'activation.
+      expect(tokens.hashPassword).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f]{64}$/));
       expect(tx.user.create).toHaveBeenCalledWith({
         data: {
-          supabaseId: 'supabase-uid-1',
+          passwordHash: 'placeholder-hash',
           email: inviteDto.email,
           phone: inviteDto.phone,
           role: 'TENANT',
@@ -486,7 +473,7 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
         NotFoundException,
       );
-      expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+      expect(tx.user.create).not.toHaveBeenCalled();
     });
 
     it("rejette avec 403 si l'appelant n'est ni propriétaire ni gestionnaire mandaté sur ce bien", async () => {
@@ -494,7 +481,7 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(stranger as never, inviteDto)).rejects.toThrow(
         ForbiddenException,
       );
-      expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+      expect(tx.user.create).not.toHaveBeenCalled();
     });
 
     it('autorise le gestionnaire avec un mandat actif sur le bien', async () => {
@@ -504,17 +491,7 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(manager as never, inviteDto)).resolves.toBeDefined();
     });
 
-    it('convertit une erreur Supabase email_exists en 409', async () => {
-      supabaseAdmin.auth.admin.createUser.mockResolvedValue({
-        data: null,
-        error: { code: 'email_exists', message: 'User already registered' },
-      });
-      await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('supprime le compte Supabase et distingue conflit email vs téléphone (P2002)', async () => {
+    it('distingue conflit email vs téléphone (P2002) au moment de la création', async () => {
       prisma.$transaction.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
           code: 'P2002',
@@ -525,7 +502,6 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
         'Ce numéro de téléphone est déjà utilisé(e)',
       );
-      expect(supabaseAdmin.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-uid-1');
     });
 
     // Voir /architect unité 14 : le blocage locataire↔bien est vérifié dès
@@ -541,7 +517,7 @@ describe('AuthService', () => {
         await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
           ForbiddenException,
         );
-        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+        expect(tx.user.create).not.toHaveBeenCalled();
       });
 
       it("recherche l'utilisateur existant par email OU téléphone, tous rôles confondus (email/phone uniques globalement)", async () => {
@@ -572,9 +548,7 @@ describe('AuthService', () => {
 
       // Bug réel corrigé le 2026-08-09 : l'ancienne recherche filtrait
       // `role: 'TENANT'`, donc un email déjà pris par un compte
-      // OWNER/MANAGER/ADMIN n'était jamais détecté ici — l'appel Supabase
-      // plus bas échouait alors avec un "email déjà utilisé" trompeur,
-      // jamais vu côté locataire par l'appelant.
+      // OWNER/MANAGER/ADMIN n'était jamais détecté ici.
       it("rejette avec 409 explicite si l'email appartient déjà à un compte non-TENANT (ex: OWNER)", async () => {
         prisma.user.findFirst.mockResolvedValueOnce({
           id: 'owner-9',
@@ -585,7 +559,7 @@ describe('AuthService', () => {
         await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
           ConflictException,
         );
-        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+        expect(tx.user.create).not.toHaveBeenCalled();
       });
 
       it('rejette avec 409 explicite si le téléphone appartient déjà à un compte non-TENANT', async () => {
@@ -603,7 +577,7 @@ describe('AuthService', () => {
 
     // Voir /architect révision paiements, 2026-07-25 : un locataire déjà
     // connu de la plateforme (ex. bail précédent résilié, nouveau bien) est
-    // rattaché à un nouveau bail sans nouveau compte Supabase ni ré-invitation.
+    // rattaché à un nouveau bail sans nouveau compte ni ré-invitation.
     describe('locataire déjà existant sur la plateforme', () => {
       const existingTenant = {
         id: 'existing-tenant-1',
@@ -622,10 +596,9 @@ describe('AuthService', () => {
         });
       });
 
-      it('ne crée ni compte Supabase ni User ni email d’invitation — réutilise le locataire existant', async () => {
+      it('ne crée ni compte ni email d’invitation — réutilise le locataire existant', async () => {
         const result = await service.inviteTenant(owner as never, inviteDto);
 
-        expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
         expect(tx.user.create).not.toHaveBeenCalled();
         expect(tx.tenantProfile.create).not.toHaveBeenCalled();
         expect(emailService.sendEmail).not.toHaveBeenCalled();
@@ -664,23 +637,21 @@ describe('AuthService', () => {
       await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toThrow(
         'Ce locataire a déjà un bail actif',
       );
-      expect(supabaseAdmin.auth.admin.deleteUser).not.toHaveBeenCalled();
     });
   });
 
   describe('completeTenantSignup', () => {
-    it('pose le mot de passe du compte déjà créé', async () => {
+    it('hash et pose le mot de passe du compte déjà créé', async () => {
       const token = createInvitationToken('tenant-1', 'test-secret');
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'tenant-1',
-        role: 'TENANT',
-        supabaseId: 'supabase-uid-tenant',
-      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'tenant-1', role: 'TENANT' });
+      tokens.hashPassword.mockResolvedValue('hashed-tenant-password');
 
       const result = await service.completeTenantSignup(token, { password: 'newpassword123' });
 
-      expect(supabaseAdmin.auth.admin.updateUserById).toHaveBeenCalledWith('supabase-uid-tenant', {
-        password: 'newpassword123',
+      expect(tokens.hashPassword).toHaveBeenCalledWith('newpassword123');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'tenant-1' },
+        data: { passwordHash: 'hashed-tenant-password' },
       });
       expect(result).toEqual({ userId: 'tenant-1' });
     });
@@ -694,12 +665,12 @@ describe('AuthService', () => {
 
     it("rejette avec 400 si l'utilisateur n'existe pas ou n'est pas TENANT", async () => {
       const token = createInvitationToken('user-x', 'test-secret');
-      prisma.user.findUnique.mockResolvedValue({ id: 'user-x', role: 'OWNER', supabaseId: 'x' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-x', role: 'OWNER' });
 
       await expect(
         service.completeTenantSignup(token, { password: 'newpassword123' }),
       ).rejects.toThrow(BadRequestException);
-      expect(supabaseAdmin.auth.admin.updateUserById).not.toHaveBeenCalled();
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
     });
   });
 

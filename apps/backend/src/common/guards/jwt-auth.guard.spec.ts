@@ -1,19 +1,14 @@
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
-import { SupabaseAuthGuard } from './supabase-auth.guard';
+import { JwtAuthGuard } from './jwt-auth.guard';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ALLOW_WHILE_SUSPENDED_KEY } from '../decorators/allow-while-suspended.decorator';
 
-describe('SupabaseAuthGuard', () => {
-  let guard: SupabaseAuthGuard;
+describe('JwtAuthGuard', () => {
+  let guard: JwtAuthGuard;
   let reflector: { getAllAndOverride: jest.Mock };
-  let supabaseAdmin: { auth: { getUser: jest.Mock }; withRetry: jest.Mock };
+  let tokens: { verifyAccessToken: jest.Mock };
   let prisma: { user: { findUnique: jest.Mock } };
   let cache: { get: jest.Mock; set: jest.Mock };
-
-  const confirmedSupabaseUser = {
-    id: 'supabase-uid-1',
-    email_confirmed_at: '2026-07-01T00:00:00.000Z',
-  };
 
   type FakeRequest = { user?: unknown; headers: { authorization?: string }; method: string };
 
@@ -42,27 +37,17 @@ describe('SupabaseAuthGuard', () => {
 
   beforeEach(() => {
     reflector = { getAllAndOverride: jest.fn() };
-    supabaseAdmin = {
-      auth: {
-        getUser: jest
-          .fn()
-          .mockResolvedValue({ data: { user: confirmedSupabaseUser }, error: null }),
-      },
-      withRetry: jest.fn((fn: () => unknown) => fn()),
+    tokens = {
+      verifyAccessToken: jest.fn().mockReturnValue({ sub: 'user-1', role: 'OWNER' }),
     };
     prisma = {
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1', accountStatus: 'ACTIVE' }),
       },
     };
-    // Cache toujours miss dans les tests (on vérifie le chemin réseau normal)
+    // Cache toujours miss dans les tests (on vérifie le chemin normal)
     cache = { get: jest.fn().mockReturnValue(null), set: jest.fn() };
-    guard = new SupabaseAuthGuard(
-      reflector as never,
-      supabaseAdmin as never,
-      prisma as never,
-      cache as never,
-    );
+    guard = new JwtAuthGuard(reflector as never, tokens as never, prisma as never, cache as never);
   });
 
   it('laisse passer sans token les routes marquées @Public()', async () => {
@@ -75,27 +60,16 @@ describe('SupabaseAuthGuard', () => {
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejette avec 401 si le token Supabase est invalide', async () => {
-    supabaseAdmin.auth.getUser.mockResolvedValue({
-      data: { user: null },
-      error: { message: 'invalid' },
+  it('rejette avec 401 si le JWT est invalide ou expiré', async () => {
+    tokens.verifyAccessToken.mockImplementation(() => {
+      throw new Error('jwt expired');
     });
     const { context } = buildContext({ authorization: 'Bearer x' });
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
-  });
-
-  it("rejette avec 403 EMAIL_NOT_CONFIRMED si l'email Supabase n'est pas confirmé", async () => {
-    supabaseAdmin.auth.getUser.mockResolvedValue({
-      data: { user: { ...confirmedSupabaseUser, email_confirmed_at: null } },
-      error: null,
-    });
-    const { context } = buildContext({ authorization: 'Bearer x' });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(ForbiddenException);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it('rejette avec 401 si aucun User Prisma ne correspond', async () => {
+  it('rejette avec 401 si aucun User Prisma ne correspond au `sub` du JWT', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     const { context } = buildContext({ authorization: 'Bearer x' });
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
@@ -143,10 +117,11 @@ describe('SupabaseAuthGuard', () => {
     expect(request.user).toEqual({ id: 'user-1', accountStatus: 'SUSPENDED_PAYMENT' });
   });
 
-  it("injecte l'User Prisma dans request.user et autorise un compte actif confirmé", async () => {
+  it("injecte l'User Prisma dans request.user et autorise un compte actif", async () => {
     const { context, request } = buildContext({ authorization: 'Bearer x' });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.user).toEqual({ id: 'user-1', accountStatus: 'ACTIVE' });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'user-1' } });
   });
 });

@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -16,7 +16,7 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { canActOnProperty } from '../../common/permissions/property-access';
 import { assertTenantNotBlocked } from '../../common/permissions/tenant-block';
 import { createInvitationToken, verifyInvitationToken } from '../../common/utils/invitation-token';
-import { SupabaseAdminService } from '../supabase/supabase-admin.service';
+import { TokenService } from './token.service';
 import { EmailService } from '../email/email.service';
 import { NotifyService } from '../notify/notify.service';
 import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
@@ -37,6 +37,13 @@ const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 // OTP de réinitialisation de mot de passe (voir build-plan.md unité 10).
 const PASSWORD_RESET_OTP_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_OTP_TTL_MINUTES = 10;
+
+// Hash bcrypt fixe (valide, mais d'un secret jamais connu) utilisé quand
+// aucun utilisateur ne correspond à l'email fourni — garantit un temps de
+// réponse constant que le compte existe ou non. Sans ça, l'absence de
+// comparaison bcrypt pour un email inconnu serait mesurablement plus rapide
+// qu'un email existant, une fuite d'information classique (timing attack).
+const TIMING_SAFE_DUMMY_HASH = '$2b$12$yCFsKe6MMnIIPVrHHkt8v.T8gJ2UapzKcX4ejzcEv3kq0gwXAlrte';
 
 type UserWithProfiles = Prisma.UserGetPayload<{
   include: {
@@ -71,7 +78,7 @@ export type InviteTenantResponse = {
   lease: Lease;
   // null quand le locataire existait déjà sur la plateforme (bail
   // précédent résilié, nouveau bail sur un autre bien) — pas de nouvelle
-  // invitation Supabase dans ce cas, voir AuthService.inviteTenant().
+  // invitation dans ce cas, voir AuthService.inviteTenant().
   invitationUrl: string | null;
 };
 
@@ -93,7 +100,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly tokens: TokenService,
     private readonly emailService: EmailService,
     private readonly notify: NotifyService,
     private readonly listings: ListingsService,
@@ -117,29 +124,16 @@ export class AuthService {
     };
   }
 
-  // Connexion routée par NestJS (et non directement Supabase côté client)
-  // — seul moyen de compter les échecs et appliquer le blocage de 15 minutes
-  // après 5 tentatives (voir build-plan.md unité 10, décision prise avec le
-  // développeur : renversement assumé du principe « le backend ne voit
-  // jamais un mot de passe »). Utilise anonAuth (jamais service_role) pour
-  // signInWithPassword — moindre privilège.
+  // Authentification interne depuis le 2026-08-11 (voir architecture.md) —
+  // hash bcrypt comparé localement, plus d'appel réseau vers Supabase Auth.
   async login(dto: LoginDto): Promise<LoginResponse> {
-    // Parallélisation : DB lookup et auth Supabase lancés simultanément
-    // → économise ~200 ms de latence Frankfurt pour les utilisateurs en
-    // Afrique. Contrepartie assumée : Supabase est maintenant appelé même
-    // pour un compte déjà bloqué/suspendu (avant, on le savait avant
-    // d'appeler Supabase et on l'évitait) — la réponse reste correcte dans
-    // tous les cas, seul un appel externe ponctuel devient inutile sur ce
-    // cas rare plutôt que retarder le cas courant (connexion valide).
-    const [user, { data, error }] = await Promise.all([
-      this.prisma.user.findUnique({ where: { email: dto.email } }),
-      this.supabaseAdmin.withRetry(() =>
-        this.supabaseAdmin.anonAuth.signInWithPassword({
-          email: dto.email,
-          password: dto.password,
-        }),
-      ),
-    ]);
+    // omit: { passwordHash: false } réactive explicitement le champ omis
+    // globalement par défaut (voir PrismaService) — seul endroit de tout le
+    // code qui a besoin de le lire.
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      omit: { passwordHash: false },
+    });
 
     if (user?.accountStatus === 'SUSPENDED_ADMIN') {
       throw new UnauthorizedException('Compte suspendu');
@@ -152,16 +146,18 @@ export class AuthService {
       );
     }
 
-    if (error || !data.session) {
+    // Toujours comparer, même si `user` est absent (voir TIMING_SAFE_DUMMY_HASH).
+    const passwordValid = await this.tokens.comparePassword(
+      dto.password,
+      user?.passwordHash ?? TIMING_SAFE_DUMMY_HASH,
+    );
+
+    if (!user || !passwordValid) {
       if (user) {
         await this.recordFailedLogin(user);
       }
       // Message générique — jamais de fuite sur l'existence d'un email.
       throw new UnauthorizedException('Email ou mot de passe incorrect');
-    }
-
-    if (!user) {
-      throw new UnauthorizedException('Utilisateur inconnu');
     }
 
     // Renvoie l'utilisateur à jour (pas l'instantané pré-connexion) — sans
@@ -174,24 +170,17 @@ export class AuthService {
           })
         : user;
 
-    return {
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-      user: resetUser,
-    };
+    const { accessToken, refreshToken } = await this.tokens.issueTokenPair(resetUser);
+    // `resetUser` peut encore porter passwordHash (branche sans reset de
+    // compteur, voir omit: { passwordHash: false } plus haut) — jamais
+    // renvoyé au client, même par ce chemin précis.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _passwordHash, ...safeUser } = resetUser;
+    return { accessToken, refreshToken, user: safeUser as User };
   }
 
   async refreshSession(refreshToken: string): Promise<RefreshResponse> {
-    const { data, error } = await this.supabaseAdmin.withRetry(() =>
-      this.supabaseAdmin.anonAuth.refreshSession({ refresh_token: refreshToken }),
-    );
-    if (error || !data.session) {
-      throw new UnauthorizedException('Session expirée — veuillez vous reconnecter');
-    }
-    return {
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-    };
+    return this.tokens.rotateRefreshToken(refreshToken);
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto): Promise<{ message: string }> {
@@ -233,10 +222,9 @@ export class AuthService {
 
   async confirmPasswordReset(dto: ConfirmPasswordResetDto): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user || !user.supabaseId) {
+    if (!user) {
       throw new BadRequestException('Code invalide ou expiré');
     }
-    const supabaseId = user.supabaseId;
 
     const otp = await this.prisma.passwordResetOtp.findFirst({
       where: {
@@ -256,14 +244,8 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    const { error } = await this.supabaseAdmin.withRetry(() =>
-      this.supabaseAdmin.auth.admin.updateUserById(supabaseId, {
-        password: dto.newPassword,
-      }),
-    );
-    if (error) {
-      throw new BadRequestException(error.message);
-    }
+    const passwordHash = await this.tokens.hashPassword(dto.newPassword);
+    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
     return { message: 'Mot de passe mis à jour' };
   }
@@ -341,9 +323,9 @@ export class AuthService {
   // /architect révision paiements, 2026-07-25 — remplace le flux en deux
   // étapes invite puis POST /api/leases). Deux chemins selon que
   // l'email/téléphone correspond déjà à un locataire existant :
-  //   - Nouveau locataire : crée le compte Supabase (email_confirm: true,
-  //     voir signupOwner/signupManager) + User + TenantProfile + Lease +
-  //     échéancier, envoie l'email d'invitation.
+  //   - Nouveau locataire : crée le User (mot de passe placeholder jamais
+  //     communiqué, posé plus tard via completeTenantSignup) + TenantProfile
+  //     + Lease + échéancier, envoie l'email d'invitation.
   //   - Locataire déjà connu de la plateforme (ex. bail précédent résilié,
   //     nouveau bien) : aucun nouveau compte, juste un nouveau Lease sur ce
   //     bien — notifié comme pour n'importe quel nouveau bail, pas
@@ -369,9 +351,7 @@ export class AuthService {
     // `email`/`phone` sont uniques globalement sur `User` (tous rôles
     // confondus, voir schema.prisma) — la recherche doit donc porter sur
     // n'importe quel rôle, pas seulement TENANT. Sinon un email déjà utilisé
-    // par un compte OWNER/MANAGER/ADMIN n'est jamais détecté ici, et
-    // l'appel Supabase plus bas échoue avec un "email déjà utilisé" trompeur
-    // (l'appelant croit à raison qu'aucun locataire n'a jamais eu cet email).
+    // par un compte OWNER/MANAGER/ADMIN n'est jamais détecté ici.
     const existingUser = await this.prisma.user.findFirst({
       where: { OR: [{ email: dto.email }, { phone: dto.phone }] },
     });
@@ -437,29 +417,18 @@ export class AuthService {
     } else {
       // Le compte est créé à l'invitation, pas à l'activation — le locataire
       // n'a plus qu'à poser un mot de passe en cliquant le lien (voir
-      // build-plan.md unité 09, décision prise avec le développeur).
-      const { data, error } = await this.supabaseAdmin.withRetry(() =>
-        this.supabaseAdmin.auth.admin.createUser({
-          email: dto.email,
-          email_confirm: true,
-          user_metadata: { role: 'TENANT' },
-        }),
+      // build-plan.md unité 09). Mot de passe placeholder jamais communiqué
+      // ni utilisable (voir TIMING_SAFE_DUMMY_HASH pour le même principe) —
+      // remplacé par un vrai hash dès completeTenantSignup().
+      const placeholderPasswordHash = await this.tokens.hashPassword(
+        randomBytes(32).toString('hex'),
       );
-
-      if (error) {
-        if (error.code === 'email_exists' || error.code === 'user_already_exists') {
-          throw new ConflictException('Cette adresse email est déjà utilisée');
-        }
-        throw new BadRequestException(error.message);
-      }
-
-      const supabaseUserId = data.user.id;
 
       try {
         const result = await this.prisma.$transaction(async (tx) => {
           const created = await tx.user.create({
             data: {
-              supabaseId: supabaseUserId,
+              passwordHash: placeholderPasswordHash,
               email: dto.email,
               phone: dto.phone,
               role: 'TENANT',
@@ -486,9 +455,6 @@ export class AuthService {
         user = result.user;
         lease = result.lease;
       } catch (dbError) {
-        await this.supabaseAdmin.withRetry(() =>
-          this.supabaseAdmin.auth.admin.deleteUser(supabaseUserId),
-        );
         throw this.mapDuplicateError(dbError);
       }
 
@@ -584,19 +550,12 @@ export class AuthService {
     const userId = verifyInvitationToken(token, secret);
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.role !== 'TENANT' || !user.supabaseId) {
+    if (!user || user.role !== 'TENANT') {
       throw new BadRequestException("Lien d'invitation invalide");
     }
-    const supabaseId = user.supabaseId;
 
-    const { error } = await this.supabaseAdmin.withRetry(() =>
-      this.supabaseAdmin.auth.admin.updateUserById(supabaseId, {
-        password: dto.password,
-      }),
-    );
-    if (error) {
-      throw new BadRequestException(error.message);
-    }
+    const passwordHash = await this.tokens.hashPassword(dto.password);
+    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
     return { userId: user.id };
   }
@@ -611,29 +570,10 @@ export class AuthService {
     city: string;
     createProfile: (tx: Prisma.TransactionClient, user: User) => Promise<unknown>;
   }): Promise<{ user: User; confirmationUrl: string }> {
-    // email_confirm: true → compte immédiatement confirmé, connexion possible
-    // sans clic dans un email de confirmation. Choix assumé : la fiabilité
-    // de la messagerie au Togo est variable ; bloquer la connexion sur un
-    // email non reçu crée plus de friction qu'elle n'apporte de sécurité
-    // pour ce contexte B2B (propriétaire/gestionnaire connus de l'admin).
-    const { data, error } = await this.supabaseAdmin.withRetry(() =>
-      this.supabaseAdmin.auth.admin.createUser({
-        email: params.email,
-        password: params.password,
-        email_confirm: true,
-        user_metadata: { role: params.role },
-      }),
-    );
-
-    if (error) {
-      if (error.code === 'email_exists' || error.code === 'user_already_exists') {
-        throw new ConflictException('Cette adresse email est déjà utilisée');
-      }
-      throw new BadRequestException(error.message);
-    }
-
-    const supabaseUserId = data.user.id;
-    // URL de connexion directe envoyée dans l'email de bienvenue
+    const passwordHash = await this.tokens.hashPassword(params.password);
+    // URL de connexion directe envoyée dans l'email de bienvenue — connexion
+    // immédiate possible, pas de clic de confirmation requis (voir choix
+    // assumé plus bas : fiabilité de la messagerie au Togo variable).
     const confirmationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/auth/login`;
 
     let user: User;
@@ -641,7 +581,7 @@ export class AuthService {
       user = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
           data: {
-            supabaseId: supabaseUserId,
+            passwordHash,
             email: params.email,
             role: params.role,
             firstName: params.firstName,
@@ -664,11 +604,6 @@ export class AuthService {
         return created;
       });
     } catch (dbError) {
-      // Évite un compte Supabase orphelin qui bloquerait toute nouvelle
-      // tentative de signup avec le même email.
-      await this.supabaseAdmin.withRetry(() =>
-        this.supabaseAdmin.auth.admin.deleteUser(supabaseUserId),
-      );
       throw this.mapDuplicateError(dbError);
     }
 

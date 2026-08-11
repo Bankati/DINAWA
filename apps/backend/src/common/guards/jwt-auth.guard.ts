@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ALLOW_WHILE_SUSPENDED_KEY } from '../decorators/allow-while-suspended.decorator';
-import { SupabaseAdminService } from '../../modules/supabase/supabase-admin.service';
+import { TokenService } from '../../modules/auth/token.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { AuthenticatedUser } from '../types/authenticated-user.type';
@@ -23,11 +23,15 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // entre pages) sans laisser une suspension active ignorée trop longtemps.
 const AUTH_CACHE_TTL = 30_000;
 
+// Authentification interne depuis le 2026-08-11 (voir architecture.md) —
+// remplace SupabaseAuthGuard. Vérification du JWT purement locale (aucun
+// appel réseau), contrairement à l'ancien guard qui appelait
+// supabaseAdmin.auth.getUser() à chaque cache miss.
 @Injectable()
-export class SupabaseAuthGuard implements CanActivate {
+export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly tokens: TokenService,
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
   ) {}
@@ -70,30 +74,18 @@ export class SupabaseAuthGuard implements CanActivate {
     return true;
   }
 
-  // Appelé uniquement sur cache miss — les 2 appels réseau coûteux. Budget
-  // de retry court (voir SupabaseAdminService.withRetry) — ce chemin ne
-  // tourne qu'une fois toutes les 30s par token grâce au cache ci-dessus,
-  // mais un blip réseau ne doit toujours pas ajouter les ~30s du retry par
-  // défaut à une requête qui rate le cache.
+  // Appelé uniquement sur cache miss — jwt.verify() est local et rapide
+  // (pas d'appel réseau), le cache 30s reste utile pour éviter le lookup
+  // Prisma sur chaque requête.
   private async resolveUser(token: string, cacheKey: string): Promise<AuthenticatedUser> {
-    const { data, error } = await this.supabaseAdmin.withRetry(
-      () => this.supabaseAdmin.auth.getUser(token),
-      { retries: 2, minTimeout: 500, maxTimeout: 4000 },
-    );
-    if (error || !data.user) throw new UnauthorizedException('Token invalide');
-
-    // Email non confirmé : rejet total, contrairement à SUSPENDED_INACTIVITY/
-    // PAYMENT qui restent lisibles — tant que l'email n'est pas confirmé,
-    // l'inscription n'est pas considérée comme terminée (voir build-plan.md
-    // unité 08).
-    if (!data.user.email_confirmed_at) {
-      throw new ForbiddenException({
-        code: 'EMAIL_NOT_CONFIRMED',
-        message: 'Confirmez votre adresse email avant de continuer',
-      });
+    let payload: { sub: string };
+    try {
+      payload = this.tokens.verifyAccessToken(token);
+    } catch {
+      throw new UnauthorizedException('Token invalide');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { supabaseId: data.user.id } });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException('Utilisateur inconnu');
 
     this.cache.set(cacheKey, user, AUTH_CACHE_TTL);
