@@ -77,6 +77,11 @@ export class AccountActivationService {
   // du controller pour respecter l'invariant "aucune logique métier dans les
   // controllers" (voir /review).
   resolveStatus(user: { accountStatus: AccountStatus; role: UserRole }): AccountStatusResponse {
+    // SUSPENDED_ADMIN n'atteint jamais ce code : JwtAuthGuard rejette déjà
+    // ces requêtes en 401 avant le controller (voir jwt-auth.guard.ts) — un
+    // compte suspendu par un admin ne peut pas se connecter du tout, message
+    // "Compte suspendu" affiché directement sur la page de login. Vérifié en
+    // conditions réelles le 2026-08-12 (voir progress-tracker.md unité 37).
     if (user.accountStatus === 'SUSPENDED_INACTIVITY') {
       return {
         accountStatus: user.accountStatus,

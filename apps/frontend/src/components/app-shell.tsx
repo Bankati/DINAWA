@@ -10,7 +10,7 @@ import { initiales } from '@/lib/format';
 import {
   Search, LayoutDashboard, Home, Users, CreditCard, Megaphone, User, UserCircle2,
   IdCard, Bell, Download, Handshake, Briefcase, BarChart3, Scale, LogOut, X, Menu,
-  AlertTriangle, UserSearch, type LucideIcon,
+  AlertTriangle, UserSearch, History, type LucideIcon,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui';
 import { CommandPalette, ThemeToggle, type CommandPaletteItem } from '@/components/ds';
@@ -19,7 +19,7 @@ import './app-shell.css';
 type NavIcon =
   | 'dashboard' | 'biens' | 'locataires' | 'paiements' | 'annonces'
   | 'profil' | 'notifications' | 'export' | 'identite' | 'delegation'
-  | 'portefeuille' | 'rapports' | 'profil-public' | 'litiges' | 'gestionnaires';
+  | 'portefeuille' | 'rapports' | 'profil-public' | 'litiges' | 'gestionnaires' | 'audit-logs';
 
 interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; }
 interface NavSection { label?: string; items: NavItem[]; }
@@ -76,6 +76,7 @@ const ADMIN_NAV: NavSection[] = [
       { icon: 'locataires', label: 'Comptes', route: '/admin/comptes' },
       { icon: 'paiements', label: 'Transactions', route: '/admin/transactions' },
       { icon: 'litiges', label: 'Litiges', route: '/admin/litiges' },
+      { icon: 'audit-logs', label: "Journal d'audit", route: '/admin/audit-logs' },
     ],
   },
 ];
@@ -124,6 +125,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   litiges: Scale,
   delegation: Handshake,
   gestionnaires: UserSearch,
+  'audit-logs': History,
 };
 
 interface AccountStatusResponse {
