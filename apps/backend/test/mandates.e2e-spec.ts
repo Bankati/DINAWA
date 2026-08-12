@@ -1,29 +1,26 @@
 import 'reflect-metadata';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { execSync } from 'child_process';
-import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { SupabaseAdminService } from '../src/modules/supabase/supabase-admin.service';
-import { FakeSupabaseAdminService } from './support/fake-supabase-admin.service';
 
 // Premier test e2e du projet (voir contexte/progress-tracker.md, "types
 // partagés"/"tests d'intégration" — recommandations du 2026-08-09) : boot
-// complet de l'application NestJS (vrai routing, vrai SupabaseAuthGuard, vrai
+// complet de l'application NestJS (vrai routing, vrai JwtAuthGuard, vrai
 // RolesGuard, vrais services) contre un vrai Postgres jetable (testcontainers),
 // pas des mocks Prisma. C'est exactement ce niveau de test qui aurait attrapé
 // les 2 bugs trouvés ce jour-là (`GET /mandates/received` inexistant,
 // `owner`/`manager` jamais inclus dans la réponse) — les deux invisibles avec
 // des tests unitaires mockés.
 //
-// Seule dépendance externe (Supabase Admin API) remplacée par un faux
-// SupabaseAdminService (voir test/support/fake-supabase-admin.service.ts) —
-// le VRAI SupabaseAuthGuard tourne, cache et vérification email confirmé
-// compris. Le token Bearer envoyé par chaque requête EST le `supabaseId` de
-// l'utilisateur Prisma seedé.
+// Authentification interne depuis le 2026-08-11 (voir architecture.md) — le
+// token Bearer envoyé par chaque requête est un vrai JWT signé avec le même
+// secret que l'app (`JWT_SECRET`, voir test/env-setup.ts), le VRAI
+// JwtAuthGuard tourne sans aucune dépendance externe à faker.
 //
 // Nécessite Docker en cours d'exécution localement (Docker Desktop). Tourne
 // aussi en CI (voir .github/workflows/ci.yml, job backend-ci, étape "e2e
@@ -34,13 +31,18 @@ describe('Mandates (e2e)', () => {
   let container: StartedPostgreSqlContainer;
   let app: INestApplication;
   let prisma: PrismaService;
+  let jwt: JwtService;
 
-  let owner: { id: string; supabaseId: string | null };
-  let manager: { id: string; supabaseId: string | null };
+  let owner: { id: string; role: string };
+  let manager: { id: string; role: string };
   let property: { id: string };
 
-  function authHeader(user: { supabaseId: string | null }) {
-    return `Bearer ${user.supabaseId}`;
+  function authHeader(user: { id: string; role: string }) {
+    const token = jwt.sign(
+      { sub: user.id, role: user.role },
+      { secret: process.env['JWT_SECRET'], expiresIn: '15m' },
+    );
+    return `Bearer ${token}`;
   }
 
   beforeAll(async () => {
@@ -55,10 +57,7 @@ describe('Mandates (e2e)', () => {
       stdio: 'inherit',
     });
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(SupabaseAdminService)
-      .useClass(FakeSupabaseAdminService)
-      .compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
     app = moduleRef.createNestApplication();
     // Réplique uniquement ce qui affecte le comportement testé ici (validation
@@ -70,6 +69,7 @@ describe('Mandates (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    jwt = app.get(JwtService);
   });
 
   afterAll(async () => {
@@ -84,7 +84,7 @@ describe('Mandates (e2e)', () => {
         firstName: 'Jean',
         lastName: 'Propriétaire',
         email: `owner-${Date.now()}@test.local`,
-        supabaseId: randomUUID(),
+        passwordHash: 'not-used-in-this-test',
       },
     });
     manager = await prisma.user.create({
@@ -93,7 +93,7 @@ describe('Mandates (e2e)', () => {
         firstName: 'Ama',
         lastName: 'Gestionnaire',
         email: `manager-${Date.now()}@test.local`,
-        supabaseId: randomUUID(),
+        passwordHash: 'not-used-in-this-test',
       },
     });
     property = await prisma.property.create({

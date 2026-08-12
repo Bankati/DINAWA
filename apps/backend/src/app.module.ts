@@ -34,7 +34,7 @@ import { ManagerReportsModule } from './modules/manager-reports/manager-reports.
 import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { ContactModule } from './modules/contact/contact.module';
-import { SupabaseAuthGuard } from './common/guards/supabase-auth.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
@@ -166,7 +166,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     // Authentifie chaque requête (sauf @Public()) et injecte request.user
     {
       provide: APP_GUARD,
-      useClass: SupabaseAuthGuard,
+      useClass: JwtAuthGuard,
     },
     // Vérifie @Roles(...) après authentification
     {

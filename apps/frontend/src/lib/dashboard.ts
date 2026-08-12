@@ -12,6 +12,54 @@ export type PaymentStatus =
   | "OVERDUE"
   | "REJECTED";
 
+export const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  VILLA: "Villa",
+  APARTMENT: "Appartement",
+  STUDIO: "Studio",
+  COMMERCIAL: "Commercial",
+};
+
+const MOIS_COURTS = [
+  "janv.",
+  "févr.",
+  "mars",
+  "avr.",
+  "mai",
+  "juin",
+  "juil.",
+  "août",
+  "sept.",
+  "oct.",
+  "nov.",
+  "déc.",
+];
+const MOIS_LONGS = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
+// `mois` est toujours au format "YYYY-MM" (voir DashboardService.bucketByMonth
+// côté backend) — parsing manuel plutôt que Date() pour éviter tout piège de
+// fuseau horaire sur un simple libellé d'axe.
+export function formatMoisCourt(mois: string): string {
+  const [, m] = mois.split("-").map(Number);
+  return m >= 1 && m <= 12 ? MOIS_COURTS[m - 1] : mois;
+}
+export function formatMoisLong(mois: string): string {
+  const [y, m] = mois.split("-").map(Number);
+  return m >= 1 && m <= 12 ? `${MOIS_LONGS[m - 1]} ${y}` : mois;
+}
+
 export interface DashboardKPI {
   totalBiens: number;
   biensOccupes: number;
@@ -29,12 +77,10 @@ export interface RevenuMensuel {
   paiements: number;
 }
 
-export interface Alerte {
-  id: string;
-  type: "retard" | "impaye" | "bientot_expire" | "maintenance";
-  titre: string;
-  description: string;
-  priorite: "haute" | "moyenne" | "basse";
+export interface RepartitionType {
+  type: string;
+  montant: number;
+  nombreBiens: number;
 }
 
 export interface DernierPaiement {
@@ -56,38 +102,53 @@ export interface DernierBien {
   createdAt: string;
 }
 
-// Forme exacte de GET /dashboard?annee= (DashboardSummary côté backend) —
-// calculée entièrement côté serveur, jamais ré-agrégée côté client (voir
+// Forme exacte de GET /dashboard?annee=&mois= (DashboardSummary côté backend)
+// — calculée entièrement côté serveur, jamais ré-agrégée côté client (voir
 // dashboard.service.ts : totalBiens/impayes/revenus... déjà scopés par
 // propertyVisibilityWhere(user)).
 interface DashboardData {
   kpis: DashboardKPI;
   revenusMensuels: RevenuMensuel[];
+  repartitionLoyersParType: RepartitionType[];
   derniersBiens: DernierBien[];
   derniersPaiements: DernierPaiement[];
 }
 
-let cache: { annee: number; promise: Promise<DashboardData> } | null = null;
+let cache: { key: string; promise: Promise<DashboardData> } | null = null;
 
 const LS_KEY = "warah_dashboard_cache";
 
-export function getDashboardStale(annee: number): DashboardData | null {
+function cacheKey(annee: number, mois: number): string {
+  return `${annee}-${mois}`;
+}
+
+export function getDashboardStale(
+  annee: number,
+  mois: number,
+): DashboardData | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed.annee !== annee) return null;
+    if (parsed.key !== cacheKey(annee, mois)) return null;
     return parsed.data as DashboardData;
   } catch {
     return null;
   }
 }
 
-function saveDashboardCache(annee: number, data: DashboardData): void {
+function saveDashboardCache(
+  annee: number,
+  mois: number,
+  data: DashboardData,
+): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify({ annee, data }));
+    localStorage.setItem(
+      LS_KEY,
+      JSON.stringify({ key: cacheKey(annee, mois), data }),
+    );
   } catch {
     /* ignore */
   }
@@ -104,39 +165,48 @@ export function invalidateDashboardCache(): void {
   }
 }
 
-function getData(annee: number): Promise<DashboardData> {
-  if (cache && cache.annee === annee) return cache.promise;
+function getData(annee: number, mois: number): Promise<DashboardData> {
+  const key = cacheKey(annee, mois);
+  if (cache && cache.key === key) return cache.promise;
   const promise = api
-    .get<DashboardData>(`/dashboard?annee=${annee}`)
+    .get<DashboardData>(`/dashboard?annee=${annee}&mois=${mois}`)
     .then((data) => {
-      saveDashboardCache(annee, data);
+      saveDashboardCache(annee, mois, data);
       return data;
     });
-  cache = { annee, promise };
+  cache = { key, promise };
   return promise;
 }
 
 export async function getKPIs(
   annee = new Date().getFullYear(),
+  mois = new Date().getMonth() + 1,
 ): Promise<DashboardKPI> {
-  return (await getData(annee)).kpis;
+  return (await getData(annee, mois)).kpis;
 }
 export async function getRevenusMensuels(
   annee = new Date().getFullYear(),
+  mois = new Date().getMonth() + 1,
 ): Promise<RevenuMensuel[]> {
-  return (await getData(annee)).revenusMensuels;
+  return (await getData(annee, mois)).revenusMensuels;
 }
-// Aucun cron de génération d'alertes lisibles n'existe encore côté backend
-// pour le propriétaire (seul le gestionnaire a GET /dashboard/manager/alerts)
-// — liste honnêtement vide plutôt que simulée.
-export async function getAlertes(): Promise<Alerte[]> {
-  return [];
+export async function getRepartitionLoyersParType(
+  annee = new Date().getFullYear(),
+  mois = new Date().getMonth() + 1,
+): Promise<RepartitionType[]> {
+  return (await getData(annee, mois)).repartitionLoyersParType;
 }
-export async function getDerniersPaiements(): Promise<DernierPaiement[]> {
-  return (await getData(new Date().getFullYear())).derniersPaiements;
+export async function getDerniersPaiements(
+  annee = new Date().getFullYear(),
+  mois = new Date().getMonth() + 1,
+): Promise<DernierPaiement[]> {
+  return (await getData(annee, mois)).derniersPaiements;
 }
-export async function getDerniersBiens(): Promise<DernierBien[]> {
-  return (await getData(new Date().getFullYear())).derniersBiens;
+export async function getDerniersBiens(
+  annee = new Date().getFullYear(),
+  mois = new Date().getMonth() + 1,
+): Promise<DernierBien[]> {
+  return (await getData(annee, mois)).derniersBiens;
 }
 
 export const fcfa = formatFcfa;

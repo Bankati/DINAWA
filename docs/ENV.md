@@ -37,12 +37,21 @@ obligatoire manque ou a une valeur invalide.
 
 ### Supabase
 
-| Variable                    | Obligatoire | Où trouver                    | Description                               |
-| --------------------------- | ----------- | ----------------------------- | ----------------------------------------- |
-| `SUPABASE_URL`              | ✅          | Settings → API → Project URL  | URL du projet Supabase                    |
-| `SUPABASE_ANON_KEY`         | ✅          | Settings → API → anon public  | Clé publique (safe côté client)           |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅          | Settings → API → service_role | Clé privée — JAMAIS exposée côté frontend |
-| `SUPABASE_JWT_SECRET`       | ✅          | Settings → Auth → JWT Secret  | Secret de vérification des JWT Supabase   |
+| Variable                    | Obligatoire | Où trouver                    | Description                                                          |
+| --------------------------- | ----------- | ----------------------------- | -------------------------------------------------------------------- |
+| `SUPABASE_URL`              | ✅          | Settings → API → Project URL  | URL du projet Supabase                                               |
+| `SUPABASE_ANON_KEY`         | ✅          | Settings → API → anon public  | Utilisée uniquement pour le ping de réveil du projet (PrismaService) |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅          | Settings → API → service_role | Storage (photos, documents) — JAMAIS exposée côté frontend           |
+
+Depuis le 2026-08-11, Supabase n'héberge plus que Postgres et le Storage —
+l'authentification (mots de passe, sessions) est gérée entièrement côté
+NestJS.
+
+### Authentification interne
+
+| Variable     | Obligatoire | Comment générer                                                            | Description                                                      |
+| ------------ | ----------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `JWT_SECRET` | ✅          | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | Signature des access tokens (voir modules/auth/token.service.ts) |
 
 ### Resend (emails)
 
@@ -144,19 +153,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 À configurer dans `CASHPAY_WEBHOOK_SECRET` (Railway).
 Communiquer ce secret à Semoa pour qu'ils signent leurs webhooks avec.
 
-### JWT Secret Supabase
-
-Disponible directement dans le dashboard Supabase → Settings → Auth → JWT Secret.
-Ne pas générer soi-même, utiliser la valeur fournie par Supabase.
-
 ---
 
 ## Récapitulatif — Où configurer quoi
 
-| Service                | Variables à configurer                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **`.env` local** (dev) | Toutes les variables backend (copier `.env.example`)                                                          |
-| **Railway**            | `NODE_ENV`, `DATABASE_URL`, `SUPABASE_*`, `RESEND_*`, `VAPID_*`, `CASHPAY_*`, `SENTRY_DSN`, `ALLOWED_ORIGINS` |
-| **Vercel**             | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SENTRY_DSN`                                                               |
-| **GitHub Secrets**     | `RAILWAY_TOKEN`                                                                                               |
-| **GitHub Variables**   | `RAILWAY_SERVICE_NAME`                                                                                        |
+| Service                | Variables à configurer                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **`.env` local** (dev) | Toutes les variables backend (copier `.env.example`)                                                                        |
+| **Railway**            | `NODE_ENV`, `DATABASE_URL`, `SUPABASE_*`, `JWT_SECRET`, `RESEND_*`, `VAPID_*`, `CASHPAY_*`, `SENTRY_DSN`, `ALLOWED_ORIGINS` |
+| **Vercel**             | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SENTRY_DSN`                                                                             |
+| **GitHub Secrets**     | `RAILWAY_TOKEN`                                                                                                             |
+| **GitHub Variables**   | `RAILWAY_SERVICE_NAME`                                                                                                      |

@@ -22,10 +22,6 @@ export class SupabaseAdminService {
   private readonly logger = new Logger(SupabaseAdminService.name);
 
   private readonly client: SupabaseClient;
-  // Client anon dédié à signInWithPassword() (AuthService.login) — le
-  // principe de moindre privilège veut qu'on ne fasse jamais transiter une
-  // connexion utilisateur par la clé service_role.
-  private readonly anonClient: SupabaseClient;
 
   constructor(config: ConfigService) {
     this.client = createClient(
@@ -33,21 +29,13 @@ export class SupabaseAdminService {
       config.getOrThrow<string>('SUPABASE_SERVICE_ROLE_KEY'),
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
-    this.anonClient = createClient(
-      config.getOrThrow<string>('SUPABASE_URL'),
-      config.getOrThrow<string>('SUPABASE_ANON_KEY'),
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
   }
 
+  // Vestige de l'authentification Supabase (retirée le 2026-08-11) — encore
+  // utilisé par AdminService/ProfileService pour nettoyer d'éventuels
+  // comptes Supabase legacy lors d'une suppression/anonymisation.
   get auth(): SupabaseClient['auth'] {
     return this.client.auth;
-  }
-
-  // Utilisé uniquement pour signInWithPassword() côté serveur (voir
-  // AuthService.login) — jamais pour des opérations admin.
-  get anonAuth(): SupabaseClient['auth'] {
-    return this.anonClient.auth;
   }
 
   // Accès complet au client — utilisé par StorageService pour l'API Storage

@@ -1,8 +1,13 @@
 // Habillage HTML partagé par tous les templates — wordmark WARAH en texte
 // stylé (pas d'image) pour éviter toute dépendance à un logo hébergé et
 // rester fiable même quand un client email bloque les images distantes.
+// Bandeau restylé (2026-08-11) pour reprendre le même dégradé bleu marine
+// que les sections sombres du site (navbar/stats/footer, voir CLAUDE.md) —
+// alignement gauche et typo sans-serif, sur le même principe de mise en
+// page qu'une référence de bandeau d'en-tête fournie par le développeur.
 
 const BRAND_NAVY = '#13284A';
+const BRAND_NAVY_GRADIENT = 'linear-gradient(135deg, #0A2650 0%, #0F4C81 60%, #081E41 100%)';
 const BRAND_GOLD = '#C9A227';
 const BACKGROUND = '#F4F6F9';
 const TEXT = '#333333';
@@ -28,11 +33,15 @@ export function renderLayout(bodyHtml: string, options: LayoutOptions = {}): str
         <td align="center">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;">
             <tr>
-              <td style="background-color:${BRAND_NAVY};padding:28px 32px;" align="center">
-                <div style="font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:bold;letter-spacing:2px;color:#ffffff;">
-                  WARA<span style="color:${BRAND_GOLD};">H</span>
+              <td
+                bgcolor="#0A2650"
+                style="background-color:#0A2650;background-image:${BRAND_NAVY_GRADIENT};padding:32px 32px;"
+                align="left"
+              >
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:bold;color:#ffffff;">
+                  WARAH
                 </div>
-                <div style="font-size:11px;letter-spacing:1px;color:${BRAND_GOLD};text-transform:uppercase;margin-top:4px;">
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.5px;color:#D9C48A;text-transform:uppercase;margin-top:6px;">
                   La gestion locative intelligente
                 </div>
               </td>

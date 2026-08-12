@@ -30,6 +30,8 @@ export interface PublicManagerPortfolio {
 }
 
 export interface PublicManagerDetail extends PublicManagerSummary {
+  /** Réservé aux appelants authentifiés (Roles OWNER/MANAGER) — voir public-managers.controller.ts. */
+  email: string | null;
   pricingNote: string | null;
   portfolio: PublicManagerPortfolio;
   reviews: PublicManagerReview[];

@@ -2,11 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Upload, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatFcfa } from '@/lib/format';
-import { cacheInvalidate } from '@/lib/cache';
-import { useApi, TTL } from '@/lib/use-api';
-import { PageHeader, Card, CardBody, Field, Select, Input, Textarea, Button, toast } from '@/components/ui';
+import { toast } from '@/components/ui';
+import {
+  PageHeader, Card, CardBody, Label, Input, Textarea, Button,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ds';
 
 interface Property {
   id: string;
@@ -41,8 +45,11 @@ const TYPE_LABEL: Record<string, string> = {
 const BACK_ROUTE = '/dashboard/paiements';
 
 export default function PaiementManualPage() {
-  const { data: propsRes, loading: loadingProps } =
-    useApi<{ data: Property[]; total: number }>('/properties?status=OCCUPIED&limit=50', TTL.LIST);
+  const queryClient = useQueryClient();
+  const { data: propsRes, isLoading: loadingProps } = useQuery({
+    queryKey: ['properties', 'OCCUPIED'],
+    queryFn: () => api.get<{ data: Property[]; total: number }>('/properties?status=OCCUPIED&limit=50'),
+  });
   const properties = propsRes?.data ?? [];
 
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
@@ -117,7 +124,7 @@ export default function PaiementManualPage() {
 
       await api.post('/payments/manual', fd);
       toast.success('Paiement enregistré avec succès.');
-      cacheInvalidate('/payments');
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
       setScheduleEntryId('');
       setPaidAmount('');
       setNote('');
@@ -134,8 +141,8 @@ export default function PaiementManualPage() {
 
   return (
     <div>
-      <Link href={BACK_ROUTE} className="text-gray-400 text-sm no-underline inline-flex items-center gap-1 mb-4 hover:text-gray-600">
-        ← Paiements
+      <Link href={BACK_ROUTE} className="text-muted-foreground text-sm no-underline inline-flex items-center gap-1 mb-4 hover:text-foreground">
+        <ArrowLeft className="w-3.5 h-3.5" /> Paiements
       </Link>
 
       <PageHeader title="Enregistrer un paiement" subtitle="Paiement hors-plateforme reçu en espèces ou par virement" />
@@ -150,98 +157,108 @@ export default function PaiementManualPage() {
       <Card>
         <CardBody>
           {loadingProps ? (
-            <div className="text-center py-8 text-gray-400">Chargement des biens…</div>
+            <div className="text-center py-8 text-muted-foreground">Chargement des biens…</div>
           ) : properties.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <div className="font-semibold text-gray-700 mb-2">Aucun bien occupé</div>
+            <div className="text-center py-8 text-muted-foreground">
+              <div className="font-semibold text-foreground mb-2">Aucun bien occupé</div>
               <div className="text-sm">Invitez un locataire pour créer un bail avant d&apos;enregistrer un paiement.</div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-              <Field label="Bien concerné" required>
-                <Select value={selectedPropertyId} onChange={(e) => handlePropertyChange(e.target.value)} required>
-                  <option value="">Sélectionnez un bien</option>
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {TYPE_LABEL[p.type] ?? p.type} — {p.neighborhood}, {p.city} ({formatFcfa(p.monthlyRent)}/mois)
-                    </option>
-                  ))}
+              <div>
+                <Label>Bien concerné <span className="text-destructive">*</span></Label>
+                <Select value={selectedPropertyId} onValueChange={handlePropertyChange}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Sélectionnez un bien" /></SelectTrigger>
+                  <SelectContent>
+                    {properties.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {TYPE_LABEL[p.type] ?? p.type} — {p.neighborhood}, {p.city} ({formatFcfa(p.monthlyRent)}/mois)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
-              </Field>
+              </div>
 
               {selectedPropertyId && (
                 loadingSchedule ? (
-                  <div className="text-center text-sm text-gray-400">Chargement du calendrier…</div>
+                  <div className="text-center text-sm text-muted-foreground">Chargement du calendrier…</div>
                 ) : schedule.length === 0 ? (
                   <div className="bg-green-50 border border-green-300 rounded-lg px-4 py-3 text-sm text-green-800">
                     ✓ Toutes les échéances de ce bail sont payées.
                   </div>
                 ) : (
-                  <Field label="Échéance" required>
-                    <Select value={scheduleEntryId} onChange={(e) => handleEntryChange(e.target.value)} required>
-                      {schedule.map((entry) => {
-                        const due = new Date(entry.dueDate).toLocaleDateString('fr-FR');
-                        const remaining = entry.expectedAmount - entry.paidAmount;
-                        return (
-                          <option key={entry.id} value={entry.id}>
-                            Échéance du {due} — {formatFcfa(remaining)} restant
-                          </option>
-                        );
-                      })}
+                  <div>
+                    <Label>Échéance <span className="text-destructive">*</span></Label>
+                    <Select value={scheduleEntryId} onValueChange={handleEntryChange}>
+                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {schedule.map((entry) => {
+                          const due = new Date(entry.dueDate).toLocaleDateString('fr-FR');
+                          const remaining = entry.expectedAmount - entry.paidAmount;
+                          return (
+                            <SelectItem key={entry.id} value={entry.id}>
+                              Échéance du {due} — {formatFcfa(remaining)} restant
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
                     </Select>
                     {selectedEntry && (
-                      <div className="flex gap-5 mt-2.5 text-xs text-gray-700 bg-gray-50 rounded-lg px-3.5 py-2.5 flex-wrap">
+                      <div className="flex gap-5 mt-2.5 text-xs text-foreground bg-ds-secondary rounded-lg px-3.5 py-2.5 flex-wrap">
                         <span><strong>Attendu :</strong> {formatFcfa(selectedEntry.expectedAmount)}</span>
                         {selectedEntry.paidAmount > 0 && <span><strong>Déjà payé :</strong> {formatFcfa(selectedEntry.paidAmount)}</span>}
                         <span><strong>Reste :</strong> {formatFcfa(selectedEntry.expectedAmount - selectedEntry.paidAmount)}</span>
                       </div>
                     )}
-                  </Field>
+                  </div>
                 )
               )}
 
               {scheduleEntryId && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Montant reçu (FCFA)" required>
-                      <Input type="number" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} required min="1" />
-                    </Field>
-                    <Field label="Date du paiement" required>
-                      <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} required />
-                    </Field>
+                    <div>
+                      <Label>Montant reçu (FCFA) <span className="text-destructive">*</span></Label>
+                      <Input className="mt-1.5" type="number" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} required min="1" />
+                    </div>
+                    <div>
+                      <Label>Date du paiement <span className="text-destructive">*</span></Label>
+                      <Input className="mt-1.5" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} required />
+                    </div>
                   </div>
 
-                  <Field label="Mode de paiement" required>
-                    <div className="flex gap-3">
+                  <div>
+                    <Label>Mode de paiement <span className="text-destructive">*</span></Label>
+                    <div className="flex gap-3 mt-1.5">
                       {[{ value: 'CASH', label: 'Espèces' }, { value: 'BANK_TRANSFER', label: 'Virement bancaire' }].map((m) => (
                         <label
                           key={m.value}
-                          className={`flex items-center gap-2 cursor-pointer text-sm px-4 py-2.5 rounded-lg border ${paymentMethod === m.value ? 'border-primary bg-blue-50 text-primary font-semibold' : 'border-gray-300 text-gray-700'}`}
+                          className={`flex items-center gap-2 cursor-pointer text-sm px-4 py-2.5 rounded-lg border ${paymentMethod === m.value ? 'border-primary bg-primary-50 dark:bg-ds-secondary text-primary font-semibold' : 'border-ds-border text-foreground'}`}
                         >
                           <input type="radio" name="method" value={m.value} checked={paymentMethod === m.value} onChange={() => setPaymentMethod(m.value as 'CASH' | 'BANK_TRANSFER')} className="hidden" />
                           {m.label}
                         </label>
                       ))}
                     </div>
-                  </Field>
+                  </div>
 
-                  <Field label="Note" hint="Optionnel">
-                    <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex. : loyer reçu en espèces le 05/08/2026…" rows={3} />
-                  </Field>
+                  <div>
+                    <Label>Note <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                    <Textarea className="mt-1.5" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex. : loyer reçu en espèces le 05/08/2026…" rows={3} />
+                  </div>
 
-                  <Field label="Justificatif" hint="Optionnel">
+                  <div>
+                    <Label>Justificatif <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
                     <input type="file" id="proof-file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={handleProofChange} className="hidden" />
-                    <label htmlFor="proof-file" className="flex items-center gap-2.5 px-4 py-2.5 border border-dashed border-gray-300 rounded-lg cursor-pointer text-sm text-gray-500 bg-gray-50">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 shrink-0">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                      </svg>
-                      {proof ? <span className="text-green-600 font-medium">✓ {proof.name}</span> : <span>Cliquez pour téléverser un justificatif (JPEG, PNG, PDF — max 5 Mo)</span>}
+                    <label htmlFor="proof-file" className="flex items-center gap-2.5 px-4 py-2.5 mt-1.5 border border-dashed border-ds-border rounded-lg cursor-pointer text-sm text-muted-foreground bg-ds-secondary">
+                      <Upload className="w-4 h-4 shrink-0" />
+                      {proof ? <span className="text-green-600 font-medium flex items-center gap-1"><Check className="w-3.5 h-3.5" /> {proof.name}</span> : <span>Cliquez pour téléverser un justificatif (JPEG, PNG, PDF — max 5 Mo)</span>}
                     </label>
-                  </Field>
+                  </div>
 
                   <div className="flex gap-3 pt-1">
                     <Button type="submit" loading={saving}>Enregistrer le paiement</Button>
-                    <Link href={BACK_ROUTE}><Button type="button" variant="secondary">Annuler</Button></Link>
+                    <Button asChild variant="secondary"><Link href={BACK_ROUTE}>Annuler</Link></Button>
                   </div>
                 </>
               )}

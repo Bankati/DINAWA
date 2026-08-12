@@ -46,6 +46,11 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<WARAHUser>;
   logout: () => void;
   getDefaultRoute: () => string;
+  // Compteur incrémenté après une modification du profil (ex. nouvelle photo)
+  // — permet à AppShell de rafraîchir l'avatar de la navbar immédiatement,
+  // sans navigation ni rechargement de page.
+  profileVersion: number;
+  refreshProfile: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -53,7 +58,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<WARAHUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileVersion, setProfileVersion] = useState(0);
   const router = useRouter();
+
+  const refreshProfile = useCallback(() => setProfileVersion((v) => v + 1), []);
 
   useEffect(() => {
     const raw = localStorage.getItem(USER_KEY);
@@ -93,7 +101,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isLoggedIn, login, logout, getDefaultRoute }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, isLoggedIn, login, logout, getDefaultRoute, profileVersion, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

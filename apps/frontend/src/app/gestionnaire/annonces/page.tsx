@@ -1,8 +1,10 @@
 'use client';
 
-import { useApi, TTL } from '@/lib/use-api';
+import { useQuery } from '@tanstack/react-query';
+import { Info, Home } from 'lucide-react';
+import { api } from '@/lib/api';
 import { formatFcfa } from '@/lib/format';
-import { PageHeader, Card, Badge, EmptyState, Skeleton } from '@/components/ui';
+import { PageHeader, Card, Badge, EmptyState, Skeleton } from '@/components/ds';
 
 type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
 type PropertyStatus = 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
@@ -27,7 +29,10 @@ const TYPE_LABELS: Record<string, string> = {
 // d'un bail), jamais par une action de l'utilisateur. Cette page est
 // purement informative.
 export default function GestionnaireAnnoncesPage() {
-  const { data: res, loading } = useApi<{ data: Property[]; total: number }>('/properties?status=VACANT&limit=100', TTL.LIST);
+  const { data: res, isLoading: loading } = useQuery({
+    queryKey: ['properties', 'VACANT'],
+    queryFn: () => api.get<{ data: Property[]; total: number }>('/properties?status=VACANT&limit=100'),
+  });
   const properties = res?.data ?? [];
 
   return (
@@ -35,29 +40,25 @@ export default function GestionnaireAnnoncesPage() {
       <PageHeader title="Annonces" subtitle="Biens vacants sous votre mandat, publiés automatiquement sur le portail WARAH" />
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5 flex items-start gap-2.5">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" strokeWidth="2" className="w-4.5 h-4.5 shrink-0 mt-0.5"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+        <Info className="w-[18px] h-[18px] shrink-0 mt-0.5 text-blue-700" />
         <div className="text-sm text-blue-700">
           Un bien vacant sous votre mandat est automatiquement publié, et automatiquement retiré dès qu&apos;un locataire y est installé — rien à faire ici.
         </div>
       </div>
 
       {loading ? (
-        <Card><div className="p-2"><Skeleton /><Skeleton /><Skeleton /></div></Card>
+        <Card><div className="p-5 flex flex-col gap-3"><Skeleton className="h-10" /><Skeleton className="h-10" /><Skeleton className="h-10" /></div></Card>
       ) : properties.length === 0 ? (
         <Card>
           <EmptyState
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            }
+            icon={<Home />}
             title="Aucun bien vacant"
             description="Aucun bien vacant sous votre mandat pour le moment."
           />
         </Card>
       ) : (
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {properties.map(p => (
+          {properties.map((p) => (
             <Card key={p.id}>
               <div className="p-5 flex flex-col gap-3">
                 <div className="flex justify-between items-start">
@@ -65,8 +66,8 @@ export default function GestionnaireAnnoncesPage() {
                   <Badge tone="info" dot>Annonce active</Badge>
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-gray-900 mb-0.5">{p.address}</div>
-                  <div className="text-xs text-gray-500">{p.neighborhood}, {p.city}</div>
+                  <div className="font-bold text-sm text-foreground mb-0.5">{p.address}</div>
+                  <div className="text-xs text-muted-foreground">{p.neighborhood}, {p.city}</div>
                 </div>
                 <span className="text-base font-extrabold text-primary-dark tabular-nums">{formatFcfa(p.monthlyRent)}</span>
               </div>

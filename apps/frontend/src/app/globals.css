@@ -1,4 +1,12 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+/* Sans ceci, l'utilitaire `dark:` de Tailwind v4 suit par défaut
+   `prefers-color-scheme` — il ignorerait la classe `.dark` posée par
+   next-themes (attribute="class") sur <html>. Nécessaire pour que toute
+   teinte qui n'a pas d'équivalent sombre nativement (ex: bg-primary-50,
+   bg-emerald-50…) puisse être neutralisée explicitement en mode sombre. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Variables de marque WARAH - source unique de vérité pour les couleurs
    (portées telles quelles depuis l'app Angular, src/styles.css) */
@@ -23,6 +31,55 @@
   --color-error: #EF4444;
   --color-warning: #F59E0B;
   --color-info: #3B82F6;
+
+  /* Jetons sémantiques shadcn/Radix (refonte design system, 2026-08-11) —
+     alignés sur la palette WARAH ci-dessus plutôt que le gris shadcn par
+     défaut. `--accent` shadcn = surface de survol neutre (ex. item de menu
+     actif), volontairement distinct de `--color-accent` (l'or de marque,
+     réservé aux CTA/badges) pour ne pas dorer tous les hovers de l'app. */
+  --background: #ffffff;
+  --foreground: var(--color-text);
+  --card: #ffffff;
+  --card-foreground: var(--color-text);
+  --popover: #ffffff;
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-primary);
+  --primary-foreground: #ffffff;
+  /* ds- : neutre shadcn, distinct de --color-secondary (l'or de marque) */
+  --ds-secondary: #F3F4F6;
+  --ds-secondary-foreground: var(--color-text);
+  --muted: var(--color-bg);
+  --muted-foreground: var(--color-text-muted);
+  --accent: #F3F4F6;
+  --accent-foreground: var(--color-text);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-primary);
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: var(--color-primary-900);
+  --foreground: #F3F4F6;
+  --card: var(--color-primary-dark);
+  --card-foreground: #F3F4F6;
+  --popover: var(--color-primary-dark);
+  --popover-foreground: #F3F4F6;
+  --primary: var(--color-primary-light);
+  --primary-foreground: var(--color-primary-900);
+  --ds-secondary: #1B2C47;
+  --ds-secondary-foreground: #F3F4F6;
+  --muted: #142238;
+  --muted-foreground: #9CA3AF;
+  --accent: #1B2C47;
+  --accent-foreground: #F3F4F6;
+  --destructive: #F87171;
+  --destructive-foreground: var(--color-primary-900);
+  --border: #24365A;
+  --input: #24365A;
+  --ring: var(--color-primary-light);
 }
 
 @theme inline {
@@ -65,6 +122,35 @@
 
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
   --shadow-card-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+  /* Surfaces sémantiques shadcn/Radix — référencent les jetons définis dans
+     :root/.dark ci-dessus (bascule via next-themes, classe .dark). Ne
+     redéfinit jamais --color-primary/--color-secondary/--color-accent (déjà
+     la marque WARAH) : seulement leurs pendants -foreground et les
+     nouvelles surfaces (background/card/popover/muted/destructive/...). */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ds-secondary: var(--ds-secondary);
+  --color-ds-secondary-foreground: var(--ds-secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-ds-accent: var(--accent);
+  --color-ds-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ds-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 body {

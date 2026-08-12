@@ -1,14 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { compressPhoto } from '../storage/image-processor';
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { AuthService, AuthMeResponse } from '../auth/auth.service';
+import { TokenService } from '../auth/token.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationConsentDto } from './dto/update-notification-consent.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class ProfileService {
@@ -17,10 +24,17 @@ export class ProfileService {
     private readonly storage: StorageService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly authService: AuthService,
+    private readonly tokens: TokenService,
   ) {}
 
-  async getProfile(user: AuthenticatedUser): Promise<AuthMeResponse> {
-    return this.authService.getMe(user);
+  async getProfile(
+    user: AuthenticatedUser,
+  ): Promise<AuthMeResponse & { profilePhotoUrl: string | null }> {
+    const me = await this.authService.getMe(user);
+    const profilePhotoUrl = me.profilePhotoPath
+      ? await this.storage.getSignedUrl('profile-photos', me.profilePhotoPath)
+      : null;
+    return { ...me, profilePhotoUrl };
   }
 
   async updateProfile(
@@ -31,6 +45,8 @@ export class ProfileService {
     const data: Prisma.UserUpdateInput = {};
     if (dto.firstName !== undefined) data.firstName = dto.firstName;
     if (dto.lastName !== undefined) data.lastName = dto.lastName;
+    if (dto.phone !== undefined) data.phone = dto.phone;
+    if (dto.city !== undefined) data.city = dto.city;
     if (dto.reminderDaysBefore !== undefined) data.reminderDaysBefore = dto.reminderDaysBefore;
     if (dto.overdueGraceDays !== undefined) data.overdueGraceDays = dto.overdueGraceDays;
 
@@ -57,13 +73,56 @@ export class ProfileService {
       data.profilePhotoPath = path;
     }
 
-    const updated = await this.prisma.user.update({ where: { id: user.id }, data });
+    let updated: User;
+    try {
+      updated = await this.prisma.user.update({ where: { id: user.id }, data });
+    } catch (dbError) {
+      // `phone` est unique (@unique en base) — jamais laisser une violation
+      // de contrainte remonter en 500 brut (même pattern que
+      // AuthService.mapDuplicateError()).
+      if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2002') {
+        throw new ConflictException('Ce numéro de téléphone est déjà utilisé par un autre compte');
+      }
+      throw dbError;
+    }
 
     if (photo && previousPhotoPath) {
       await this.storage.remove('profile-photos', previousPhotoPath);
     }
 
     return updated;
+  }
+
+  // Changement de mot de passe pour un utilisateur déjà connecté — distinct
+  // du flux « mot de passe oublié » (OTP). Révoque toutes les sessions
+  // (refresh tokens) existantes, y compris celle en cours : l'appelant
+  // recevra un 401 sur son prochain refresh et devra se reconnecter avec le
+  // nouveau mot de passe, même logique que changer son mot de passe partout
+  // ailleurs (déconnexion de tous les appareils par sécurité).
+  async changePassword(
+    user: AuthenticatedUser,
+    dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    const fullUser = await this.prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      omit: { passwordHash: false },
+    });
+
+    const matches = await this.tokens.comparePassword(dto.currentPassword, fullUser.passwordHash);
+    if (!matches) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+
+    const newHash = await this.tokens.hashPassword(dto.newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } }),
+      this.prisma.session.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Mot de passe mis à jour — reconnectez-vous sur vos autres appareils' };
   }
 
   async updateNotificationConsent(

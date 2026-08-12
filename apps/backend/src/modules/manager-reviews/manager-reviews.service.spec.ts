@@ -9,7 +9,12 @@ describe('ManagerReviewsService', () => {
     $transaction: jest.Mock;
     user: { findUnique: jest.Mock; findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock };
     mandate: { findFirst: jest.Mock };
-    managerReview: { findUnique: jest.Mock; findMany: jest.Mock; aggregate: jest.Mock };
+    managerReview: {
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+      aggregate: jest.Mock;
+    };
     property: { groupBy: jest.Mock };
   };
   let tx: {
@@ -39,7 +44,12 @@ describe('ManagerReviewsService', () => {
         findFirst: jest.fn(),
       },
       mandate: { findFirst: jest.fn() },
-      managerReview: { findUnique: jest.fn(), findMany: jest.fn(), aggregate: jest.fn() },
+      managerReview: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        aggregate: jest.fn(),
+      },
       property: { groupBy: jest.fn() },
     };
     service = new ManagerReviewsService(prisma as never);
@@ -102,6 +112,28 @@ describe('ManagerReviewsService', () => {
       );
 
       await expect(service.create(owner, 'manager-1', dto)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('findMine', () => {
+    it('retourne null si le propriétaire connecté n’a laissé aucun avis pour ce gestionnaire', async () => {
+      prisma.managerReview.findFirst.mockResolvedValueOnce(null);
+
+      const result = await service.findMine(owner, 'manager-1');
+
+      expect(result).toBeNull();
+      expect(prisma.managerReview.findFirst).toHaveBeenCalledWith({
+        where: { managerId: 'manager-1', ownerId: 'owner-1' },
+      });
+    });
+
+    it('retourne l’avis existant du propriétaire connecté pour ce gestionnaire', async () => {
+      const existing = { id: 'review-1', managerId: 'manager-1', ownerId: 'owner-1', rating: 5 };
+      prisma.managerReview.findFirst.mockResolvedValueOnce(existing);
+
+      const result = await service.findMine(owner, 'manager-1');
+
+      expect(result).toEqual(existing);
     });
   });
 
@@ -223,6 +255,21 @@ describe('ManagerReviewsService', () => {
       expect(findManyArgs.where.managerProfile.zonesOfIntervention).toEqual({ has: 'Lome' });
       expect(findManyArgs.where.managerProfile.ratingAverage).toEqual({ gte: 4 });
     });
+
+    it('filtre par recherche textuelle sur prénom/nom', async () => {
+      prisma.user.findMany.mockResolvedValueOnce([]);
+      prisma.user.count.mockResolvedValueOnce(0);
+
+      await service.findAllPublic({ page: 1, limit: 20, search: 'Kodjo' });
+
+      const [findManyArgs] = prisma.user.findMany.mock.calls[0] as [
+        { where: { OR: Array<{ firstName?: unknown; lastName?: unknown }> } },
+      ];
+      expect(findManyArgs.where.OR).toEqual([
+        { firstName: { contains: 'Kodjo', mode: 'insensitive' } },
+        { lastName: { contains: 'Kodjo', mode: 'insensitive' } },
+      ]);
+    });
   });
 
   describe('findOnePublic', () => {
@@ -236,6 +283,7 @@ describe('ManagerReviewsService', () => {
         id: 'manager-1',
         firstName: 'Ama',
         lastName: 'Kodjo',
+        email: 'ama.kodjo@example.com',
         city: 'Lome',
         createdAt: new Date('2026-01-01'),
         managerProfile: {
@@ -261,6 +309,10 @@ describe('ManagerReviewsService', () => {
 
       const result = await service.findOnePublic('manager-1');
 
+      // Email exposé uniquement à ce niveau (appelant authentifié
+      // OWNER/MANAGER, voir public-managers.controller.ts) — c'est celui que
+      // le propriétaire utilise pour créer une délégation (POST /mandates).
+      expect(result.email).toBe('ama.kodjo@example.com');
       expect(result.portfolio.totalManagedProperties).toBe(3);
       expect(result.portfolio.byType).toEqual([
         { type: 'APARTMENT', count: 2 },

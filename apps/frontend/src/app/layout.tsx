@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth-context";
 import { GlobalProgressBar } from "@/components/global-progress-bar";
 import { Toaster } from "@/components/ui/toast";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,11 +16,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className="h-full antialiased">
+    <html lang="fr" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
-        <GlobalProgressBar />
-        <Toaster />
-        <AuthProvider>{children}</AuthProvider>
+        <Providers>
+          <GlobalProgressBar />
+          <Toaster />
+          <AuthProvider>{children}</AuthProvider>
+        </Providers>
       </body>
     </html>
   );

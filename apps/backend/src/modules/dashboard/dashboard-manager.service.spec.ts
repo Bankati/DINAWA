@@ -100,6 +100,35 @@ describe('DashboardManagerService', () => {
     });
   });
 
+  describe('getPropertyTypeBreakdown', () => {
+    it('agrège les loyers par type sur le périmètre demandé', async () => {
+      prisma.property.groupBy.mockResolvedValueOnce([
+        { type: 'APARTMENT', _sum: { monthlyRent: 300000 }, _count: { _all: 4 } },
+      ]);
+
+      const result = await service.getPropertyTypeBreakdown(manager, DashboardScope.MANAGED);
+
+      expect(result).toEqual([{ type: 'APARTMENT', montant: 300000, nombreBiens: 4 }]);
+    });
+  });
+
+  describe('getMonthlyRevenue', () => {
+    it("bucket les encaissements payés sur les 12 mois de l'année demandée", async () => {
+      prisma.payment.findMany.mockResolvedValueOnce([
+        { paidAmount: 100000, paidAt: new Date(Date.UTC(2026, 0, 15)) },
+        { paidAmount: 50000, paidAt: new Date(Date.UTC(2026, 0, 20)) },
+        { paidAmount: 75000, paidAt: new Date(Date.UTC(2026, 11, 5)) },
+      ]);
+
+      const result = await service.getMonthlyRevenue(manager, DashboardScope.ALL, 2026);
+
+      expect(result).toHaveLength(12);
+      expect(result[0]).toEqual({ mois: '2026-01', montant: 150000 });
+      expect(result[11]).toEqual({ mois: '2026-12', montant: 75000 });
+      expect(result[5]).toEqual({ mois: '2026-06', montant: 0 });
+    });
+  });
+
   describe('getAlerts', () => {
     it('renvoie les 3 listes correctement mises en forme', async () => {
       prisma.paymentScheduleEntry.findMany.mockResolvedValueOnce([

@@ -48,22 +48,20 @@ export const adminApi = {
     api.delete<{ message: string }>(`/admin/users/${id}`),
 };
 
-export interface RepartitionVille {
-  ville: string;
-  pourcentage: number;
+export interface RepartitionBienType {
+  type: string;
+  montant: number;
+  nombreBiens: number;
 }
 
 export interface StatistiquesPlateforme {
   nombreUtilisateurs: number;
-  nombreProprietaires: number;
-  nombreLocataires: number;
-  nombreGestionnaires: number;
   nombreBiens: number;
-  nombreBiensOccupes: number;
   volumeTransactionsMois: number;
   commissionsMois: number;
   nombreLitigesOuverts: number;
   tauxOccupation: number;
   croissanceUtilisateursMois: number;
-  repartitionVilles: RepartitionVille[];
+  repartitionBiensParType: RepartitionBienType[];
+  revenusMensuels: { mois: string; montant: number }[];
 }

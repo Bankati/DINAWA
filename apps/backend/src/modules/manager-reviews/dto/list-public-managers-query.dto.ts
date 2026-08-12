@@ -26,6 +26,15 @@ export class ListPublicManagersQueryDto {
   @MaxLength(100)
   zone?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Recherche textuelle sur le prénom/nom du gestionnaire (contains, insensible à la casse)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
   @ApiPropertyOptional({ minimum: 1, maximum: 5 })
   @IsOptional()
   @Type(() => Number)

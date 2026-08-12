@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
+import { Home, Users, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { PHONE_PREFIXES, matchPrefix, phoneLengthError, phoneIsValid, type PhonePrefix } from '@/lib/phone-prefixes';
 import { signupOwner, signupManager } from '@/lib/signup';
 import { ApiError } from '@/lib/auth-context';
+import { AuthShell } from '../auth-shell';
 import './page.css';
 
 type Role = 'OWNER' | 'MANAGER';
@@ -31,6 +33,7 @@ export default function RegisterPage() {
   const [info, setInfo] = useState<InfoForm>(EMPTY_INFO);
   const [touched, setTouched] = useState<Partial<Record<keyof InfoForm, boolean>>>({});
 
+  const [showPassword, setShowPassword] = useState(false);
   const [detectedCountry, setDetectedCountry] = useState<PhonePrefix | null>(null);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
@@ -154,35 +157,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="register-page">
-      {/* Panneau gauche */}
-      <div className="left-panel">
-        <div className="left-content">
-          <Link href="/" className="lp-logo">
-            <img src="/warah-icon.png" alt="" className="lp-logo-icon" />
-            WARAH
-          </Link>
-          <h1>L&apos;immobilier togolais<br />dans votre poche</h1>
-          <ul className="features">
-            <li>Gérez vos biens à distance</li>
-            <li>Encaissez via T-Money &amp; Flooz</li>
-            <li>Statistiques en temps réel</li>
-          </ul>
-          <div className="steps-indicator">
-            <div className={`step-item${step === 'role' ? ' active' : ''}${stepIndex > 0 ? ' done' : ''}`}>
-              <span className="step-num">1</span><span>Rôle</span>
+    <AuthShell maxWidth={520}>
+      <div className="auth-card" style={{ width: '100%' }}>
+          {step !== 'success' && (
+            <div className="mini-steps">
+              <span className={`mini-step${step === 'role' ? ' active' : ''}${stepIndex > 0 ? ' done' : ''}`}>1. Rôle</span>
+              <span className="mini-step-sep" />
+              <span className={`mini-step${step === 'info' ? ' active' : ''}${stepIndex > 1 ? ' done' : ''}`}>2. Informations</span>
             </div>
-            <div className="step-line" />
-            <div className={`step-item${step === 'info' ? ' active' : ''}${stepIndex > 1 ? ' done' : ''}`}>
-              <span className="step-num">2</span><span>Informations</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Panneau droit */}
-      <div className="right-panel">
-        <div className="form-card">
+          )}
           {/* ÉTAPE 1 : Choix du rôle */}
           {step === 'role' && (
             <div className="step-content">
@@ -190,19 +173,12 @@ export default function RegisterPage() {
               <p className="subtitle">Je suis…</p>
               <div className="role-grid">
                 <button type="button" className={`role-card${selectedRole === 'OWNER' ? ' selected' : ''}`} onClick={() => setSelectedRole('OWNER')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                    <polyline points="9 22 9 12 15 12 15 22"/>
-                  </svg>
+                  <Home strokeWidth={1.5} />
                   <strong>Propriétaire</strong>
                   <span>Je possède des biens immobiliers au Togo</span>
                 </button>
                 <button type="button" className={`role-card${selectedRole === 'MANAGER' ? ' selected' : ''}`} onClick={() => setSelectedRole('MANAGER')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                    <circle cx="9" cy="7" r="4"/>
-                    <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-                  </svg>
+                  <Users strokeWidth={1.5} />
                   <strong>Gestionnaire</strong>
                   <span>Je gère des biens pour le compte de propriétaires</span>
                 </button>
@@ -219,6 +195,13 @@ export default function RegisterPage() {
           {step === 'info' && (
             <div className="step-content">
               <button className="back-btn" onClick={() => setStep('role')}>← Retour</button>
+              <div className="role-badge">
+                {selectedRole === 'OWNER' ? <Home className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                <div>
+                  <strong>{selectedRole === 'OWNER' ? 'Propriétaire' : 'Gestionnaire'}</strong>
+                  <span>{selectedRole === 'OWNER' ? 'Je gère mes biens' : 'Je gère des biens pour un tiers'}</span>
+                </div>
+              </div>
               <h2>Vos informations</h2>
               <p className="subtitle">{selectedRole === 'OWNER' ? 'Compte propriétaire' : 'Compte gestionnaire immobilier'}</p>
               <form onSubmit={submit} className="form-fields">
@@ -236,12 +219,21 @@ export default function RegisterPage() {
                 </div>
                 <div className="field">
                   <label>Email *</label>
-                  <input type="email" placeholder="kofi@exemple.com" value={info.email} onChange={(e) => setField('email', e.target.value)} onBlur={() => markTouched('email')} />
+                  <div className="field-icon-wrap">
+                    <span className="field-icon"><Mail className="w-4 h-4" /></span>
+                    <input type="email" placeholder="kofi@exemple.com" value={info.email} onChange={(e) => setField('email', e.target.value)} onBlur={() => markTouched('email')} />
+                  </div>
                   {emailInvalid && <span className="error">Email valide requis</span>}
                 </div>
                 <div className="field">
                   <label>Mot de passe * <small>(min 6 caractères)</small></label>
-                  <input type="password" placeholder="••••••••" value={info.password} onChange={(e) => setField('password', e.target.value)} onBlur={() => markTouched('password')} />
+                  <div className="field-icon-wrap has-eye">
+                    <span className="field-icon"><Lock className="w-4 h-4" /></span>
+                    <input type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={info.password} onChange={(e) => setField('password', e.target.value)} onBlur={() => markTouched('password')} />
+                    <button type="button" className="field-eye" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {passwordInvalid && <span className="error">Minimum 6 caractères</span>}
                 </div>
 
@@ -336,8 +328,7 @@ export default function RegisterPage() {
               <Link href="/auth/login" className="btn-primary">Se connecter</Link>
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

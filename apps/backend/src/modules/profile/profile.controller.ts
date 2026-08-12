@@ -17,6 +17,7 @@ import { AuthMeResponse } from '../auth/auth.service';
 import { ProfileService } from './profile.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationConsentDto } from './dto/update-notification-consent.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('Profile')
 @ApiBearerAuth()
@@ -26,7 +27,9 @@ export class ProfileController {
 
   @Get()
   @ApiOperation({ summary: "Profil de l'utilisateur courant" })
-  getProfile(@CurrentUser() user: AuthenticatedUser): Promise<AuthMeResponse> {
+  getProfile(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<AuthMeResponse & { profilePhotoUrl: string | null }> {
     return this.profileService.getProfile(user);
   }
 
@@ -59,6 +62,20 @@ export class ProfileController {
     @Body() dto: UpdateNotificationConsentDto,
   ): Promise<User> {
     return this.profileService.updateNotificationConsent(user, dto);
+  }
+
+  @Patch('password')
+  @ApiOperation({
+    summary: 'Change le mot de passe du compte connecté',
+    description:
+      'Nécessite le mot de passe actuel. Révoque toutes les sessions existantes — reconnexion ' +
+      'requise sur les autres appareils.',
+  })
+  changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    return this.profileService.changePassword(user, dto);
   }
 
   @Delete()

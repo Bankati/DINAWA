@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { PaymentSource, PaymentStatus } from '@prisma/client';
 
 export class ListPaymentsQueryDto {
@@ -28,6 +37,15 @@ export class ListPaymentsQueryDto {
   @IsOptional()
   @IsString()
   tenantUserId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Recherche textuelle sur le prénom/nom/email du locataire (contains, insensible à la casse)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
 
   @ApiPropertyOptional({ enum: PaymentStatus })
   @IsOptional()

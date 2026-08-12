@@ -35,13 +35,21 @@ export function isAllowedMimeType(bucket: StorageBucket, mimetype: string): bool
 }
 
 // Cache centralisé des URLs signées — évite N aller-retours réseau vers Supabase
-// Storage (latence ~1-3s depuis Afrique/Togo vers serveurs US). TTL 55 min
-// (les URLs signées expirent à 60 min par défaut).
+// Storage (latence ~1-3s depuis Afrique/Togo vers serveurs US).
+//
+// Bug corrigé le 2026-08-11 : le TTL du cache était une constante fixe de
+// 55 min, alors que l'URL signée réelle expire côté Supabase après
+// `expiresIn` secondes (900s = 15 min par défaut, voir SIGNED_URL_EXPIRY_SECONDS
+// dans constants.ts). Entre la 15ᵉ et la 55ᵉ minute, le cache renvoyait donc
+// une URL déjà révoquée par Supabase (403 côté navigateur) — symptôme observé
+// sur les photos de biens des annonces publiques. Le TTL du cache est
+// maintenant dérivé de `expiresIn` (avec une marge de sécurité de 10%) pour
+// ne jamais dépasser la durée de vie réelle de l'URL.
 interface CachedSignedUrl {
   url: string;
   expiresAt: number;
 }
-const URL_CACHE_TTL_MS = 55 * 60 * 1000;
+const CACHE_SAFETY_FACTOR = 0.9;
 
 // Wrapper Supabase Storage — seul point d'entrée pour manipuler les 6 buckets
 // privés du projet (voir architecture.md, invariant Storage — mis à jour à
@@ -82,7 +90,10 @@ export class StorageService {
       this.supabase.raw.storage.from(bucket).createSignedUrl(path, expiresIn),
     );
     if (error || !data) throw new InternalServerErrorException(`URL signée ${bucket} échouée`);
-    this.urlCache.set(cacheKey, { url: data.signedUrl, expiresAt: Date.now() + URL_CACHE_TTL_MS });
+    this.urlCache.set(cacheKey, {
+      url: data.signedUrl,
+      expiresAt: Date.now() + expiresIn * 1000 * CACHE_SAFETY_FACTOR,
+    });
     return data.signedUrl;
   }
 
@@ -117,7 +128,7 @@ export class StorageService {
             result.set(item.path, item.signedUrl);
             this.urlCache.set(`${bucket}:${item.path}`, {
               url: item.signedUrl,
-              expiresAt: now + URL_CACHE_TTL_MS,
+              expiresAt: now + expiresIn * 1000 * CACHE_SAFETY_FACTOR,
             });
           }
         }

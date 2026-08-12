@@ -48,7 +48,7 @@ L'agent IA sur ce projet opère comme un ingénieur senior. Cela signifie :
 ## Nommage des Fichiers et Dossiers
 
 - Dossiers : kebab-case — `payment-declarations/`, `identity-verification/`, `monthly-reports/`
-- Fichiers NestJS : kebab-case avec suffixe explicite — `properties.controller.ts`, `cashpay.service.ts`, `supabase-auth.guard.ts`, `audit-log.interceptor.ts`
+- Fichiers NestJS : kebab-case avec suffixe explicite — `properties.controller.ts`, `cashpay.service.ts`, `jwt-auth.guard.ts`, `audit-log.interceptor.ts`
 - Fichiers DTO : kebab-case avec suffixe `.dto.ts` — `create-property.dto.ts`, `update-lease.dto.ts`
 - Fichiers de tâches planifiées : kebab-case avec suffixe `.task.ts` — `reminders.task.ts`, `overdue.task.ts`, `monthly-reports.task.ts`, `inactivity.task.ts`
 - Fichiers de constantes : `constants.ts` (dans `src/common/`)
@@ -88,7 +88,7 @@ src/modules/properties/
 
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { SupabaseAuthGuard } from '@/common/guards/supabase-auth.guard';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
@@ -97,7 +97,7 @@ import { CreatePropertyDto } from './dto/create-property.dto';
 
 @ApiTags('properties')
 @Controller('properties')
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) {}
 
@@ -110,7 +110,7 @@ export class PropertiesController {
 ```
 
 - Chaque controller est annoté `@ApiTags(...)` pour apparaître dans Swagger
-- Chaque endpoint sensible est protégé par `@UseGuards(SupabaseAuthGuard)` et `@Roles(...)` quand applicable
+- Chaque endpoint sensible est protégé par `@UseGuards(JwtAuthGuard)` et `@Roles(...)` quand applicable
 - L'utilisateur courant est récupéré via `@CurrentUser()` — jamais en lisant `request.user` directement
 - Les DTOs d'entrée sont typés et validés (jamais `@Body() body: any`)
 - Le controller ne fait pas de try/catch — les erreurs métier sont levées par le service via les exceptions HTTP de NestJS et capturées par le filtre global
@@ -225,15 +225,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
 ---
 
-## Authentification — Supabase
+## Authentification — interne (depuis le 2026-08-11)
 
 ```typescript
-// src/common/guards/supabase-auth.guard.ts
+// src/common/guards/jwt-auth.guard.ts
 
 @Injectable()
-export class SupabaseAuthGuard implements CanActivate {
+export class JwtAuthGuard implements CanActivate {
   constructor(
-    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly tokens: TokenService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -242,10 +242,14 @@ export class SupabaseAuthGuard implements CanActivate {
     const token = this.extractBearerToken(request);
     if (!token) throw new UnauthorizedException('Token manquant');
 
-    const { data, error } = await this.supabaseAdmin.auth.getUser(token);
-    if (error || !data.user) throw new UnauthorizedException('Token invalide');
+    let payload: { sub: string };
+    try {
+      payload = this.tokens.verifyAccessToken(token);
+    } catch {
+      throw new UnauthorizedException('Token invalide');
+    }
 
-    const user = await this.prisma.user.findUnique({ where: { supabaseId: data.user.id } });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException('Utilisateur inconnu');
 
     request.user = user;
@@ -254,8 +258,9 @@ export class SupabaseAuthGuard implements CanActivate {
 }
 ```
 
-- Tout l'auth utilisateur passe par Supabase Auth — pas de hashage de mot de passe côté NestJS, pas de bcrypt, pas de table `password` locale
-- Le `SupabaseAuthGuard` valide le JWT à chaque requête authentifiée, charge l'`User` côté Prisma, et injecte dans `request.user`
+- Mots de passe hashés en bcrypt (`User.passwordHash`, `TokenService.hashPassword()`/`comparePassword()`) — jamais en clair, jamais via un service externe
+- Le `JwtAuthGuard` vérifie le JWT localement (aucun appel réseau), charge l'`User` côté Prisma par `sub`, et injecte dans `request.user`
+- Refresh tokens opaques stockés hashés (SHA-256) dans `Session`, avec rotation à chaque `/auth/refresh` — un refresh token déjà utilisé est révoqué et ne fonctionne plus jamais une seconde fois
 - Une session est ouverte directement après connexion email + mot de passe valides — pas de second facteur, pas d'OTP à la connexion
 - L'OTP n'est utilisé que pour la réinitialisation de mot de passe (cas « mot de passe oublié ») — code à 6 chiffres, expiration 10 minutes, usage unique, toute nouvelle demande invalide les codes précédents
 - Les emails d'authentification (confirmation d'inscription, réinitialisation de mot de passe) appellent directement `EmailService` — jamais via `NotifyService`, jamais soumis au consentement de notification push de l'utilisateur
@@ -527,26 +532,26 @@ Buckets utilisés et leur seul rôle :
 
 Toutes les variables sont définies dans `.env` en développement et dans les variables Railway en production. Jamais de clé, URL ou secret en dur dans le code.
 
-| Variable                    | Utilisée dans                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`              | `prisma/schema.prisma`, `PrismaService`                                                                   |
-| `DIRECT_URL`                | `prisma/schema.prisma` (migrations Supabase)                                                              |
-| `SUPABASE_URL`              | `SupabaseAdminService`                                                                                    |
-| `SUPABASE_ANON_KEY`         | référence côté client (non utilisée côté NestJS)                                                          |
-| `SUPABASE_SERVICE_ROLE_KEY` | `SupabaseAdminService` (validation des JWT, admin Storage)                                                |
-| `SUPABASE_JWT_SECRET`       | Optionnelle — non requise, `SupabaseAuthGuard` valide les JWT via l'API Admin Supabase (`auth.getUser()`) |
-| `RESEND_API_KEY`            | `EmailService`                                                                                            |
-| `RESEND_FROM_EMAIL`         | `EmailService` (adresse expéditrice)                                                                      |
-| `CASHPAY_API_URL`           | `CashpayService`                                                                                          |
-| `CASHPAY_API_KEY`           | `CashpayService` (auth requêtes sortantes)                                                                |
-| `CASHPAY_WEBHOOK_SECRET`    | `CashpayWebhookController` (vérification HMAC)                                                            |
-| `VAPID_PUBLIC_KEY`          | `WebPushService`                                                                                          |
-| `VAPID_PRIVATE_KEY`         | `WebPushService`                                                                                          |
-| `VAPID_SUBJECT`             | `WebPushService` (format `mailto:contact@warah...`)                                                       |
-| `LOG_LEVEL`                 | `LoggerModule` (`info` en prod, `debug` en dev)                                                           |
-| `SENTRY_DSN`                | `main.ts` (initialisation Sentry, vide en dev pour désactiver)                                            |
-| `NODE_ENV`                  | configuration globale                                                                                     |
-| `PORT`                      | `main.ts`                                                                                                 |
+| Variable                    | Utilisée dans                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`              | `prisma/schema.prisma`, `PrismaService`                                                      |
+| `DIRECT_URL`                | `prisma/schema.prisma` (migrations Supabase)                                                 |
+| `SUPABASE_URL`              | `SupabaseAdminService`                                                                       |
+| `SUPABASE_ANON_KEY`         | `PrismaService` (ping HTTP de réveil du projet gratuit uniquement)                           |
+| `SUPABASE_SERVICE_ROLE_KEY` | `SupabaseAdminService` (Storage, nettoyage best-effort de comptes Auth legacy)               |
+| `JWT_SECRET`                | `TokenService` — signature des access tokens (authentification interne, voir section dédiée) |
+| `RESEND_API_KEY`            | `EmailService`                                                                               |
+| `RESEND_FROM_EMAIL`         | `EmailService` (adresse expéditrice)                                                         |
+| `CASHPAY_API_URL`           | `CashpayService`                                                                             |
+| `CASHPAY_API_KEY`           | `CashpayService` (auth requêtes sortantes)                                                   |
+| `CASHPAY_WEBHOOK_SECRET`    | `CashpayWebhookController` (vérification HMAC)                                               |
+| `VAPID_PUBLIC_KEY`          | `WebPushService`                                                                             |
+| `VAPID_PRIVATE_KEY`         | `WebPushService`                                                                             |
+| `VAPID_SUBJECT`             | `WebPushService` (format `mailto:contact@warah...`)                                          |
+| `LOG_LEVEL`                 | `LoggerModule` (`info` en prod, `debug` en dev)                                              |
+| `SENTRY_DSN`                | `main.ts` (initialisation Sentry, vide en dev pour désactiver)                               |
+| `NODE_ENV`                  | configuration globale                                                                        |
+| `PORT`                      | `main.ts`                                                                                    |
 
 Toutes les valeurs sensibles restent strictement côté serveur. NestJS étant un backend pur, aucune variable ne doit être exposée au navigateur.
 
@@ -559,7 +564,7 @@ Toujours utiliser l'alias `@/` configuré dans `tsconfig.json` — jamais d'impo
 ```typescript
 // Correct
 import { PrismaService } from '@/prisma/prisma.service';
-import { SupabaseAuthGuard } from '@/common/guards/supabase-auth.guard';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { SUBSCRIPTION_TIERS } from '@/common/constants';
 
 // Jamais

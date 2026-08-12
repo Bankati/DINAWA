@@ -1,60 +1,134 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useForm, type UseFormReturn } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Pencil, Archive as ArchiveIcon, Home, CheckCircle2, Building2, UserCog } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useApi, TTL } from '@/lib/use-api';
-import { cacheInvalidate } from '@/lib/cache';
 import { formatFcfa } from '@/lib/format';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import {
-  PageHeader, Button, Card, Badge, DataTable, type DataTableColumn,
-  Modal, Field, Input, Select, Textarea, Skeleton, toast,
-} from '@/components/ui';
+  PageHeader, Button, Card, Badge, EmptyState, Skeleton, StatCard,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+  Label, Input, Textarea,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ds';
+import { PhotoThumbnailGrid, PhotoUploadZone, toast, type PhotoGridItem } from '@/components/ui';
 
 type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
 type PropertyStatus = 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
 
-interface PropertyPhoto {
-  id: string;
-  url: string;
-  position: number;
-}
+interface PropertyPhoto { id: string; url: string; position: number; }
 
 interface Property {
-  id: string;
-  ownerId: string;
-  type: PropertyType;
-  status: PropertyStatus;
-  address: string;
-  neighborhood: string;
-  city: string;
-  surfaceArea: number | null;
-  roomsCount: number | null;
-  monthlyRent: number;
-  monthlyCharges: number;
-  description: string | null;
+  id: string; ownerId: string; type: PropertyType; status: PropertyStatus;
+  address: string; neighborhood: string; city: string;
+  surfaceArea: number | null; roomsCount: number | null;
+  monthlyRent: number; monthlyCharges: number; description: string | null;
   createdAt: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial',
-};
-const STATUS_LABELS: Record<string, string> = {
-  OCCUPIED: 'Occupé', VACANT: 'Vacant', RENOVATION: 'Travaux', ARCHIVED: 'Archivé',
-};
-const STATUS_TONE: Record<string, 'success' | 'warning' | 'violet' | 'neutral'> = {
-  OCCUPIED: 'success', VACANT: 'warning', RENOVATION: 'violet', ARCHIVED: 'neutral',
-};
+const TYPE_LABELS: Record<PropertyType, string> = { VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial' };
+const STATUS_LABELS: Record<string, string> = { OCCUPIED: 'Occupé', VACANT: 'Vacant', RENOVATION: 'Travaux', ARCHIVED: 'Archivé' };
+const STATUS_TONE: Record<string, 'success' | 'warning' | 'info' | 'neutral'> = { OCCUPIED: 'success', VACANT: 'warning', RENOVATION: 'info', ARCHIVED: 'neutral' };
+const FILTERS: [string, string][] = [['', 'Tous'], ['OCCUPIED', 'Occupés'], ['VACANT', 'Vacants'], ['RENOVATION', 'Travaux'], ['ARCHIVED', 'Archivés']];
 
-const FILTERS: [string, string][] = [
-  ['', 'Tous'], ['OCCUPIED', 'Occupés'], ['VACANT', 'Vacants'], ['RENOVATION', 'Travaux'], ['ARCHIVED', 'Archivés'],
-];
+const propertySchema = z.object({
+  type: z.enum(['VILLA', 'APARTMENT', 'STUDIO', 'COMMERCIAL']),
+  address: z.string().min(1, "L'adresse est requise"),
+  neighborhood: z.string().min(1, 'Le quartier est requis'),
+  city: z.string().min(1, 'La ville est requise'),
+  surfaceArea: z.string().optional(),
+  roomsCount: z.string().optional(),
+  monthlyRent: z.string().min(1, 'Le loyer mensuel est requis').refine((v) => Number(v) > 0, 'Doit être un nombre positif'),
+  monthlyCharges: z.string().optional(),
+  description: z.string().optional(),
+});
+type PropertyFormValues = z.infer<typeof propertySchema>;
 
-const EMPTY_FORM = {
+const EMPTY_VALUES: PropertyFormValues = {
   type: 'APARTMENT', address: '', neighborhood: '', city: '',
   surfaceArea: '', roomsCount: '', monthlyRent: '', monthlyCharges: '0', description: '',
 };
+
+function toPayload(v: PropertyFormValues) {
+  return {
+    type: v.type,
+    address: v.address,
+    neighborhood: v.neighborhood,
+    city: v.city,
+    ...(v.surfaceArea ? { surfaceArea: parseFloat(v.surfaceArea) } : {}),
+    ...(v.roomsCount ? { roomsCount: parseInt(v.roomsCount) } : {}),
+    monthlyRent: parseInt(v.monthlyRent),
+    monthlyCharges: parseInt(v.monthlyCharges || '0'),
+    ...(v.description ? { description: v.description } : {}),
+  };
+}
+
+// Champs partagés création/édition — un seul rendu, deux instances RHF.
+function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> }) {
+  const { register, watch, setValue, formState: { errors } } = form;
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <Label>Type</Label>
+        <Select value={watch('type')} onValueChange={(v) => setValue('type', v as PropertyType)}>
+          <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(TYPE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Adresse</Label>
+        <Input className="mt-1.5" placeholder="Ex: Rue des Cocotiers, lot 42" {...register('address')} />
+        {errors.address && <p className="text-xs text-destructive mt-1">{errors.address.message}</p>}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Quartier</Label>
+          <Input className="mt-1.5" placeholder="Ex: Agbalépédogan" {...register('neighborhood')} />
+          {errors.neighborhood && <p className="text-xs text-destructive mt-1">{errors.neighborhood.message}</p>}
+        </div>
+        <div>
+          <Label>Ville</Label>
+          <Input className="mt-1.5" placeholder="Ex: Lomé" {...register('city')} />
+          {errors.city && <p className="text-xs text-destructive mt-1">{errors.city.message}</p>}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Surface (m²)</Label>
+          <Input className="mt-1.5" type="number" min="1" placeholder="75" {...register('surfaceArea')} />
+        </div>
+        <div>
+          <Label>Nombre de pièces</Label>
+          <Input className="mt-1.5" type="number" min="1" placeholder="3" {...register('roomsCount')} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Loyer mensuel (FCFA)</Label>
+          <Input className="mt-1.5" type="number" min="0" placeholder="150000" {...register('monthlyRent')} />
+          {errors.monthlyRent && <p className="text-xs text-destructive mt-1">{errors.monthlyRent.message}</p>}
+        </div>
+        <div>
+          <Label>Charges mensuelles (FCFA)</Label>
+          <Input className="mt-1.5" type="number" min="0" placeholder="10000" {...register('monthlyCharges')} />
+        </div>
+      </div>
+      <div>
+        <Label>Description</Label>
+        <Textarea className="mt-1.5" rows={3} placeholder="Description optionnelle du bien..." {...register('description')} />
+      </div>
+    </div>
+  );
+}
 
 // Le gestionnaire a les mêmes droits que le propriétaire sur un bien sous
 // mandat ACTIVE (canActOnProperty()) — cette page réutilise donc exactement
@@ -63,89 +137,137 @@ const EMPTY_FORM = {
 export default function GestionnaireBiensPage() {
   const { user } = useAuth();
   const [filter, setFilter] = useState('');
-  const url = filter ? `/properties?status=${filter}&limit=100` : '/properties?limit=100';
-  const { data: res, loading, reload } = useApi<{ data: Property[]; total: number }>(url, TTL.LIST);
+  const queryClient = useQueryClient();
+
+  const { data: res, isLoading } = useQuery({
+    queryKey: ['gestionnaire-properties', filter],
+    queryFn: () => api.get<{ data: Property[]; total: number }>(filter ? `/properties?status=${filter}&limit=100` : '/properties?limit=100'),
+  });
   const biens = res?.data ?? [];
 
+  const { data: allRes } = useQuery({
+    queryKey: ['gestionnaire-properties', 'stats'],
+    queryFn: () => api.get<{ data: Property[]; total: number }>('/properties?limit=100'),
+  });
+  const allBiens = allRes?.data ?? [];
+  const counts = {
+    total: allRes?.total ?? 0,
+    own: allBiens.filter((b) => b.ownerId === user?.id).length,
+    mandated: allBiens.filter((b) => b.ownerId !== user?.id).length,
+    occupied: allBiens.filter((b) => b.status === 'OCCUPIED').length,
+  };
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['gestionnaire-properties'] });
+  }
+
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
   const [newPropertyPhotos, setNewPropertyPhotos] = useState<File[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [formErr, setFormErr] = useState('');
-  const [archiving, setArchiving] = useState<string | null>(null);
+  const [newPhotoPreviews, setNewPhotoPreviews] = useState<PhotoGridItem[]>([]);
+  const createForm = useForm<PropertyFormValues>({ resolver: zodResolver(propertySchema), defaultValues: EMPTY_VALUES });
 
   const [editing, setEditing] = useState<Property | null>(null);
-  const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
-  const [editSaving, setEditSaving] = useState(false);
-  const [editErr, setEditErr] = useState('');
+  const editForm = useForm<PropertyFormValues>({ resolver: zodResolver(propertySchema), defaultValues: EMPTY_VALUES });
   const [photos, setPhotos] = useState<PropertyPhoto[]>([]);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
-  const [photosErr, setPhotosErr] = useState('');
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const previews = newPropertyPhotos.map((file, i) => ({ id: `${file.name}-${file.lastModified}-${i}`, url: URL.createObjectURL(file) }));
+    setNewPhotoPreviews(previews);
+    return () => previews.forEach((p) => URL.revokeObjectURL(p.url));
+  }, [newPropertyPhotos]);
+
+  function addNewPhotos(files: File[]) {
+    setNewPropertyPhotos((current) => [...current, ...files].slice(0, 10));
+  }
+  function removeNewPhoto(id: string) {
+    const index = newPhotoPreviews.findIndex((p) => p.id === id);
+    if (index !== -1) setNewPropertyPhotos((current) => current.filter((_, i) => i !== index));
+  }
+
+  const createMutation = useMutation({
+    mutationFn: async (values: PropertyFormValues) => {
+      const created = await api.post<Property>('/properties', toPayload(values));
+      if (newPropertyPhotos.length > 0) {
+        const formData = new FormData();
+        newPropertyPhotos.forEach((file) => formData.append('photos', file));
+        try {
+          await api.post(`/properties/${created.id}/photos`, formData);
+        } catch (photoErr: unknown) {
+          throw new Error(
+            photoErr instanceof Error
+              ? `Le bien a été créé, mais l'envoi des photos a échoué : ${photoErr.message}`
+              : "Le bien a été créé, mais l'envoi des photos a échoué",
+          );
+        }
+      }
+      return created;
+    },
+    onSuccess: () => {
+      invalidate();
+      setShowForm(false);
+      setNewPropertyPhotos([]);
+      toast.success('Bien ajouté avec succès');
+    },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Erreur lors de la création'),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (values: PropertyFormValues) => {
+      if (!editing) throw new Error('Aucun bien sélectionné');
+      return api.patch(`/properties/${editing.id}`, toPayload(values));
+    },
+    onSuccess: () => {
+      invalidate();
+      setEditing(null);
+      toast.success('Bien modifié avec succès');
+    },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Erreur lors de la modification'),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/properties/${id}`),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Bien archivé');
+    },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : "Erreur lors de l'archivage"),
+    onSettled: () => setArchivingId(null),
+  });
 
   async function openEdit(p: Property) {
     setEditing(p);
-    setEditErr('');
-    setEditForm({
-      type: p.type,
-      address: p.address,
-      neighborhood: p.neighborhood,
-      city: p.city,
+    editForm.reset({
+      type: p.type, address: p.address, neighborhood: p.neighborhood, city: p.city,
       surfaceArea: p.surfaceArea != null ? String(p.surfaceArea) : '',
       roomsCount: p.roomsCount != null ? String(p.roomsCount) : '',
-      monthlyRent: String(p.monthlyRent),
-      monthlyCharges: String(p.monthlyCharges),
+      monthlyRent: String(p.monthlyRent), monthlyCharges: String(p.monthlyCharges),
       description: p.description ?? '',
     });
-
-    setPhotosErr('');
     setPhotosLoading(true);
     try {
       const detail = await api.get<{ photos: PropertyPhoto[] }>(`/properties/${p.id}`);
       setPhotos(detail.photos);
     } catch (err: unknown) {
-      setPhotosErr(err instanceof Error ? err.message : 'Erreur de chargement des photos');
+      toast.error(err instanceof Error ? err.message : 'Erreur de chargement des photos');
     } finally {
       setPhotosLoading(false);
     }
   }
 
-  async function submitEdit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editing) return;
-    setEditSaving(true); setEditErr('');
-    try {
-      await api.patch(`/properties/${editing.id}`, {
-        type: editForm.type,
-        address: editForm.address,
-        neighborhood: editForm.neighborhood,
-        city: editForm.city,
-        ...(editForm.surfaceArea ? { surfaceArea: parseFloat(editForm.surfaceArea) } : {}),
-        ...(editForm.roomsCount ? { roomsCount: parseInt(editForm.roomsCount) } : {}),
-        monthlyRent: parseInt(editForm.monthlyRent),
-        monthlyCharges: parseInt(editForm.monthlyCharges || '0'),
-        ...(editForm.description ? { description: editForm.description } : {}),
-      });
-      cacheInvalidate(url);
-      reload();
-      setEditing(null);
-      toast.success('Bien modifié avec succès');
-    } catch (err: unknown) {
-      setEditErr(err instanceof Error ? err.message : 'Erreur lors de la modification');
-    } finally { setEditSaving(false); }
-  }
-
-  async function uploadPhotos(files: FileList | null) {
-    if (!files || files.length === 0 || !editing) return;
-    setUploadingPhotos(true); setPhotosErr('');
+  async function uploadPhotos(files: File[]) {
+    if (files.length === 0 || !editing) return;
+    setUploadingPhotos(true);
     try {
       const formData = new FormData();
-      Array.from(files).forEach(file => formData.append('photos', file));
+      files.forEach((file) => formData.append('photos', file));
       const uploaded = await api.post<PropertyPhoto[]>(`/properties/${editing.id}/photos`, formData);
-      setPhotos(current => [...current, ...uploaded]);
-      cacheInvalidate(url);
+      setPhotos((current) => [...current, ...uploaded]);
+      invalidate();
     } catch (err: unknown) {
-      setPhotosErr(err instanceof Error ? err.message : "Erreur lors de l'envoi");
+      toast.error(err instanceof Error ? err.message : "Erreur lors de l'envoi");
     } finally {
       setUploadingPhotos(false);
     }
@@ -155,104 +277,12 @@ export default function GestionnaireBiensPage() {
     if (!editing) return;
     try {
       await api.delete(`/properties/${editing.id}/photos/${photoId}`);
-      setPhotos(current => current.filter(ph => ph.id !== photoId));
-      cacheInvalidate(url);
+      setPhotos((current) => current.filter((ph) => ph.id !== photoId));
+      invalidate();
     } catch (err: unknown) {
-      setPhotosErr(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     }
   }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true); setFormErr('');
-    try {
-      const created = await api.post<Property>('/properties', {
-        type: form.type,
-        address: form.address,
-        neighborhood: form.neighborhood,
-        city: form.city,
-        ...(form.surfaceArea ? { surfaceArea: parseFloat(form.surfaceArea) } : {}),
-        ...(form.roomsCount ? { roomsCount: parseInt(form.roomsCount) } : {}),
-        monthlyRent: parseInt(form.monthlyRent),
-        monthlyCharges: parseInt(form.monthlyCharges || '0'),
-        ...(form.description ? { description: form.description } : {}),
-      });
-      cacheInvalidate(url);
-      reload();
-
-      if (newPropertyPhotos.length > 0) {
-        const formData = new FormData();
-        newPropertyPhotos.forEach(file => formData.append('photos', file));
-        try {
-          await api.post(`/properties/${created.id}/photos`, formData);
-        } catch (photoErr: unknown) {
-          setFormErr(
-            photoErr instanceof Error
-              ? `Le bien a été créé, mais l'envoi des photos a échoué : ${photoErr.message}`
-              : "Le bien a été créé, mais l'envoi des photos a échoué",
-          );
-          return;
-        }
-      }
-      setShowForm(false);
-      setNewPropertyPhotos([]);
-      toast.success('Bien ajouté avec succès');
-    } catch (err: unknown) {
-      setFormErr(err instanceof Error ? err.message : 'Erreur lors de la création');
-    } finally { setSaving(false); }
-  }
-
-  async function archive(id: string) {
-    if (!confirm('Archiver ce bien ?')) return;
-    setArchiving(id);
-    try {
-      await api.delete(`/properties/${id}`);
-      cacheInvalidate(url);
-      reload();
-      toast.success('Bien archivé');
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Erreur lors de l'archivage");
-    } finally { setArchiving(null); }
-  }
-
-  const columns: DataTableColumn<Property>[] = [
-    { key: 'type', header: 'Type', render: (b) => (
-      <span className="text-sm font-semibold text-gray-700">{TYPE_LABELS[b.type] ?? b.type}</span>
-    ) },
-    { key: 'address', header: 'Adresse', render: (b) => (
-      <div>
-        <div className="font-semibold text-sm text-gray-900">{b.address}</div>
-        <div className="text-xs text-gray-400">{b.neighborhood}</div>
-      </div>
-    ) },
-    { key: 'origine', header: 'Origine', render: (b) => (
-      b.ownerId === user?.id
-        ? <Badge tone="neutral">Mon bien</Badge>
-        : <Badge tone="accent">Sous mandat</Badge>
-    ) },
-    { key: 'city', header: 'Ville', render: (b) => <span className="text-sm text-gray-700">{b.city}</span> },
-    { key: 'surface', header: 'Surface', render: (b) => (
-      b.surfaceArea != null
-        ? <span className="text-sm text-gray-500">{b.surfaceArea} m²</span>
-        : <span className="text-gray-300">—</span>
-    ) },
-    { key: 'rent', header: 'Loyer', render: (b) => (
-      <span className="text-sm font-bold text-primary-dark tabular-nums">{formatFcfa(b.monthlyRent)}</span>
-    ) },
-    { key: 'status', header: 'Statut', render: (b) => (
-      <Badge tone={STATUS_TONE[b.status] ?? 'neutral'}>{STATUS_LABELS[b.status] ?? b.status}</Badge>
-    ) },
-    { key: 'actions', header: 'Actions', render: (b) => (
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => openEdit(b)}>Modifier</Button>
-        {b.status !== 'ARCHIVED' && (
-          <Button variant="danger" size="sm" onClick={() => archive(b.id)} loading={archiving === b.id}>
-            Archiver
-          </Button>
-        )}
-      </div>
-    ) },
-  ];
 
   return (
     <div>
@@ -261,17 +291,26 @@ export default function GestionnaireBiensPage() {
         subtitle="Vos biens propres et ceux confiés par mandat"
         badge={res ? `${res.total} bien${res.total > 1 ? 's' : ''}` : undefined}
         actions={
-          <Button
-            variant="accent"
-            onClick={() => { setForm({ ...EMPTY_FORM }); setNewPropertyPhotos([]); setFormErr(''); setShowForm(true); }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Ajouter un bien
+          <Button variant="accent" onClick={() => { createForm.reset(EMPTY_VALUES); setNewPropertyPhotos([]); setShowForm(true); }}>
+            <Plus className="w-4 h-4" />Ajouter un bien
           </Button>
         }
       />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <StatCard index={0} label="Total biens" value={counts.total} tone="primary" icon={<Home className="w-[18px] h-[18px]" />} />
+        <StatCard index={1} label="Biens propres" value={counts.own} tone="success" icon={<CheckCircle2 className="w-[18px] h-[18px]" />} />
+        <StatCard index={2} label="Sous mandat" value={counts.mandated} tone="warning" icon={<UserCog className="w-[18px] h-[18px]" />} />
+        <StatCard
+          index={3}
+          label="Occupés"
+          value={counts.occupied}
+          sub={counts.total > 0 ? `${Math.round((counts.occupied / counts.total) * 100)}% du portefeuille` : undefined}
+          progressPercent={counts.total > 0 ? (counts.occupied / counts.total) * 100 : undefined}
+          tone="error"
+          icon={<Building2 className="w-[18px] h-[18px]" />}
+        />
+      </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {FILTERS.map(([v, l]) => (
@@ -280,7 +319,7 @@ export default function GestionnaireBiensPage() {
             onClick={() => setFilter(v)}
             className={cn(
               'rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors',
-              filter === v ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700 border-gray-300 hover:border-primary/50',
+              filter === v ? 'bg-primary text-white border-primary' : 'bg-background text-foreground border-ds-border hover:border-primary/50',
             )}
           >
             {l}
@@ -289,177 +328,126 @@ export default function GestionnaireBiensPage() {
       </div>
 
       <Card>
-        <DataTable
-          columns={columns}
-          data={biens}
-          rowKey={(b) => b.id}
-          loading={loading}
-          empty={{
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            ),
-            title: 'Aucun bien géré',
-            description: 'Les propriétaires qui vous délèguent des biens apparaîtront ici, ou ajoutez votre propre bien.',
-          }}
-        />
+        {isLoading ? (
+          <div className="p-5 flex flex-col gap-3"><Skeleton className="h-10" /><Skeleton className="h-10" /><Skeleton className="h-10" /></div>
+        ) : biens.length === 0 ? (
+          <EmptyState
+            icon={<Home />}
+            title="Aucun bien géré"
+            description="Les propriétaires qui vous délèguent des biens apparaîtront ici, ou ajoutez votre propre bien."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Type</TableHead>
+                <TableHead>Adresse</TableHead>
+                <TableHead>Origine</TableHead>
+                <TableHead>Ville</TableHead>
+                <TableHead>Surface</TableHead>
+                <TableHead>Loyer mensuel</TableHead>
+                <TableHead>Statut</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {biens.map((b) => (
+                <TableRow key={b.id}>
+                  <TableCell className="font-semibold text-foreground">{TYPE_LABELS[b.type] ?? b.type}</TableCell>
+                  <TableCell>
+                    <div className="font-semibold text-foreground">{b.address}</div>
+                    <div className="text-xs text-muted-foreground">{b.neighborhood}</div>
+                  </TableCell>
+                  <TableCell>
+                    {b.ownerId === user?.id ? <Badge tone="neutral">Mon bien</Badge> : <Badge tone="accent">Sous mandat</Badge>}
+                  </TableCell>
+                  <TableCell>{b.city}</TableCell>
+                  <TableCell>{b.surfaceArea != null ? `${b.surfaceArea} m²` : <span className="text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="font-bold text-primary-dark tabular-nums">{formatFcfa(b.monthlyRent)}</TableCell>
+                  <TableCell><Badge tone={STATUS_TONE[b.status] ?? 'neutral'}>{STATUS_LABELS[b.status] ?? b.status}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(b)}>
+                        <Pencil className="w-3.5 h-3.5" />Modifier
+                      </Button>
+                      {b.status !== 'ARCHIVED' && (
+                        <AlertDialog open={archivingId === b.id} onOpenChange={(open) => setArchivingId(open ? b.id : null)}>
+                          <Button variant="destructive" size="sm" onClick={() => setArchivingId(b.id)}>
+                            <ArchiveIcon className="w-3.5 h-3.5" />Archiver
+                          </Button>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Archiver ce bien ?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {b.address} ne sera plus visible dans le portefeuille actif. Cette action peut être annulée plus tard.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Annuler</AlertDialogCancel>
+                              <AlertDialogAction variant="destructive" onClick={() => archiveMutation.mutate(b.id)}>
+                                Archiver
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
 
-      {/* Modal ajout */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Ajouter un bien" maxWidth={600}>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <Field label="Type" required>
-            <Select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="VILLA">Villa</option>
-              <option value="APARTMENT">Appartement</option>
-              <option value="STUDIO">Studio</option>
-              <option value="COMMERCIAL">Commercial</option>
-            </Select>
-          </Field>
-          <Field label="Adresse" required>
-            <Input required placeholder="Ex: Rue des Cocotiers, lot 42" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Quartier" required>
-              <Input required placeholder="Ex: Agbalépédogan" value={form.neighborhood} onChange={e => setForm(f => ({ ...f, neighborhood: e.target.value }))} />
-            </Field>
-            <Field label="Ville" required>
-              <Input required placeholder="Ex: Lomé" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Surface (m²)">
-              <Input type="number" min="1" placeholder="75" value={form.surfaceArea} onChange={e => setForm(f => ({ ...f, surfaceArea: e.target.value }))} />
-            </Field>
-            <Field label="Nombre de pièces">
-              <Input type="number" min="1" placeholder="3" value={form.roomsCount} onChange={e => setForm(f => ({ ...f, roomsCount: e.target.value }))} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Loyer mensuel (FCFA)" required>
-              <Input required type="number" min="0" placeholder="150000" value={form.monthlyRent} onChange={e => setForm(f => ({ ...f, monthlyRent: e.target.value }))} />
-            </Field>
-            <Field label="Charges mensuelles (FCFA)">
-              <Input type="number" min="0" placeholder="10000" value={form.monthlyCharges} onChange={e => setForm(f => ({ ...f, monthlyCharges: e.target.value }))} />
-            </Field>
-          </div>
-          <Field label="Description">
-            <Textarea rows={3} placeholder="Description optionnelle du bien..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-          </Field>
-          <Field label="Photos (10 max, 5 Mo chacune)">
-            <input
-              type="file" accept="image/*" multiple
-              onChange={e => setNewPropertyPhotos(Array.from(e.target.files ?? []).slice(0, 10))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm box-border"
-            />
-            {newPropertyPhotos.length > 0 && (
-              <div className="text-xs text-gray-500 mt-1.5">
-                {newPropertyPhotos.length} photo{newPropertyPhotos.length > 1 ? 's' : ''} sélectionnée{newPropertyPhotos.length > 1 ? 's' : ''}
-              </div>
-            )}
-          </Field>
-          {formErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{formErr}</div>}
-          <div className="flex gap-2.5 justify-end">
-            <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Annuler</Button>
-            <Button type="submit" loading={saving}>Ajouter le bien</Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Modal modification — champs du bien + photos */}
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Modifier le bien" maxWidth={640}>
-        <form onSubmit={submitEdit} className="flex flex-col gap-4">
-          <Field label="Type" required>
-            <Select value={editForm.type} onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="VILLA">Villa</option>
-              <option value="APARTMENT">Appartement</option>
-              <option value="STUDIO">Studio</option>
-              <option value="COMMERCIAL">Commercial</option>
-            </Select>
-          </Field>
-          <Field label="Adresse" required>
-            <Input required value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Quartier" required>
-              <Input required value={editForm.neighborhood} onChange={e => setEditForm(f => ({ ...f, neighborhood: e.target.value }))} />
-            </Field>
-            <Field label="Ville" required>
-              <Input required value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Surface (m²)">
-              <Input type="number" min="1" value={editForm.surfaceArea} onChange={e => setEditForm(f => ({ ...f, surfaceArea: e.target.value }))} />
-            </Field>
-            <Field label="Nombre de pièces">
-              <Input type="number" min="1" value={editForm.roomsCount} onChange={e => setEditForm(f => ({ ...f, roomsCount: e.target.value }))} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Loyer mensuel (FCFA)" required>
-              <Input required type="number" min="0" value={editForm.monthlyRent} onChange={e => setEditForm(f => ({ ...f, monthlyRent: e.target.value }))} />
-            </Field>
-            <Field label="Charges mensuelles (FCFA)">
-              <Input type="number" min="0" value={editForm.monthlyCharges} onChange={e => setEditForm(f => ({ ...f, monthlyCharges: e.target.value }))} />
-            </Field>
-          </div>
-          <Field label="Description">
-            <Textarea rows={3} placeholder="Description optionnelle du bien..." value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
-          </Field>
-          {editErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{editErr}</div>}
-          <div className="flex gap-2.5 justify-end">
-            <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Annuler</Button>
-            <Button type="submit" loading={editSaving}>Enregistrer les modifications</Button>
-          </div>
-        </form>
-
-        <div className="border-t border-gray-100 mt-6 pt-5">
-          <h3 className="text-[15px] font-bold text-gray-900 mb-1">Photos</h3>
-          <p className="text-xs text-gray-500 mb-4">Jusqu&apos;à 10 photos, 5 Mo max chacune. Chaque ajout/suppression est appliqué immédiatement.</p>
-
-          {photosErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600 mb-4">{photosErr}</div>}
-
-          {photosLoading ? (
-            <div className="py-2"><Skeleton height={80} /></div>
-          ) : (
-            <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
-              {photos.map(ph => (
-                <div key={ph.id} className="relative rounded-lg overflow-hidden bg-gray-100" style={{ aspectRatio: '1' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- URLs signées Supabase temporaires, next/image ajouterait peu ici */}
-                  <img src={ph.url} alt="" className="w-full h-full object-cover block" />
-                  <button
-                    onClick={() => removePhoto(ph.id)}
-                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white border-none text-sm cursor-pointer leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              {photos.length === 0 && (
-                <div className="col-span-full text-center py-6 text-gray-400 text-sm">Aucune photo pour l&apos;instant.</div>
-              )}
+      {/* Modale ajout */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent maxWidth={600}>
+          <DialogHeader><DialogTitle>Ajouter un bien</DialogTitle></DialogHeader>
+          <form onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))} className="flex flex-col gap-4">
+            <PropertyFormFields form={createForm} />
+            <div>
+              <Label>Photos (10 max, 5 Mo chacune)</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-2.5">Ajoutez vos photos puis retirez celles que vous ne voulez pas garder avant de valider.</p>
+              {newPhotoPreviews.length > 0 && <div className="mb-3"><PhotoThumbnailGrid photos={newPhotoPreviews} onRemove={removeNewPhoto} /></div>}
+              <PhotoUploadZone onSelect={addNewPhotos} disabled={newPropertyPhotos.length >= 10} label={newPropertyPhotos.length >= 10 ? 'Limite de 10 photos atteinte' : 'Ajouter des photos'} />
             </div>
-          )}
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Annuler</Button>
+              <Button type="submit" loading={createMutation.isPending}>Ajouter le bien</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-          <label
-            className={cn(
-              'flex items-center justify-center gap-2 border border-dashed border-gray-300 rounded-lg py-4 text-gray-700 text-sm font-semibold bg-gray-50',
-              photos.length >= 10 || uploadingPhotos ? 'cursor-not-allowed' : 'cursor-pointer',
+      {/* Modale modification — champs + photos */}
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent maxWidth={640}>
+          <DialogHeader><DialogTitle>Modifier le bien</DialogTitle></DialogHeader>
+          <form onSubmit={editForm.handleSubmit((v) => editMutation.mutate(v))} className="flex flex-col gap-4">
+            <PropertyFormFields form={editForm} />
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Annuler</Button>
+              <Button type="submit" loading={editMutation.isPending}>Enregistrer les modifications</Button>
+            </DialogFooter>
+          </form>
+
+          <div className="border-t border-ds-border mt-6 pt-5">
+            <h3 className="text-[15px] font-bold text-foreground mb-1">Photos</h3>
+            <p className="text-xs text-muted-foreground mb-4">Jusqu&apos;à 10 photos, 5 Mo max chacune. Chaque ajout/suppression est appliqué immédiatement.</p>
+            {photosLoading ? (
+              <div className="py-2"><Skeleton className="h-20" /></div>
+            ) : (
+              <div className="mb-5"><PhotoThumbnailGrid photos={photos} onRemove={removePhoto} /></div>
             )}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            {uploadingPhotos ? 'Envoi en cours…' : photos.length >= 10 ? 'Limite de 10 photos atteinte' : 'Ajouter des photos'}
-            <input
-              type="file" accept="image/*" multiple hidden disabled={photos.length >= 10 || uploadingPhotos}
-              onChange={e => { void uploadPhotos(e.target.files); e.target.value = ''; }}
+            <PhotoUploadZone
+              onSelect={(files) => void uploadPhotos(files)}
+              disabled={photos.length >= 10 || uploadingPhotos}
+              label={uploadingPhotos ? 'Envoi en cours…' : photos.length >= 10 ? 'Limite de 10 photos atteinte' : 'Ajouter des photos'}
             />
-          </label>
-        </div>
-      </Modal>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -112,6 +112,19 @@ export class PaymentsService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
+    // Recherche par nom/email de locataire — n'a de sens que pour un
+    // propriétaire/gestionnaire/admin qui consulte plusieurs locataires ;
+    // un TENANT ne voit déjà que ses propres paiements.
+    const tenantSearch: Prisma.LeaseWhereInput['tenant'] = query.search
+      ? {
+          OR: [
+            { firstName: { contains: query.search, mode: 'insensitive' } },
+            { lastName: { contains: query.search, mode: 'insensitive' } },
+            { email: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }
+      : undefined;
+
     // Un locataire ne voit que ses propres paiements — pas de propertyVisibilityWhere
     // qui ne s'applique qu'aux propriétaires/gestionnaires.
     const leaseWhere: Prisma.LeaseWhereInput =
@@ -121,6 +134,7 @@ export class PaymentsService {
             property: propertyVisibilityWhere(user),
             ...(query.propertyId ? { propertyId: query.propertyId } : {}),
             ...(query.tenantUserId ? { tenantUserId: query.tenantUserId } : {}),
+            ...(tenantSearch ? { tenant: tenantSearch } : {}),
           };
 
     const where: Prisma.PaymentWhereInput = {
