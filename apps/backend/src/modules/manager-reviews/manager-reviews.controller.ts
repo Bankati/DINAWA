@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ManagerReview, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -27,6 +27,18 @@ export class ManagerReviewsController {
     @Body() dto: CreateManagerReviewDto,
   ): Promise<ManagerReview> {
     return this.managerReviews.create(user, managerId, dto);
+  }
+
+  @Get('me')
+  @ApiOperation({
+    summary:
+      "Récupère l'avis de l'utilisateur connecté pour ce gestionnaire, s'il existe (null sinon)",
+  })
+  findMine(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') managerId: string,
+  ): Promise<ManagerReview | null> {
+    return this.managerReviews.findMine(user, managerId);
   }
 
   @Patch(':reviewId')

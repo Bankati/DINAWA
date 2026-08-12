@@ -44,11 +44,12 @@ class EnvironmentVariables {
   @IsString()
   SUPABASE_SERVICE_ROLE_KEY!: string;
 
-  // Optionnel — SupabaseAuthGuard valide les JWT via l'API Admin Supabase
-  // (auth.getUser()), pas de vérification locale HS256 nécessaire
+  // Signature des access tokens JWT maison (voir modules/auth/token.service.ts)
+  // — authentification gérée entièrement côté NestJS depuis le 2026-08-11,
+  // plus de vérification via l'API Admin Supabase. Générer avec :
+  // node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   @IsString()
-  @IsOptional()
-  SUPABASE_JWT_SECRET?: string;
+  JWT_SECRET!: string;
 
   @IsString()
   RESEND_API_KEY!: string;

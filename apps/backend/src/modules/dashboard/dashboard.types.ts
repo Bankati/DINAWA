@@ -84,3 +84,14 @@ export interface ManagerDashboardPerformance {
   onTimeCount: number;
   onTimeRatePercent: number | null;
 }
+
+export interface PropertyTypeBreakdown {
+  type: string;
+  montant: number;
+  nombreBiens: number;
+}
+
+export interface ManagerMonthlyRevenue {
+  mois: string;
+  montant: number;
+}

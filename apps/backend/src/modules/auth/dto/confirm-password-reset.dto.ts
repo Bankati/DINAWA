@@ -11,8 +11,8 @@ export class ConfirmPasswordResetDto {
   @Matches(/^\d{6}$/, { message: 'code doit être composé de 6 chiffres' })
   code!: string;
 
-  // Politique de mot de passe déléguée à Supabase Auth (minimum 6
-  // caractères par défaut) — pas de règle locale supplémentaire.
+  // Politique de mot de passe interne (voir modules/auth/token.service.ts)
+  // — minimum 6 caractères, hashé en bcrypt avant stockage.
   @ApiProperty()
   @IsString()
   @MinLength(6)

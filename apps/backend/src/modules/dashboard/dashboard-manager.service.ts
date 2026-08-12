@@ -15,6 +15,8 @@ import {
   ManagerDashboardRevenue,
   ManagerDashboardSummary,
   ManagerDashboardUpcomingPayment,
+  ManagerMonthlyRevenue,
+  PropertyTypeBreakdown,
 } from './dashboard.types';
 import { RevenueQueryDto } from './dto/revenue-query.dto';
 
@@ -267,6 +269,59 @@ export class DashboardManagerService {
       property: e.lease.property,
       tenant: e.lease.tenant,
     }));
+  }
+
+  // Composition du portefeuille par type — état courant, même logique que
+  // DashboardService.getSummary() côté propriétaire, mais scopée via
+  // propertyScopeWhere() (MANAGED par défaut).
+  async getPropertyTypeBreakdown(
+    user: AuthenticatedUser,
+    scope: DashboardScope,
+  ): Promise<PropertyTypeBreakdown[]> {
+    const rows = await this.prisma.property.groupBy({
+      by: ['type'],
+      where: propertyScopeWhere(user, scope),
+      _sum: { monthlyRent: true },
+      _count: { _all: true },
+    });
+
+    return rows.map((r) => ({
+      type: r.type,
+      montant: r._sum.monthlyRent ?? 0,
+      nombreBiens: r._count._all,
+    }));
+  }
+
+  // Série Jan-Déc des encaissements — même bucketing que
+  // DashboardService.bucketByMonth() côté propriétaire, scopée ici via
+  // propertyScopeWhere().
+  async getMonthlyRevenue(
+    user: AuthenticatedUser,
+    scope: DashboardScope,
+    year: number,
+  ): Promise<ManagerMonthlyRevenue[]> {
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        status: 'PAID',
+        paidAt: { gte: yearStart, lte: yearEnd },
+        lease: { property: propertyScopeWhere(user, scope) },
+      },
+      select: { paidAmount: true, paidAt: true },
+    });
+
+    const buckets = new Map<string, number>();
+    for (let m = 0; m < 12; m++) {
+      buckets.set(`${year}-${String(m + 1).padStart(2, '0')}`, 0);
+    }
+    for (const p of payments) {
+      if (!p.paidAt) continue;
+      const key = `${year}-${String(new Date(p.paidAt).getUTCMonth() + 1).padStart(2, '0')}`;
+      buckets.set(key, (buckets.get(key) ?? 0) + p.paidAmount);
+    }
+    return Array.from(buckets.entries()).map(([mois, montant]) => ({ mois, montant }));
   }
 
   // Accès vérifié comme n'importe quelle lecture de bien (canActOnProperty)

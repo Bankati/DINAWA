@@ -3,8 +3,10 @@
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, Zap, LockKeyhole } from 'lucide-react';
 import { useAuth, ApiError, roleDefaultRoute } from '@/lib/auth-context';
 import { API_URL } from '@/lib/api';
+import { AuthShell } from '../auth-shell';
 
 export default function LoginPage() {
   return (
@@ -73,46 +75,18 @@ function LoginForm() {
   }
 
   return (
-    <div className="lp">
-      {/* ── Panneau gauche ── */}
-      <div className="lp-left">
-        <div className="lp-left-inner">
-          <Link href="/" className="lp-logo">
-            <img src="/warah-icon.png" alt="" className="lp-logo-icon" />
-            WARAH
-          </Link>
-
-          <p className="lp-pitch">
-            Gérez vos biens en toute sérénité. La plateforme pensée pour les propriétaires,
-            locataires et gestionnaires immobiliers du Togo.
-          </p>
-
-          <ul className="lp-list">
-            <li>Gestion multi-biens — villas, appartements, studios</li>
-            <li>Paiements T-Money &amp; Flooz encaissés automatiquement</li>
-            <li>Alertes impayés en temps réel</li>
-            <li>Contrats de bail générés et archivés en PDF</li>
-          </ul>
-
-          <div className="lp-stats">
-            <span>1 200+ annonces</span>
-            <span>500+ propriétaires</span>
-            <span>4.9 satisfaction</span>
-          </div>
+    <AuthShell>
+      <div className="auth-card" style={{ width: '100%' }}>
+        <div className="lf-head">
+          <h1 className="lf-title">Connexion</h1>
+          <p className="lf-sub">Accédez à votre espace WARAH</p>
         </div>
-      </div>
 
-      {/* ── Panneau droit ── */}
-      <div className="lp-right">
-        <div className="lp-form-wrap">
-          <div className="lf-head">
-            <h1 className="lf-title">Connexion</h1>
-            <p className="lf-sub">Accédez à votre espace WARAH</p>
-          </div>
-
-          <form onSubmit={onLogin} className="lf-form">
-            <div className="lf-group">
-              <label className="lf-label" htmlFor="email">Adresse email</label>
+        <form onSubmit={onLogin} className="lf-form">
+          <div className="lf-group">
+            <label className="lf-label" htmlFor="email">Adresse email</label>
+            <div className="lf-input-icon-wrap">
+              <span className="lf-input-icon"><Mail className="w-4 h-4" /></span>
               <input
                 id="email"
                 type="email"
@@ -122,54 +96,59 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 onBlur={() => setEmailTouched(true)}
               />
-              {emailInvalid && <span className="lf-err-msg">Adresse email invalide</span>}
             </div>
+            {emailInvalid && <span className="lf-err-msg">Adresse email invalide</span>}
+          </div>
 
-            <div className="lf-group">
-              <div className="lf-label-row">
-                <label className="lf-label" htmlFor="password">Mot de passe</label>
-                <Link href="/auth/forgot-password" className="lf-forgot">Mot de passe oublié</Link>
-              </div>
-              <div className="lf-pw-wrap">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  className="lf-input"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="lf-eye"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label="Afficher le mot de passe"
-                >
-                  {showPassword ? 'Masquer' : 'Afficher'}
-                </button>
-              </div>
+          <div className="lf-group">
+            <div className="lf-label-row">
+              <label className="lf-label" htmlFor="password">Mot de passe</label>
+              <Link href="/auth/forgot-password" className="lf-forgot">Mot de passe oublié</Link>
             </div>
+            <div className="lf-input-icon-wrap lf-pw-wrap">
+              <span className="lf-input-icon"><Lock className="w-4 h-4" /></span>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                className="lf-input"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="lf-eye-icon"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
 
-            <label className="lf-remember">
-              <input type="checkbox" className="lf-check" />
-              <span className="lf-check-box" />
-              <span>Se souvenir de moi</span>
-            </label>
+          <label className="lf-remember">
+            <input type="checkbox" className="lf-check" />
+            <span className="lf-check-box" />
+            <span>Se souvenir de moi</span>
+          </label>
 
-            <button type="submit" className="lf-btn" disabled={!email || !password || emailInvalid || isLoading}>
-              {isLoading ? 'Connexion…' : 'Se connecter'}
-            </button>
+          <button type="submit" className="lf-btn" disabled={!email || !password || emailInvalid || isLoading}>
+            {isLoading ? 'Connexion…' : 'Se connecter'}
+          </button>
 
-            {errorMessage && <div className="lf-error-banner">{errorMessage}</div>}
-          </form>
+          {errorMessage && <div className="lf-error-banner">{errorMessage}</div>}
+        </form>
 
-          <p className="lf-footer">
-            Pas encore inscrit ? <Link href="/auth/register" className="lf-register-link">Créer un compte</Link>
-          </p>
-
-          <Link href="/" className="lf-back">Retour à l&apos;accueil</Link>
+        <div className="lf-trust-row">
+          <span className="lf-trust-item"><ShieldCheck />Connexion sécurisée</span>
+          <span className="lf-trust-item"><Zap />Accès instantané</span>
+          <span className="lf-trust-item"><LockKeyhole />Données protégées</span>
         </div>
+
+        <p className="lf-footer" style={{ marginTop: 24, marginBottom: 0 }}>
+          Pas encore inscrit ? <Link href="/auth/register" className="lf-register-link">Créer un compte</Link>
+        </p>
       </div>
-    </div>
+    </AuthShell>
   );
 }

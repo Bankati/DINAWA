@@ -1,12 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+import { Plus, Users, Building2, UserCog, FileClock, UserSearch, Search } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useApi, TTL } from '@/lib/use-api';
-import { cacheInvalidate } from '@/lib/cache';
 import { formatFcfa } from '@/lib/format';
 import type { MandateWithParties } from '@/lib/api-types';
-import { PageHeader, Button, Card, Modal, Field, Input, Select, EmptyState, Badge, toast } from '@/components/ui';
+import { toast } from '@/components/ui';
+import {
+  PageHeader, Button, Card, EmptyState, Badge, StatCard,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Label, Input,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ds';
 
 interface ManagerSummary { id: string; firstName: string; lastName: string; }
 interface Property {
@@ -24,31 +31,64 @@ const EMPTY_FORM = {
 };
 
 export default function DelegationPage() {
-  const { data: mandatesRaw, reload } = useApi<Mandate[]>('/mandates', TTL.LIST);
+  const queryClient = useQueryClient();
+  const { data: mandatesRaw } = useQuery({
+    queryKey: ['mandates'],
+    queryFn: () => api.get<Mandate[]>('/mandates'),
+  });
   // GET /mandates renvoie aussi les mandats REVOKED/EXPIRED (historique) —
   // seuls PENDING/ACTIVE comptent comme "délégation en cours" ici.
-  const mandates = (mandatesRaw ?? []).filter(m => m.status === 'ACTIVE' || m.status === 'PENDING');
-  const { data: propsRes } = useApi<{ data: Property[]; total: number } | Property[]>('/properties?limit=200', TTL.LIST);
+  const mandates = (mandatesRaw ?? []).filter((m) => m.status === 'ACTIVE' || m.status === 'PENDING');
+  const { data: propsRes } = useQuery({
+    queryKey: ['properties', 'all'],
+    queryFn: () => api.get<{ data: Property[]; total: number } | Property[]>('/properties?limit=200'),
+  });
   const allProps: Property[] = Array.isArray(propsRes) ? propsRes : (propsRes?.data ?? []);
+  const invalidateMandates = () => queryClient.invalidateQueries({ queryKey: ['mandates'] });
+
+  const managersCount = new Set(mandates.map((m) => m.manager.id)).size;
+  const delegatedPropertyCount = new Set(mandates.map((m) => m.property.id)).size;
+  const availableCount = allProps.length - delegatedPropertyCount;
+  const pendingCount = (mandatesRaw ?? []).filter((m) => m.status === 'PENDING').length;
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [selected, setSelected] = useState<string[]>([]);
+  const [propSearch, setPropSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [revoking, setRevoking] = useState<string | null>(null);
 
-  // Biens déjà délégués
-  const delegatedIds = new Set(mandates.map(m => m.property.id));
-  const availableProps = allProps.filter(p => !delegatedIds.has(p.id));
+  // Biens déjà délégués — un bien archivé ne peut de toute façon plus être
+  // géré activement, donc jamais proposé à la délégation.
+  const delegatedIds = new Set(mandates.map((m) => m.property.id));
+  const availableProps = allProps.filter((p) => !delegatedIds.has(p.id) && p.status !== 'ARCHIVED');
+
+  const filteredProps = (() => {
+    const q = propSearch.trim().toLowerCase();
+    if (!q) return availableProps;
+    return availableProps.filter(
+      (p) => p.address.toLowerCase().includes(q) || p.neighborhood.toLowerCase().includes(q) || p.city.toLowerCase().includes(q),
+    );
+  })();
+  const allFilteredSelected = filteredProps.length > 0 && filteredProps.every((p) => selected.includes(p.id));
 
   function toggleProp(id: string) {
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleSelectAllFiltered() {
+    if (allFilteredSelected) {
+      setSelected((prev) => prev.filter((id) => !filteredProps.some((p) => p.id === id)));
+    } else {
+      setSelected((prev) => Array.from(new Set([...prev, ...filteredProps.map((p) => p.id)])));
+    }
   }
 
   function openForm() {
     setForm({ ...EMPTY_FORM });
     setSelected([]);
+    setPropSearch('');
     setFormError('');
     setShowForm(true);
   }
@@ -75,8 +115,7 @@ export default function DelegationPage() {
         startDate: form.startDate,
         ...(form.endDate ? { endDate: form.endDate } : {}),
       });
-      cacheInvalidate('/mandates');
-      reload();
+      invalidateMandates();
       setShowForm(false);
       toast.success(`${selected.length} bien${selected.length > 1 ? 's' : ''} délégué${selected.length > 1 ? 's' : ''} à ${found[0].firstName} ${found[0].lastName}`);
     } catch (err: unknown) {
@@ -88,8 +127,7 @@ export default function DelegationPage() {
     setRevoking(id);
     try {
       await api.post(`/mandates/${id}/revoke`, {});
-      cacheInvalidate('/mandates');
-      reload();
+      invalidateMandates();
       toast.success('Délégation révoquée');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la révocation');
@@ -109,24 +147,24 @@ export default function DelegationPage() {
         title="Délégation"
         subtitle="Confiez la gestion de vos biens à un gestionnaire"
         actions={
-          <Button variant="accent" onClick={openForm}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Nouvelle délégation
-          </Button>
+          <>
+            <Button asChild variant="outline"><Link href="/gestionnaires"><UserSearch className="w-4 h-4" />Trouver un gestionnaire</Link></Button>
+            <Button variant="accent" onClick={openForm}><Plus className="w-4 h-4" />Nouvelle délégation</Button>
+          </>
         }
       />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <StatCard index={0} label="Biens délégués" value={delegatedPropertyCount} tone="primary" icon={<Building2 className="w-[18px] h-[18px]" />} />
+        <StatCard index={1} label="Gestionnaires" value={managersCount} tone="success" icon={<UserCog className="w-[18px] h-[18px]" />} />
+        <StatCard index={2} label="Biens disponibles" value={availableCount} sub="Non délégués" tone="warning" icon={<Users className="w-[18px] h-[18px]" />} />
+        <StatCard index={3} label="Mandats en attente" value={pendingCount} sub={pendingCount > 0 ? "En attente d'acceptation" : 'Aucun'} tone={pendingCount > 0 ? 'error' : 'success'} icon={<FileClock className="w-[18px] h-[18px]" />} />
+      </div>
 
       {mandates.length === 0 ? (
         <Card>
           <EmptyState
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            }
+            icon={<Users />}
             title="Aucune délégation active"
             description="Vous n'avez confié aucun bien à un gestionnaire pour le moment."
           />
@@ -135,30 +173,30 @@ export default function DelegationPage() {
         <div className="flex flex-col gap-4">
           {Object.values(byManager).map(({ manager, mandates: ms }) => (
             <Card key={manager.id}>
-              <div className="bg-gray-50 border-b border-gray-200 px-5 py-3.5 flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)' }}>
+              <div className="bg-ds-secondary border-b border-ds-border px-5 py-3.5 flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0 bg-primary">
                   {manager.firstName[0]}{manager.lastName[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm text-gray-900">{manager.firstName} {manager.lastName}</div>
-                  <div className="text-xs text-gray-500">{manager.email} {manager.phone ? `· ${manager.phone}` : ''}</div>
+                  <div className="font-bold text-sm text-foreground">{manager.firstName} {manager.lastName}</div>
+                  <div className="text-xs text-muted-foreground">{manager.email} {manager.phone ? `· ${manager.phone}` : ''}</div>
                 </div>
                 <Badge tone="info">{ms.length} bien{ms.length > 1 ? 's' : ''} délégué{ms.length > 1 ? 's' : ''}</Badge>
               </div>
               <div>
                 {ms.map((m, i) => (
-                  <div key={m.id} className={`px-5 py-3.5 flex items-center gap-3.5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                  <div key={m.id} className={`px-5 py-3.5 flex items-center gap-3.5 ${i > 0 ? 'border-t border-ds-border' : ''}`}>
                     <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-gray-900">{m.property.address}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="font-semibold text-sm text-foreground">{m.property.address}</div>
+                      <div className="text-xs text-muted-foreground">
                         {m.property.neighborhood}, {m.property.city}
                         {' · '}Commission : {m.feeType === 'PERCENTAGE' ? `${m.feeValue}%` : formatFcfa(m.feeValue)}
                         {' · '}Depuis le {new Date(m.startDate).toLocaleDateString('fr-FR')}
                         {m.endDate ? ` → ${new Date(m.endDate).toLocaleDateString('fr-FR')}` : ''}
                       </div>
                     </div>
-                    <Button variant="danger" size="sm" onClick={() => handleRevoke(m.id)} loading={revoking === m.id}>
+                    <Button variant="destructive" size="sm" onClick={() => handleRevoke(m.id)} loading={revoking === m.id}>
                       Révoquer
                     </Button>
                   </div>
@@ -169,70 +207,108 @@ export default function DelegationPage() {
         </div>
       )}
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nouvelle délégation" maxWidth={600}>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Field label="Email du gestionnaire" required hint="Le gestionnaire doit déjà avoir un compte WARAH avec le rôle Gestionnaire.">
-            <Input type="email" required placeholder="gestionnaire@exemple.com" value={form.managerEmail} onChange={e => setForm(f => ({ ...f, managerEmail: e.target.value }))} />
-          </Field>
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent maxWidth={600}>
+          <DialogHeader><DialogTitle>Nouvelle délégation</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div>
+              <Label>Email du gestionnaire <span className="text-destructive">*</span></Label>
+              <Input className="mt-1.5" type="email" required placeholder="gestionnaire@exemple.com" value={form.managerEmail} onChange={(e) => setForm((f) => ({ ...f, managerEmail: e.target.value }))} />
+              <p className="text-xs text-muted-foreground mt-1">Le gestionnaire doit déjà avoir un compte WARAH avec le rôle Gestionnaire.</p>
+            </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Biens à déléguer <span className="text-red-600">*</span>
-              <span className="text-xs font-normal text-gray-400 ml-2">(sélectionnez un ou plusieurs)</span>
-            </label>
-            {availableProps.length === 0 ? (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg px-3.5 py-3 text-sm text-orange-800">
-                Tous vos biens sont déjà délégués.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                {availableProps.map(p => (
-                  <label key={p.id} className={`flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md border ${selected.includes(p.id) ? 'bg-blue-50 border-blue-200' : 'border-transparent'}`}>
-                    <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} className="w-4 h-4 shrink-0 accent-primary" />
-                    <div>
-                      <div className="font-semibold text-sm text-gray-900">{p.address}</div>
-                      <div className="text-xs text-gray-500">{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
+            <div>
+              <Label>
+                Biens à déléguer <span className="text-destructive">*</span>
+                <span className="text-xs font-normal text-muted-foreground ml-2">(sélectionnez un ou plusieurs)</span>
+              </Label>
+              {availableProps.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-3 text-sm text-amber-800 mt-1.5">
+                  Tous vos biens sont déjà délégués.
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mt-1.5 mb-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        className="pl-8 h-9"
+                        placeholder="Rechercher un bien (adresse, quartier, ville)…"
+                        value={propSearch}
+                        onChange={(e) => setPropSearch(e.target.value)}
+                      />
                     </div>
-                  </label>
-                ))}
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-primary whitespace-nowrap hover:underline shrink-0"
+                      onClick={toggleSelectAllFiltered}
+                    >
+                      {allFilteredSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                    </button>
+                  </div>
+                  {filteredProps.length === 0 ? (
+                    <div className="text-sm text-muted-foreground text-center py-6 border border-ds-border rounded-lg">
+                      Aucun bien ne correspond à votre recherche.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 max-h-56 overflow-y-auto border border-ds-border rounded-lg p-3">
+                      {filteredProps.map((p) => (
+                        <label key={p.id} className={`flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md border ${selected.includes(p.id) ? 'bg-primary-50 dark:bg-ds-secondary border-primary/20' : 'border-transparent'}`}>
+                          <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} className="w-4 h-4 shrink-0 accent-primary" />
+                          <div>
+                            <div className="font-semibold text-sm text-foreground">{p.address}</div>
+                            <div className="text-xs text-muted-foreground">{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {selected.length > 0 && (
+                <div className="text-xs text-primary font-semibold mt-1.5">
+                  {selected.length} bien{selected.length > 1 ? 's' : ''} sélectionné{selected.length > 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Type de commission</Label>
+                <Select value={form.feeType} onValueChange={(v) => setForm((f) => ({ ...f, feeType: v as 'PERCENTAGE' | 'FLAT' }))}>
+                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PERCENTAGE">Pourcentage (%)</SelectItem>
+                    <SelectItem value="FLAT">Montant fixe (FCFA)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
-            {selected.length > 0 && (
-              <div className="text-xs text-primary font-semibold mt-1.5">
-                {selected.length} bien{selected.length > 1 ? 's' : ''} sélectionné{selected.length > 1 ? 's' : ''}
+              <div>
+                <Label>{form.feeType === 'PERCENTAGE' ? 'Taux (%)' : 'Montant (FCFA)'}</Label>
+                <Input className="mt-1.5" type="number" min="0" value={form.feeValue} onChange={(e) => setForm((f) => ({ ...f, feeValue: e.target.value }))} />
               </div>
-            )}
-          </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Type de commission">
-              <Select value={form.feeType} onChange={e => setForm(f => ({ ...f, feeType: e.target.value as 'PERCENTAGE' | 'FLAT' }))}>
-                <option value="PERCENTAGE">Pourcentage (%)</option>
-                <option value="FLAT">Montant fixe (FCFA)</option>
-              </Select>
-            </Field>
-            <Field label={form.feeType === 'PERCENTAGE' ? 'Taux (%)' : 'Montant (FCFA)'}>
-              <Input type="number" min="0" value={form.feeValue} onChange={e => setForm(f => ({ ...f, feeValue: e.target.value }))} />
-            </Field>
-          </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Date de début <span className="text-destructive">*</span></Label>
+                <Input className="mt-1.5" type="date" required value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Date de fin <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                <Input className="mt-1.5" type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+              </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Date de début" required>
-              <Input type="date" required value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
-            </Field>
-            <Field label="Date de fin" hint="Optionnel">
-              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
-            </Field>
-          </div>
+            {formError && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{formError}</div>}
 
-          {formError && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{formError}</div>}
-
-          <div className="flex gap-2.5 justify-end pt-1">
-            <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Annuler</Button>
-            <Button type="submit" loading={saving} disabled={availableProps.length === 0}>Confirmer la délégation</Button>
-          </div>
-        </form>
-      </Modal>
+            <div className="flex gap-2.5 justify-end pt-1">
+              <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Annuler</Button>
+              <Button type="submit" loading={saving} disabled={availableProps.length === 0}>Confirmer la délégation</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

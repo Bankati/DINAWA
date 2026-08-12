@@ -8,32 +8,32 @@ Périmètre : backend uniquement (API REST consommée par un frontend Next.js, `
 
 ## Stack
 
-| Layer              | Technology                          | Role                                                                                         |
-| ------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------- |
-| Framework          | NestJS 10+ + TypeScript strict      | Structure modulaire, controllers, services, DTOs, guards, interceptors, pipes, decorators    |
-| ORM                | Prisma                              | Accès base de données type-safe, migrations versionnées, génération du client typé           |
-| Database           | PostgreSQL (via Supabase)           | Persistance de toutes les données métier et techniques                                       |
-| Auth               | Supabase Auth                       | Inscription, connexion, gestion des mots de passe, émission des JWT                          |
-| File Storage       | Supabase Storage                    | Photos de biens, documents administratifs, pièces d'identité, justificatifs                  |
-| Email              | Resend                              | Envoi transactionnel (auth, OTP, quittances, rappels, alertes, rapports)                     |
-| Push Notifications | `web-push` (VAPID)                  | Notifications push web vers les navigateurs des utilisateurs ayant consenti                  |
-| Mobile Money       | Cashpay (Semoa)                     | Encaissement T-Money (Togocom) et Flooz (Moov Africa) + webhook de confirmation              |
-| OCR                | Tesseract.js                        | Vérification automatique des cartes nationales d'identité togolaises                         |
-| PDF                | PDFKit                              | Génération à la volée des quittances, rapports mensuels, exports, factures                   |
-| XLSX               | ExcelJS                             | Export des paiements en format tableur, en streaming                                         |
-| Image processing   | sharp                               | Compression et conversion des photos uploadées vers WebP                                     |
-| Validation         | class-validator + class-transformer | Validation des DTOs via `ValidationPipe` global et des variables d'environnement             |
-| Cron Jobs          | `@nestjs/schedule`                  | Rappels d'échéance, alertes d'impayés, blocage d'inactivité, rapports mensuels, prélèvements |
-| Events             | `@nestjs/event-emitter`             | Événements internes asynchrones (`payment.confirmed`, etc.)                                  |
-| HTTP Client        | axios + p-retry                     | Appels sortants Cashpay avec timeouts et retry borné                                         |
-| Logging            | nestjs-pino + pino                  | Logging structuré JSON avec correlation ID et redaction des données sensibles                |
-| Monitoring         | `@sentry/node`                      | Capture des exceptions non gérées et erreurs 5xx en production                               |
-| API Docs           | `@nestjs/swagger`                   | Documentation OpenAPI accessible sur `/api/docs` en dev                                      |
-| Health Checks      | `@nestjs/terminus`                  | Endpoints `/health/live` et `/health/ready` pour Railway                                     |
-| Rate Limiting      | `@nestjs/throttler`                 | Quotas globaux et endpoint-spécifiques (anti-spam, anti-replay)                              |
-| Security Headers   | helmet                              | Headers HTTP de sécurité (HSTS, X-Frame-Options, etc.)                                       |
-| Date Handling      | date-fns + date-fns-tz              | Manipulation des dates et conversion UTC ↔ Lomé                                              |
-| Hosting            | Railway                             | Conteneur Docker avec auto-deploy depuis Git, cron Railway, monitoring de base               |
+| Layer              | Technology                          | Role                                                                                             |
+| ------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Framework          | NestJS 10+ + TypeScript strict      | Structure modulaire, controllers, services, DTOs, guards, interceptors, pipes, decorators        |
+| ORM                | Prisma                              | Accès base de données type-safe, migrations versionnées, génération du client typé               |
+| Database           | PostgreSQL (via Supabase)           | Persistance de toutes les données métier et techniques                                           |
+| Auth               | Interne (NestJS + bcrypt + JWT)     | Inscription, connexion, gestion des mots de passe, émission/rotation des JWT (depuis 2026-08-11) |
+| File Storage       | Supabase Storage                    | Photos de biens, documents administratifs, pièces d'identité, justificatifs                      |
+| Email              | Resend                              | Envoi transactionnel (auth, OTP, quittances, rappels, alertes, rapports)                         |
+| Push Notifications | `web-push` (VAPID)                  | Notifications push web vers les navigateurs des utilisateurs ayant consenti                      |
+| Mobile Money       | Cashpay (Semoa)                     | Encaissement T-Money (Togocom) et Flooz (Moov Africa) + webhook de confirmation                  |
+| OCR                | Tesseract.js                        | Vérification automatique des cartes nationales d'identité togolaises                             |
+| PDF                | PDFKit                              | Génération à la volée des quittances, rapports mensuels, exports, factures                       |
+| XLSX               | ExcelJS                             | Export des paiements en format tableur, en streaming                                             |
+| Image processing   | sharp                               | Compression et conversion des photos uploadées vers WebP                                         |
+| Validation         | class-validator + class-transformer | Validation des DTOs via `ValidationPipe` global et des variables d'environnement                 |
+| Cron Jobs          | `@nestjs/schedule`                  | Rappels d'échéance, alertes d'impayés, blocage d'inactivité, rapports mensuels, prélèvements     |
+| Events             | `@nestjs/event-emitter`             | Événements internes asynchrones (`payment.confirmed`, etc.)                                      |
+| HTTP Client        | axios + p-retry                     | Appels sortants Cashpay avec timeouts et retry borné                                             |
+| Logging            | nestjs-pino + pino                  | Logging structuré JSON avec correlation ID et redaction des données sensibles                    |
+| Monitoring         | `@sentry/node`                      | Capture des exceptions non gérées et erreurs 5xx en production                                   |
+| API Docs           | `@nestjs/swagger`                   | Documentation OpenAPI accessible sur `/api/docs` en dev                                          |
+| Health Checks      | `@nestjs/terminus`                  | Endpoints `/health/live` et `/health/ready` pour Railway                                         |
+| Rate Limiting      | `@nestjs/throttler`                 | Quotas globaux et endpoint-spécifiques (anti-spam, anti-replay)                                  |
+| Security Headers   | helmet                              | Headers HTTP de sécurité (HSTS, X-Frame-Options, etc.)                                           |
+| Date Handling      | date-fns + date-fns-tz              | Manipulation des dates et conversion UTC ↔ Lomé                                                  |
+| Hosting            | Railway                             | Conteneur Docker avec auto-deploy depuis Git, cron Railway, monitoring de base                   |
 
 ---
 
@@ -44,7 +44,7 @@ Structure du projet, en respectant strictement la modularité NestJS.
 - `src/main.ts` — bootstrap de l'application, configuration des middlewares globaux (helmet, body parser limit 1 Mo, ValidationPipe, Swagger en dev, Sentry, `enableShutdownHooks`)
 - `src/app.module.ts` — module racine, enregistre les modules transverses (`PrismaModule`, `ConfigModule`, `LoggerModule`, `EventEmitterModule`, `ScheduleModule`, `ThrottlerModule`) et tous les modules métier
 - `src/common/` — éléments transverses utilisables par tous les modules
-  - `guards/` — `SupabaseAuthGuard`, `RolesGuard`
+  - `guards/` — `JwtAuthGuard`, `RolesGuard`
   - `interceptors/` — `AuditLogInterceptor` (logging structuré des actions critiques)
   - `pipes/` — pipes de validation personnalisés si nécessaire
   - `decorators/` — `@CurrentUser()`, `@Roles()`, `@Public()`
@@ -115,14 +115,15 @@ Stockage des fichiers binaires uploadés par les utilisateurs. Tous les buckets 
 | `payment-proofs`     | Photos justificatives uploadées soit par le locataire (déclaration) soit par le propriétaire/gestionnaire (confirmation manuelle) |
 | `profile-photos`     | Photo de profil de l'utilisateur (tous rôles) — ajouté à l'étape 10, compressée via sharp comme `property-photos`                 |
 
-### Supabase Auth
+### Authentification interne (depuis le 2026-08-11)
 
-Source de vérité pour les credentials et les sessions :
+Supabase Auth a été entièrement retiré (voir invariant #8) — source de
+vérité désormais 100% côté Prisma/NestJS (`modules/auth/token.service.ts`) :
 
-- Email + mot de passe haché (jamais côté NestJS)
-- Sessions JWT émises et signées par Supabase
-- État de confirmation d'email
-- Codes OTP de réinitialisation de mot de passe (table `PasswordResetOtp` côté Prisma, mais le mot de passe est mis à jour via l'API Supabase Admin)
+- Email + mot de passe haché en bcrypt (`User.passwordHash`)
+- Access token JWT (15 min) + refresh token opaque stocké hashé (SHA-256) dans `Session`, rotation à chaque `/auth/refresh`
+- Codes OTP de réinitialisation de mot de passe (table `PasswordResetOtp`), mot de passe mis à jour directement côté Prisma
+- `User.supabaseId` conservé nullable comme vestige — plus jamais renseigné pour un nouveau compte
 
 ### Ce qui n'est jamais stocké
 
@@ -141,7 +142,7 @@ Aucun modèle Prisma `Receipt`, `MonthlyReport` ou `Invoice` ne stocke un binair
 
 ### Inscription et vérification
 
-- Inscription via Supabase Auth (`POST /api/auth/signup/owner` ou `/signup/manager` ou `/signup/tenant?token=...`) — création parallèle du `User` (avec `phone`/`city` obligatoires pour owner/manager) côté Prisma et du profil correspondant en une transaction
+- Inscription (`POST /api/auth/signup/owner` ou `/signup/manager` ou `/signup/tenant?token=...`) — mot de passe hashé en bcrypt puis `User` (avec `phone`/`city` obligatoires pour owner/manager) et profil correspondant créés dans la même transaction Prisma
 - Le rôle de l'utilisateur (`OWNER`, `TENANT`, `MANAGER`, `ADMIN`) est figé à l'inscription et stocké côté Prisma
 - Pièce d'identité **facultative pour tous les rôles** (révisé le 2026-07-16, voir /architect — initialement obligatoire pour propriétaire/gestionnaire) : peut être fournie à l'inscription ou plus tard via `POST /api/identity/verify`
 - Vérification CNI automatique via Tesseract.js (étape 07) — décision `VERIFIED` ou `REJECTED` en moins de 10 secondes, aucune validation humaine
@@ -150,16 +151,16 @@ Aucun modèle Prisma `Receipt`, `MonthlyReport` ou `Invoice` ne stocke un binair
 
 ### Connexion
 
-- Connexion par email + mot de passe via Supabase Auth — ouverture d'une session JWT directement, sans étape supplémentaire
+- Connexion par email + mot de passe (bcrypt.compare local) — émission directe d'un access token JWT + refresh token, sans étape supplémentaire
 - Pas de 2FA à la connexion (décision projet pour la V1)
 - OTP par email à 6 chiffres utilisé uniquement pour la réinitialisation de mot de passe (cas « mot de passe oublié »), expiration 10 minutes, usage unique
 - Blocage temporaire de 15 minutes après 5 tentatives de connexion échouées
 
 ### Validation des requêtes
 
-- Tout endpoint authentifié est protégé par `SupabaseAuthGuard` (validation du JWT Supabase + synchronisation avec l'`User` Prisma + injection dans `request.user`)
+- Tout endpoint authentifié est protégé par `JwtAuthGuard` (vérification locale du JWT signé par `TokenService` + lookup `User` Prisma par `sub` + injection dans `request.user`, cache 30s)
 - Les endpoints qui exigent un rôle sont annotés `@Roles(UserRole.OWNER)` et protégés par `RolesGuard`
-- L'objet `request.user` est l'`User` Prisma — jamais l'`User` Supabase brut
+- L'objet `request.user` est directement l'`User` Prisma
 - Les comptes `SUSPENDED_ADMIN` voient leur JWT rejeté avec `401`. Les comptes `SUSPENDED_INACTIVITY` ou `SUSPENDED_PAYMENT` peuvent se connecter mais reçoivent `403 ACCOUNT_SUSPENDED` sur tout endpoint de mutation — **sauf** ceux annotés `@AllowWhileSuspended()`, réservés aux actions dont le but est justement de débloquer le compte (ex. `POST /properties`, voir build-plan.md unité 11/12)
 
 ### Autorisation par bien — `canActOnProperty()`
@@ -206,11 +207,12 @@ Quelques endpoints sont volontairement non authentifiés et marqués `@Public()`
 
 ### Supabase
 
-Service unique pour Auth + Storage + Database. Le client `SupabaseAdminService` est partagé entre :
+Service pour Storage + Database uniquement depuis le 2026-08-11 (Auth
+retiré, voir invariant #8). Le client `SupabaseAdminService` est utilisé par :
 
-- `SupabaseAuthGuard` (validation des JWT)
 - `StorageService` (upload, URLs signées, suppression)
-- `AuthService` (création / suppression de comptes via l'API Admin)
+- `AdminService`/`ProfileService` (nettoyage best-effort d'éventuels comptes Auth legacy — `if (user.supabaseId)`)
+- `PrismaService` (ping HTTP de réveil du projet gratuit via `SUPABASE_ANON_KEY`)
 
 `SUPABASE_SERVICE_ROLE_KEY` reste strictement côté serveur — jamais exposée au client, jamais loggée.
 
@@ -316,7 +318,7 @@ Règles que le codebase ne doit **jamais** violer. Une violation est un bug crit
 
 7. **Les emails d'authentification ne passent jamais par `NotifyService`.** Confirmation d'inscription et OTP de réinitialisation appellent directement `EmailService` — ils doivent fonctionner même sans abonnement push.
 
-8. **Jamais de hashage de mot de passe côté NestJS.** Pas de bcrypt, pas de table `password` locale. Supabase Auth gère l'intégralité du cycle de vie des credentials.
+8. **Authentification entièrement interne depuis le 2026-08-11 (revirement assumé de l'invariant précédent).** Mots de passe hashés en bcrypt (`User.passwordHash`), jamais en clair ni ailleurs. Sessions via access token JWT (15 min) + refresh token opaque stocké hashé (SHA-256) dans `Session`, avec rotation à chaque `/auth/refresh`. Tout ce cycle vit exclusivement dans `modules/auth/token.service.ts` — jamais de `bcrypt`/`jwt`/`crypto` utilisé directement ailleurs. Supabase ne sert plus que Postgres + Storage (voir `SupabaseAdminService`, conservé uniquement pour le nettoyage best-effort d'éventuels comptes legacy et l'API Storage).
 
 9. **Connexion par email + mot de passe directe, sans 2FA.** Aucun code OTP envoyé lors d'une connexion réussie.
 

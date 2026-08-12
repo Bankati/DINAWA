@@ -10,3 +10,6 @@ export * from "./modal";
 export * from "./form-field";
 export * from "./toast";
 export * from "./notification-toggle";
+export * from "./photo-grid";
+export * from "./change-password-card";
+export * from "./notification-bell";

@@ -17,9 +17,12 @@ export type DashboardKPI = {
 
 export type RevenuMensuel = { mois: string; montant: number; paiements: number };
 
+export type RepartitionType = { type: string; montant: number; nombreBiens: number };
+
 export type DashboardSummary = {
   kpis: DashboardKPI;
   revenusMensuels: RevenuMensuel[];
+  repartitionLoyersParType: RepartitionType[];
   derniersBiens: {
     id: string;
     type: string;
@@ -43,12 +46,14 @@ export type DashboardSummary = {
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSummary(user: AuthenticatedUser, annee: number): Promise<DashboardSummary> {
+  async getSummary(
+    user: AuthenticatedUser,
+    annee: number,
+    mois?: number,
+  ): Promise<DashboardSummary> {
     const yearStart = new Date(Date.UTC(annee, 0, 1));
     const yearEnd = new Date(Date.UTC(annee, 11, 31, 23, 59, 59));
-    const now = new Date();
-    const currentMonth = now.getUTCMonth();
-    const isCurrentYear = annee === now.getUTCFullYear();
+    const moisSelectionne = (mois ?? new Date().getUTCMonth() + 1) - 1;
 
     const propWhere = propertyVisibilityWhere(user);
     const leaseWhere: Prisma.PaymentWhereInput = { lease: { property: propWhere } };
@@ -113,16 +118,36 @@ export class DashboardService {
           status: 'PAID',
           paidAt: { gte: yearStart, lte: yearEnd },
         },
-        select: { paidAmount: true, paidAt: true },
+        select: {
+          paidAmount: true,
+          paidAt: true,
+          lease: { select: { property: { select: { id: true, type: true } } } },
+        },
       }),
     ]);
 
     const revenusAnnuels = paidPayments.reduce((s, p) => s + p.paidAmount, 0);
-    const revenusMensuels = isCurrentYear
-      ? paidPayments
-          .filter((p) => p.paidAt && new Date(p.paidAt).getUTCMonth() === currentMonth)
-          .reduce((s, p) => s + p.paidAmount, 0)
-      : 0;
+    const revenusMensuels = paidPayments
+      .filter((p) => p.paidAt && new Date(p.paidAt).getUTCMonth() === moisSelectionne)
+      .reduce((s, p) => s + p.paidAmount, 0);
+
+    // Répartition des loyers RÉELLEMENT ENCAISSÉS par type de bien (sur
+    // l'année) — jamais la somme nominale de Property.monthlyRent, qui ne
+    // reflète que ce qui a été saisi à la création du bien, pas ce qui a été
+    // payé (signalé par le développeur le 2026-08-12 : 240k nominal affiché
+    // alors que seuls 150k avaient été encaissés).
+    const repartitionMap = new Map<string, { montant: number; properties: Set<string> }>();
+    for (const p of paidPayments) {
+      const type = p.lease?.property?.type;
+      if (!type) continue;
+      const entry = repartitionMap.get(type) ?? { montant: 0, properties: new Set<string>() };
+      entry.montant += p.paidAmount;
+      if (p.lease?.property?.id) entry.properties.add(p.lease.property.id);
+      repartitionMap.set(type, entry);
+    }
+    const repartitionParType: RepartitionType[] = Array.from(repartitionMap.entries()).map(
+      ([type, v]) => ({ type, montant: v.montant, nombreBiens: v.properties.size }),
+    );
 
     return {
       kpis: {
@@ -136,6 +161,7 @@ export class DashboardService {
         tauxOccupation: totalBiens > 0 ? Math.round((biensOccupes / totalBiens) * 100) : 0,
       },
       revenusMensuels: this.bucketByMonth(paidPayments, annee),
+      repartitionLoyersParType: repartitionParType,
       derniersBiens: biensRecents.map((b) => ({
         id: b.id,
         type: b.type,
