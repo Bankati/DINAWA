@@ -1,48 +1,65 @@
 /* Langage visuel partagé des pages /auth/* (login, register, forgot-password)
-   — porté depuis les composants Angular équivalents (classes .lp / .lf-*). */
+   — photo plein écran + carte centrée (inspiré de la maquette fournie par le
+   développeur, palette WARAH conservée : jamais le vert de la référence). */
 
-.lp {
+.auth-page {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 5fr 6fr;
-  font-family: 'Inter', system-ui, sans-serif;
-}
-
-/* ── PANNEAU GAUCHE ── */
-.lp-left {
-  background: var(--color-primary-900);
+  position: relative;
   display: flex;
-  align-items: center;
-  padding: 56px;
-}
-.lp-left-inner { max-width: 380px; }
-
-.lp-logo { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; letter-spacing: .16em; color: white; text-decoration: none; margin-bottom: 56px; }
-.lp-logo-icon { width: 26px; height: 26px; object-fit: contain; display: block; }
-
-.lp-pitch { font-size: 22px; font-weight: 600; color: white; line-height: 1.5; margin-bottom: 40px; }
-
-.lp-list { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-bottom: 48px; padding-left: 18px; border-left: 2px solid rgba(201,152,46,0.5); }
-.lp-list li { font-size: 13.5px; color: rgba(255,255,255,0.62); line-height: 1.6; }
-
-.lp-stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: rgba(255,255,255,0.4); }
-
-/* ── PANNEAU DROIT ── */
-.lp-right {
-  background: #FFFFFF;
-  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 40px;
+  padding: 24px 16px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+/* Photo brute, sans surcouche teintée — juste la photo du hero de l'accueil */
+.auth-bg-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; z-index: 0; }
+
+.auth-home-link {
+  position: absolute; top: 20px; left: 20px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 7px; color: white; text-decoration: none;
+  font-size: 13.5px; font-weight: 600; opacity: .9; transition: opacity .15s;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+}
+.auth-home-link:hover { opacity: 1; }
+.auth-home-link svg { width: 16px; height: 16px; }
+
+/* Pastilles décoratives flottantes — purement visuelles, masquées si l'espace manque */
+.auth-deco {
+  position: absolute; z-index: 1; width: 52px; height: 52px; border-radius: 14px;
+  background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28);
+  display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.85);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.auth-deco svg { width: 22px; height: 22px; }
+@media (max-width: 1100px), (max-height: 760px) { .auth-deco { display: none; } }
+
+.auth-card-logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 18px; }
+.auth-card-logo img { width: 40px; height: 40px; object-fit: contain; }
+.auth-card-logo span { font-size: 18px; font-weight: 800; letter-spacing: .14em; color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.45); }
+
+.auth-card {
+  position: relative; z-index: 2; width: 100%;
+  background: white; border-radius: 18px; padding: 24px 26px 20px;
+  box-shadow: 0 24px 64px rgba(4,12,28,0.35);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
-.lp-form-wrap { width: 100%; max-width: 380px; }
+.auth-footer-bar {
+  position: relative; z-index: 2; margin-top: 16px;
+  display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;
+  font-size: 12px; color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+}
+.auth-footer-bar span { display: flex; align-items: center; gap: 5px; }
+.auth-footer-bar svg { width: 13px; height: 13px; }
 
-.lf-head { margin-bottom: 36px; }
-.lf-title { font-size: 26px; font-weight: 700; color: var(--color-primary-dark); margin-bottom: 6px; }
-.lf-sub { font-size: 14px; color: #6B7280; }
+.lf-head { margin-bottom: 18px; }
+.lf-title { font-size: 22px; font-weight: 700; color: var(--color-primary-dark); margin-bottom: 4px; }
+.lf-sub { font-size: 13.5px; color: #6B7280; }
 
-.lf-form { display: flex; flex-direction: column; gap: 22px; margin-bottom: 28px; }
+.lf-form { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
 
 .lf-group { display: flex; flex-direction: column; gap: 8px; }
 .lf-label { font-size: 13px; font-weight: 600; color: #374151; }
@@ -50,38 +67,44 @@
 .lf-forgot { font-size: 12.5px; color: var(--color-primary); text-decoration: none; }
 .lf-forgot:hover { text-decoration: underline; }
 
+/* ── Champs boîte (bordés, arrondis) plutôt que soulignés ── */
 .lf-input {
   width: 100%;
-  border: none;
-  border-bottom: 1.5px solid #E2E5EA;
-  padding: 10px 2px;
-  font-size: 15px;
+  border: 1.5px solid #E2E5EA;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14.5px;
   color: var(--color-primary-dark);
   font-family: inherit;
   background: transparent;
   outline: none;
-  transition: border-color .15s;
+  transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
 }
-.lf-input:focus { border-bottom-color: var(--color-primary-dark); }
-.lf-input.lf-error { border-bottom-color: #D64545; }
+.lf-input:focus { border-color: var(--color-primary-dark); box-shadow: 0 0 0 3px rgba(15,76,129,0.10); }
+.lf-input.lf-error { border-color: #D64545; }
 .lf-input::placeholder { color: #C3C9D2; }
 
-.lf-pw-wrap { display: flex; align-items: center; gap: 10px; }
-.lf-pw-wrap .lf-input { flex: 1; }
-.lf-eye { background: none; border: none; cursor: pointer; font-size: 12px; color: #9CA3AF; padding: 0; white-space: nowrap; }
-.lf-eye:hover { color: var(--color-primary-dark); }
+.lf-pw-wrap { position: relative; }
+.lf-pw-wrap .lf-input { padding-right: 40px; }
+.lf-eye-icon {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: #9CA3AF; padding: 0;
+  display: flex; align-items: center; transition: color .15s;
+}
+.lf-eye-icon:hover { color: var(--color-primary-dark); }
 
 .lf-err-msg { font-size: 12px; color: #D64545; }
 
 .lf-remember { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13px; color: #4B5563; }
 .lf-check { display: none; }
 .lf-check-box {
-  position: relative; width: 16px; height: 16px;
-  border: 1.5px solid #D1D5DB; border-radius: 4px; flex-shrink: 0;
+  position: relative; width: 18px; height: 18px;
+  border: 1.5px solid #D1D5DB; border-radius: 5px; flex-shrink: 0;
 }
 .lf-check:checked + .lf-check-box { background: var(--color-primary-dark); border-color: var(--color-primary-dark); }
 .lf-check:checked + .lf-check-box::after {
-  content: ''; position: absolute; left: 4px; top: 1px; width: 5px; height: 8px;
+  content: ''; position: absolute; left: 5px; top: 2px; width: 5px; height: 8px;
   border: solid white; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
 }
 
@@ -91,7 +114,7 @@
   background: var(--color-primary-dark);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
@@ -107,6 +130,7 @@
   padding: 10px 14px;
   color: #A02929;
   font-size: 13px;
+  border-radius: 6px;
 }
 
 .lf-error-banner-top {
@@ -116,9 +140,10 @@
   color: #A02929;
   font-size: 13px;
   margin-bottom: 22px;
+  border-radius: 6px;
 }
 
-.lf-footer { font-size: 13.5px; color: #6B7280; margin-bottom: 24px; }
+.lf-footer { font-size: 13.5px; color: #6B7280; margin-bottom: 12px; text-align: center; }
 .lf-register-link { color: var(--color-primary-dark); font-weight: 600; text-decoration: none; }
 .lf-register-link:hover { text-decoration: underline; }
 
@@ -131,23 +156,30 @@
 }
 .lf-resend:hover { text-decoration: underline; }
 
-.lf-input-otp {
-  width: 100%;
-  border: none;
-  border-bottom: 1.5px solid #E2E5EA;
-  padding: 10px 2px;
-  font-size: 22px;
-  letter-spacing: 0.5em;
-  text-align: center;
-  color: var(--color-primary-dark);
-  font-family: inherit;
-  background: transparent;
-  outline: none;
-  transition: border-color .15s;
-}
-.lf-input-otp:focus { border-bottom-color: var(--color-primary-dark); }
+/* ── Champs avec icône (Mail/Lock) ── */
+.lf-input-icon-wrap { position: relative; display: flex; align-items: center; }
+.lf-input-icon-wrap .lf-input { padding-left: 38px; }
+.lf-input-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; display: flex; transition: color .15s; }
+.lf-input-icon-wrap:focus-within .lf-input-icon { color: var(--color-primary-dark); }
 
-.lf-success { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 24px 0; }
+/* ── Bandeau de confiance (bas de formulaire, dans la carte) ── */
+.lf-trust-row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 14px; }
+.lf-trust-item { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #9CA3AF; }
+.lf-trust-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+/* ── OTP à 6 cases séparées ── */
+.otp-boxes { display: flex; gap: 10px; }
+.otp-box {
+  width: 46px; height: 54px; border: 1.5px solid #E2E5EA; border-radius: 10px;
+  text-align: center; font-size: 20px; font-weight: 700; color: var(--color-primary-dark);
+  font-family: inherit; outline: none; transition: border-color .15s; background: transparent;
+}
+.otp-box:focus { border-color: var(--color-primary-dark); box-shadow: 0 0 0 3px rgba(15,76,129,0.12); }
+.otp-timer { font-size: 12.5px; color: #9CA3AF; margin-top: 10px; }
+.otp-timer strong { color: var(--color-primary-dark); }
+.otp-timer.expired { color: #D64545; }
+
+.lf-success { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 16px 0; }
 .lf-success-icon {
   width: 56px; height: 56px; border-radius: 50%;
   background: #E7F7EF; color: #10B981;
@@ -156,13 +188,7 @@
 .lf-success-text { font-size: 14px; color: #4B5563; line-height: 1.6; }
 
 /* ── RESPONSIVE ── */
-@media (max-width: 900px) {
-  .lp { grid-template-columns: 1fr; }
-  .lp-left { padding: 40px 28px; }
-  .lp-list, .lp-stats { display: none; }
-  .lp-pitch { font-size: 18px; margin-bottom: 0; }
-}
-
 @media (max-width: 480px) {
-  .lp-right { padding: 32px 20px; }
+  .auth-page { padding: 70px 14px 40px; }
+  .auth-card { padding: 28px 20px 24px; }
 }

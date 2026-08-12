@@ -2,22 +2,8 @@
    et le padding de page, ce fichier ne gère plus que les cartes ── */
 .dash-body { display: flex; flex-direction: column; gap: 20px; font-family: inherit; }
 
-.dash-toolbar { display: flex; justify-content: flex-end; }
-
-/* ── KPI 4 colonnes — StatCard (components/ui) gère déjà le style plat ── */
+/* ── KPI 4 colonnes — StatCard (components/ds) gère déjà le style coloré ── */
 .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-
-.quickactions-strip { display: flex; gap: 10px; flex-wrap: wrap; }
-.qa-btn {
-  display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 8px;
-  background: white; border: 1px solid #E5E7EB; color: #374151; font-size: 13.5px; font-weight: 500;
-  text-decoration: none; white-space: nowrap; transition: all 0.12s;
-}
-.qa-btn svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
-.qa-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: rgba(15,76,129,0.04); }
-.qa-btn.qa-primary { background: var(--color-primary); border-color: var(--color-primary); color: white; }
-.qa-btn.qa-primary svg { opacity: 1; }
-.qa-btn.qa-primary:hover { background: var(--color-primary-dark); border-color: var(--color-primary-dark); }
 
 .section-card { background: white; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(15,76,129,0.05); border: 1px solid #E5E7EB; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }

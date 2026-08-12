@@ -28,7 +28,11 @@ export function RentTypeDonut({ data, emptyMessage = 'Aucun loyer à répartir p
   return (
     <div>
       <div className="text-center mb-1">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Total loyers</span>
+        {/* Somme des paiements réellement encaissés sur l'année (voir
+            dashboard.service.ts) — jamais la valeur nominale de
+            Property.monthlyRent, qui ne reflète que ce qui a été saisi à la
+            création du bien, pas ce qui a été payé. */}
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Loyers encaissés (année)</span>
         <div className="text-sm font-bold text-primary-dark">{fcfa(total)}</div>
       </div>
       <ResponsiveContainer width="100%" height={220}>

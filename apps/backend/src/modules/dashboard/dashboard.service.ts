@@ -67,7 +67,6 @@ export class DashboardService {
       paiementsRecents,
       overdueCount,
       paidPayments,
-      repartitionParType,
     ] = await Promise.all([
       this.prisma.property.count({ where: propWhere }),
       this.prisma.property.count({ where: { ...propWhere, status: 'OCCUPIED' } }),
@@ -119,15 +118,11 @@ export class DashboardService {
           status: 'PAID',
           paidAt: { gte: yearStart, lte: yearEnd },
         },
-        select: { paidAmount: true, paidAt: true },
-      }),
-      // Composition du portefeuille par type — état courant, non filtré par
-      // mois/année (comme `impayes`), voir /architect refonte dashboard.
-      this.prisma.property.groupBy({
-        by: ['type'],
-        where: propWhere,
-        _sum: { monthlyRent: true },
-        _count: { _all: true },
+        select: {
+          paidAmount: true,
+          paidAt: true,
+          lease: { select: { property: { select: { id: true, type: true } } } },
+        },
       }),
     ]);
 
@@ -135,6 +130,24 @@ export class DashboardService {
     const revenusMensuels = paidPayments
       .filter((p) => p.paidAt && new Date(p.paidAt).getUTCMonth() === moisSelectionne)
       .reduce((s, p) => s + p.paidAmount, 0);
+
+    // Répartition des loyers RÉELLEMENT ENCAISSÉS par type de bien (sur
+    // l'année) — jamais la somme nominale de Property.monthlyRent, qui ne
+    // reflète que ce qui a été saisi à la création du bien, pas ce qui a été
+    // payé (signalé par le développeur le 2026-08-12 : 240k nominal affiché
+    // alors que seuls 150k avaient été encaissés).
+    const repartitionMap = new Map<string, { montant: number; properties: Set<string> }>();
+    for (const p of paidPayments) {
+      const type = p.lease?.property?.type;
+      if (!type) continue;
+      const entry = repartitionMap.get(type) ?? { montant: 0, properties: new Set<string>() };
+      entry.montant += p.paidAmount;
+      if (p.lease?.property?.id) entry.properties.add(p.lease.property.id);
+      repartitionMap.set(type, entry);
+    }
+    const repartitionParType: RepartitionType[] = Array.from(repartitionMap.entries()).map(
+      ([type, v]) => ({ type, montant: v.montant, nombreBiens: v.properties.size }),
+    );
 
     return {
       kpis: {
@@ -148,11 +161,7 @@ export class DashboardService {
         tauxOccupation: totalBiens > 0 ? Math.round((biensOccupes / totalBiens) * 100) : 0,
       },
       revenusMensuels: this.bucketByMonth(paidPayments, annee),
-      repartitionLoyersParType: repartitionParType.map((r) => ({
-        type: r.type,
-        montant: r._sum.monthlyRent ?? 0,
-        nombreBiens: r._count._all,
-      })),
+      repartitionLoyersParType: repartitionParType,
       derniersBiens: biensRecents.map((b) => ({
         id: b.id,
         type: b.type,

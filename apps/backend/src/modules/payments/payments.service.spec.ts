@@ -266,4 +266,28 @@ describe('PaymentsService', () => {
       );
     });
   });
+
+  describe('findAll', () => {
+    it('filtre par nom/prénom/email du locataire quand `search` est fourni', async () => {
+      await service.findAll(owner, { page: 1, limit: 20, search: 'Kodjo' });
+
+      const [findManyArgs] = prisma.payment.findMany.mock.calls[0] as [
+        { where: { lease: { tenant?: { OR: Array<Record<string, unknown>> } } } },
+      ];
+      expect(findManyArgs.where.lease.tenant?.OR).toEqual([
+        { firstName: { contains: 'Kodjo', mode: 'insensitive' } },
+        { lastName: { contains: 'Kodjo', mode: 'insensitive' } },
+        { email: { contains: 'Kodjo', mode: 'insensitive' } },
+      ]);
+    });
+
+    it("n'ajoute aucun filtre tenant quand `search` est absent", async () => {
+      await service.findAll(owner, { page: 1, limit: 20 });
+
+      const [findManyArgs] = prisma.payment.findMany.mock.calls[0] as [
+        { where: { lease: { tenant?: unknown } } },
+      ];
+      expect(findManyArgs.where.lease.tenant).toBeUndefined();
+    });
+  });
 });

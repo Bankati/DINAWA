@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useApi, TTL } from '@/lib/use-api';
 import { useAuth } from '@/lib/auth-context';
 import { initiales } from '@/lib/format';
-import { PageHeader, Card, CardBody, Field, Input, Button, Badge, NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
+import { NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
+import { PageHeader, Card, CardBody, Label, Input, Button, Badge } from '@/components/ds';
 
 interface UserProfile {
   id: string;
@@ -32,7 +33,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function ProfilPage() {
   const { refreshProfile } = useAuth();
-  const { data: profile, loading, reload } = useApi<UserProfile>('/profile', TTL.STABLE);
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading: loading } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api.get<UserProfile>('/profile'),
+  });
   const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', city: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -78,7 +83,7 @@ export default function ProfilPage() {
       await api.patch('/profile', fd);
       setPhotoFile(null);
       if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
-      reload();
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       refreshProfile();
       setSuccess('Profil mis à jour avec succès');
       setTimeout(() => setSuccess(''), 4000);
@@ -92,13 +97,13 @@ export default function ProfilPage() {
       <PageHeader title="Mon profil" subtitle="Gérez vos informations personnelles" />
 
       {loading ? (
-        <Card><CardBody><div className="text-center text-gray-400 py-8">Chargement…</div></CardBody></Card>
+        <Card><CardBody><div className="text-center text-muted-foreground py-8">Chargement…</div></CardBody></Card>
       ) : (
         <div className="grid gap-6 items-start" style={{ gridTemplateColumns: '300px 1fr' }}>
           <Card>
             <CardBody>
               <div className="flex flex-col items-center text-center">
-                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-2xl mb-3" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)' }}>
+                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-2xl mb-3" style={{ background: 'linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%)' }}>
                   {photoPreview || profile?.profilePhotoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob:) ou URL signée Supabase temporaire
                     <img src={photoPreview ?? profile!.profilePhotoUrl!} alt="" className="w-full h-full object-cover" />
@@ -109,8 +114,8 @@ export default function ProfilPage() {
                 <div className="mb-4 w-full max-w-[220px]">
                   <PhotoUploadZone onSelect={selectPhoto} label={photoFile ? 'Photo sélectionnée' : 'Changer la photo'} multiple={false} />
                 </div>
-                <div className="font-bold text-lg text-gray-900 mb-1">{profile?.firstName} {profile?.lastName}</div>
-                <div className="text-sm text-gray-500 mb-3">{profile?.email}</div>
+                <div className="font-bold text-lg text-foreground mb-1">{profile?.firstName} {profile?.lastName}</div>
+                <div className="text-sm text-muted-foreground mb-3">{profile?.email}</div>
                 <div className="flex flex-col gap-2 items-center">
                   <Badge tone="info">{profile ? (ROLE_LABELS[profile.role] ?? profile.role) : '—'}</Badge>
                   {profile && (
@@ -120,7 +125,7 @@ export default function ProfilPage() {
                   )}
                 </div>
                 {profile?.createdAt && (
-                  <div className="mt-4 text-xs text-gray-400">
+                  <div className="mt-4 text-xs text-muted-foreground">
                     Membre depuis {new Date(profile.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
                   </div>
                 )}
@@ -131,32 +136,38 @@ export default function ProfilPage() {
           <div className="flex flex-col gap-5">
             <Card>
               <CardBody>
-                <h2 className="text-base font-bold text-gray-900 mb-5">Informations personnelles</h2>
+                <h2 className="text-base font-bold text-foreground mb-5">Informations personnelles</h2>
 
                 {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600 mb-4">{error}</div>}
                 {success && <div className="bg-green-50 border border-green-200 rounded-lg px-3.5 py-2.5 text-sm text-green-700 font-semibold mb-4">✓ {success}</div>}
 
                 <form onSubmit={save} className="flex flex-col gap-4">
                   <div className="grid grid-cols-2 gap-3.5">
-                    <Field label="Prénom" required>
-                      <Input required value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
-                    </Field>
-                    <Field label="Nom" required>
-                      <Input required value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
-                    </Field>
+                    <div>
+                      <Label>Prénom <span className="text-destructive">*</span></Label>
+                      <Input className="mt-1.5" required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label>Nom <span className="text-destructive">*</span></Label>
+                      <Input className="mt-1.5" required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} />
+                    </div>
                   </div>
 
-                  <Field label="Adresse email" hint="Contactez le support pour changer votre adresse email.">
-                    <Input value={profile?.email ?? ''} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
-                  </Field>
+                  <div>
+                    <Label>Adresse email</Label>
+                    <Input className="mt-1.5 bg-ds-secondary text-muted-foreground cursor-not-allowed" value={profile?.email ?? ''} disabled />
+                    <p className="text-xs text-muted-foreground mt-1">Contactez le support pour changer votre adresse email.</p>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-3.5">
-                    <Field label="Téléphone">
-                      <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
-                    </Field>
-                    <Field label="Ville">
-                      <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
-                    </Field>
+                    <div>
+                      <Label>Téléphone</Label>
+                      <Input className="mt-1.5" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
+                    </div>
+                    <div>
+                      <Label>Ville</Label>
+                      <Input className="mt-1.5" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
+                    </div>
                   </div>
 
                   <div className="flex justify-end pt-1">

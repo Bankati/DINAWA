@@ -4,7 +4,7 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 describe('DashboardService', () => {
   let service: DashboardService;
   let prisma: {
-    property: { count: jest.Mock; findMany: jest.Mock; groupBy: jest.Mock };
+    property: { count: jest.Mock; findMany: jest.Mock };
     user: { count: jest.Mock };
     payment: { findMany: jest.Mock };
     paymentScheduleEntry: { count: jest.Mock };
@@ -17,7 +17,6 @@ describe('DashboardService', () => {
       property: {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
-        groupBy: jest.fn().mockResolvedValue([]),
       },
       user: { count: jest.fn().mockResolvedValue(0) },
       payment: { findMany: jest.fn().mockResolvedValue([]) },
@@ -51,18 +50,42 @@ describe('DashboardService', () => {
       await expect(service.getSummary(owner, 2026)).resolves.toBeDefined();
     });
 
-    it('agrège la répartition des loyers par type de bien via property.groupBy', async () => {
-      prisma.property.groupBy.mockResolvedValueOnce([
-        { type: 'VILLA', _sum: { monthlyRent: 500000 }, _count: { _all: 2 } },
-        { type: 'STUDIO', _sum: { monthlyRent: 150000 }, _count: { _all: 3 } },
+    // Bug réel corrigé le 2026-08-12 : le donut "répartition par type"
+    // affichait la somme nominale de Property.monthlyRent (valeur saisie à
+    // la création du bien) plutôt que ce qui a réellement été encaissé —
+    // signalé par le développeur (240k nominal affiché alors que seuls 150k
+    // avaient été payés).
+    it('calcule la répartition des loyers RÉELLEMENT ENCAISSÉS par type de bien, jamais la valeur nominale des biens', async () => {
+      prisma.payment.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          paidAmount: 100000,
+          paidAt: new Date(Date.UTC(2026, 2, 15)),
+          lease: { property: { id: 'prop-1', type: 'VILLA' } },
+        },
+        {
+          paidAmount: 50000,
+          paidAt: new Date(Date.UTC(2026, 5, 10)),
+          lease: { property: { id: 'prop-2', type: 'STUDIO' } },
+        },
+        {
+          paidAmount: 25000,
+          paidAt: new Date(Date.UTC(2026, 6, 5)),
+          lease: { property: { id: 'prop-1', type: 'VILLA' } },
+        },
       ]);
 
       const result = await service.getSummary(owner, 2026);
 
-      expect(result.repartitionLoyersParType).toEqual([
-        { type: 'VILLA', montant: 500000, nombreBiens: 2 },
-        { type: 'STUDIO', montant: 150000, nombreBiens: 3 },
-      ]);
+      expect(result.repartitionLoyersParType).toEqual(
+        expect.arrayContaining([
+          { type: 'VILLA', montant: 125000, nombreBiens: 1 },
+          { type: 'STUDIO', montant: 50000, nombreBiens: 1 },
+        ]),
+      );
+      expect(result.repartitionLoyersParType).toHaveLength(2);
+      // Le mock property.groupBy n'existe plus du tout dans ce fichier — si
+      // le service l'appelait encore, ce test échouerait avec "is not a
+      // function", garantissant qu'on ne régresse pas vers l'ancien calcul.
     });
 
     it('calcule le revenu mensuel pour le mois filtré, pas seulement le mois courant', async () => {

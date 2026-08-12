@@ -1,9 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { Download, FileText } from 'lucide-react';
+import { api } from '@/lib/api';
 import { paymentsApi, type Payment } from '@/lib/payments';
-import { useApi, TTL } from '@/lib/use-api';
-import { PageHeader, Card, Button, Badge, EmptyState, Skeleton, toast } from '@/components/ui';
+import { toast } from '@/components/ui';
+import {
+  PageHeader, Card, Button, Badge, EmptyState, Skeleton,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ds';
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'En attente',
@@ -43,7 +49,10 @@ function formatMontant(n: number) {
 }
 
 export default function PaymentHistoryPage() {
-  const { data: res, loading } = useApi<{ data: Payment[]; total: number }>('/payments', TTL.LIST);
+  const { data: res, isLoading: loading } = useQuery({
+    queryKey: ['payments'],
+    queryFn: () => api.get<{ data: Payment[]; total: number }>('/payments'),
+  });
   const payments = res?.data ?? [];
 
   async function downloadReceipt(paymentId: string) {
@@ -67,58 +76,53 @@ export default function PaymentHistoryPage() {
       <PageHeader
         title="Historique des paiements"
         subtitle="Consultez et téléchargez vos quittances de loyer"
-        actions={<Link href="/locataire/paiements/declaration"><Button>Déclarer un paiement</Button></Link>}
+        actions={<Button asChild><Link href="/locataire/paiements/declaration">Déclarer un paiement</Link></Button>}
       />
 
       <Card>
         {loading ? (
-          <div className="p-2"><Skeleton /><Skeleton /><Skeleton /></div>
+          <div className="p-5 flex flex-col gap-3"><Skeleton className="h-10" /><Skeleton className="h-10" /><Skeleton className="h-10" /></div>
         ) : payments.length === 0 ? (
           <EmptyState
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            }
+            icon={<FileText />}
             title="Aucun paiement enregistré"
             description="Votre historique de paiements apparaîtra ici."
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['Date', 'Bien', 'Montant', 'Mode', 'Statut', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-[11.5px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((p, i) => (
-                  <tr key={p.id} className={i < payments.length - 1 ? 'border-b border-gray-50' : ''}>
-                    <td className="px-4 py-3.5 text-xs text-gray-500">{formatDate(p.createdAt)}</td>
-                    <td className="px-4 py-3.5 text-sm font-medium text-gray-900">{p.lease?.property?.address || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm font-bold text-primary-dark tabular-nums">{formatMontant(p.paidAmount)}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-500">{METHOD_LABELS[p.paymentMethod] || p.paymentMethod}</td>
-                    <td className="px-4 py-3.5">
-                      <Badge tone={STATUS_TONE[p.status] ?? 'neutral'} dot>{STATUS_LABELS[p.status] || p.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {p.status === 'PAID' && (
-                        <button
-                          onClick={() => downloadReceipt(p.id)}
-                          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-dark"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                          Quittance
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Bien</TableHead>
+                <TableHead>Montant</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead>Statut</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payments.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(p.createdAt)}</TableCell>
+                  <TableCell className="font-medium text-foreground">{p.lease?.property?.address || '—'}</TableCell>
+                  <TableCell className="font-bold text-primary-dark tabular-nums whitespace-nowrap">{formatMontant(p.paidAmount)}</TableCell>
+                  <TableCell className="text-muted-foreground">{METHOD_LABELS[p.paymentMethod] || p.paymentMethod}</TableCell>
+                  <TableCell><Badge tone={STATUS_TONE[p.status] ?? 'neutral'} dot>{STATUS_LABELS[p.status] || p.status}</Badge></TableCell>
+                  <TableCell>
+                    {p.status === 'PAID' && (
+                      <button
+                        onClick={() => downloadReceipt(p.id)}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-dark"
+                      >
+                        <Download className="w-4 h-4" />
+                        Quittance
+                      </button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </Card>
     </div>

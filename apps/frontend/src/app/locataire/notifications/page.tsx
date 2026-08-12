@@ -1,21 +1,27 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bell } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useApi, TTL } from '@/lib/use-api';
-import { PageHeader, Card, Badge, Button, EmptyState, Skeleton } from '@/components/ui';
+import { PageHeader, Card, Badge, Button, EmptyState, Skeleton } from '@/components/ds';
 import { notificationIcon, formatNotificationDate, type NotificationSummary } from '@/lib/notifications';
 
-export default function NotificationsPage() {
-  const { data, loading, reload } = useApi<NotificationSummary[]>('/notifications?limit=50', TTL.LIST);
+export default function LocataireNotificationsPage() {
+  const queryClient = useQueryClient();
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => api.get<NotificationSummary[]>('/notifications?limit=50'),
+  });
   const [markingAll, setMarkingAll] = useState(false);
   const list = data ?? [];
   const unreadCount = list.filter((n) => n.unread).length;
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['notifications'] });
 
   async function markAsRead(id: string) {
     try {
       await api.patch(`/notifications/${id}/read`);
-      reload();
+      invalidate();
     } catch {
       /* échec silencieux acceptable — juste un indicateur visuel de lecture */
     }
@@ -25,7 +31,7 @@ export default function NotificationsPage() {
     setMarkingAll(true);
     try {
       await api.patch('/notifications/read-all');
-      reload();
+      invalidate();
     } finally {
       setMarkingAll(false);
     }
@@ -47,14 +53,10 @@ export default function NotificationsPage() {
 
       <Card>
         {loading ? (
-          <div className="p-2"><Skeleton /><Skeleton /><Skeleton /><Skeleton /></div>
+          <div className="p-5 flex flex-col gap-3"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
         ) : list.length === 0 ? (
           <EmptyState
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            }
+            icon={<Bell />}
             title="Aucune notification"
             description="Vos alertes et mises à jour apparaîtront ici."
           />
@@ -67,16 +69,16 @@ export default function NotificationsPage() {
                   key={n.id}
                   type="button"
                   onClick={() => n.unread && markAsRead(n.id)}
-                  className={`w-full text-left px-5 py-4 flex items-start gap-4 border-none bg-transparent cursor-pointer transition-colors hover:bg-gray-50 ${i < list.length - 1 ? 'border-b border-gray-50' : ''}`}
+                  className={`w-full text-left px-5 py-4 flex items-start gap-4 border-none bg-transparent cursor-pointer transition-colors hover:bg-ds-secondary ${i < list.length - 1 ? 'border-b border-ds-border' : ''}`}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${n.unread ? 'bg-primary-50 text-primary' : 'bg-gray-50 text-gray-400'}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${n.unread ? 'bg-primary-50 dark:bg-ds-secondary text-primary' : 'bg-ds-secondary text-muted-foreground'}`}>
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm mb-0.5 ${n.unread ? 'font-bold text-gray-900' : 'font-semibold text-gray-600'}`}>
+                    <div className={`text-sm mb-0.5 ${n.unread ? 'font-bold text-foreground' : 'font-semibold text-muted-foreground'}`}>
                       {n.titre}
                     </div>
-                    <div className="text-xs text-gray-400 flex items-center gap-2">
+                    <div className="text-xs text-muted-foreground flex items-center gap-2">
                       {formatNotificationDate(n.createdAt)}
                       <Badge tone={n.channel === 'EMAIL' ? 'info' : 'success'}>{n.channel}</Badge>
                     </div>

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useApi, TTL } from '@/lib/use-api';
 import { useAuth } from '@/lib/auth-context';
 import { initiales } from '@/lib/format';
-import { PageHeader, Card, CardBody, Field, Input, Button, Badge, NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
+import { NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
+import { PageHeader, Card, CardBody, Label, Input, Button, Badge } from '@/components/ds';
 import { MapPin } from 'lucide-react';
 
 interface UserProfile {
@@ -23,7 +24,11 @@ interface UserProfile {
 
 export default function LocataireProfilPage() {
   const { refreshProfile } = useAuth();
-  const { data: profile, loading, reload } = useApi<UserProfile>('/profile', TTL.STABLE);
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading: loading } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api.get<UserProfile>('/profile'),
+  });
   const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', city: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -62,7 +67,7 @@ export default function LocataireProfilPage() {
       await api.patch('/profile', fd);
       setPhotoFile(null);
       if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
-      reload();
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       refreshProfile();
       setSuccess('Profil mis à jour avec succès');
       setTimeout(() => setSuccess(''), 4000);
@@ -76,13 +81,13 @@ export default function LocataireProfilPage() {
       <PageHeader title="Mon profil" subtitle="Gérez vos informations personnelles" />
 
       {loading ? (
-        <Card><CardBody><div className="text-center text-gray-400 py-8">Chargement…</div></CardBody></Card>
+        <Card><CardBody><div className="text-center text-muted-foreground py-8">Chargement…</div></CardBody></Card>
       ) : (
         <div className="flex flex-col gap-5">
           <Card>
             <CardBody>
               <div className="flex items-center gap-5">
-                <div className="rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-2xl shrink-0" style={{ background: 'linear-gradient(135deg, #0A2650, #0F4C81)', width: 72, height: 72 }}>
+                <div className="rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-2xl shrink-0" style={{ background: 'linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%)', width: 72, height: 72 }}>
                   {photoPreview || profile?.profilePhotoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob:) ou URL signée Supabase temporaire
                     <img src={photoPreview ?? profile!.profilePhotoUrl!} alt="" className="w-full h-full object-cover" />
@@ -91,10 +96,10 @@ export default function LocataireProfilPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-lg text-gray-900">{profile?.firstName} {profile?.lastName}</div>
-                  <div className="text-sm text-gray-500 mt-0.5">{profile?.email}</div>
+                  <div className="font-bold text-lg text-foreground">{profile?.firstName} {profile?.lastName}</div>
+                  <div className="text-sm text-muted-foreground mt-0.5">{profile?.email}</div>
                   {profile?.city && (
-                    <div className="flex items-center gap-1.5 text-sm text-gray-400 mt-0.5">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
                       <MapPin className="w-3.5 h-3.5" /> {profile.city}
                     </div>
                   )}
@@ -109,30 +114,35 @@ export default function LocataireProfilPage() {
 
           <Card>
             <CardBody>
-              <h2 className="text-base font-bold text-gray-900 mb-5">Modifier mes informations</h2>
+              <h2 className="text-base font-bold text-foreground mb-5">Modifier mes informations</h2>
 
               {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600 mb-4">{error}</div>}
               {success && <div className="bg-green-50 border border-green-200 rounded-lg px-3.5 py-2.5 text-sm text-green-700 font-semibold mb-4">✓ {success}</div>}
 
               <form onSubmit={save} className="flex flex-col gap-4">
                 <div className="grid grid-cols-2 gap-3.5">
-                  <Field label="Prénom" required>
-                    <Input required value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
-                  </Field>
-                  <Field label="Nom" required>
-                    <Input required value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
-                  </Field>
+                  <div>
+                    <Label>Prénom <span className="text-destructive">*</span></Label>
+                    <Input className="mt-1.5" required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>Nom <span className="text-destructive">*</span></Label>
+                    <Input className="mt-1.5" required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} />
+                  </div>
                 </div>
-                <Field label="Email (lecture seule)">
-                  <Input value={profile?.email ?? ''} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
-                </Field>
+                <div>
+                  <Label>Email (lecture seule)</Label>
+                  <Input className="mt-1.5 bg-ds-secondary text-muted-foreground cursor-not-allowed" value={profile?.email ?? ''} disabled />
+                </div>
                 <div className="grid grid-cols-2 gap-3.5">
-                  <Field label="Téléphone">
-                    <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
-                  </Field>
-                  <Field label="Ville">
-                    <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
-                  </Field>
+                  <div>
+                    <Label>Téléphone</Label>
+                    <Input className="mt-1.5" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
+                  </div>
+                  <div>
+                    <Label>Ville</Label>
+                    <Input className="mt-1.5" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="Ex: Lomé" />
+                  </div>
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit" loading={saving}>Enregistrer les modifications</Button>

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { Wallet, Clock, CheckCircle2, AlertTriangle, Calendar, Home } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { paymentsApi, type Payment, PAYMENT_STATUS_LABELS } from '@/lib/payments';
 import { formatFcfa } from '@/lib/format';
-import { PageHeader, Card, CardHeader, CardBody, StatCard, Badge, EmptyState, Skeleton } from '@/components/ui';
+import { PageHeader, Card, CardHeader, CardBody, StatCard, Badge, EmptyState, Skeleton } from '@/components/ds';
 
 interface ScheduleEntry {
   id: string;
@@ -32,36 +33,32 @@ const PAYMENT_STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'neu
 
 export default function LocataireDashboardPage() {
   const { user } = useAuth();
-  const [lease, setLease] = useState<ActiveLease | null>(null);
-  const [nextDue, setNextDue] = useState<ScheduleEntry | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [noLease, setNoLease] = useState(false);
-  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
+  const { data: leasesRes, isLoading: leasesLoading, isError: leasesError } = useQuery({
+    queryKey: ['locataire-leases', user?.id],
+    queryFn: () => api.get<{ data: ActiveLease[] }>(`/tenants/${user!.id}/leases/history?limit=10`),
+    enabled: !!user,
+  });
+  const lease = leasesRes?.data.find((l) => l.status === 'ACTIVE') ?? null;
+  const noLease = !leasesLoading && !leasesError && leasesRes && !lease;
 
-    api.get<{ data: ActiveLease[] }>(`/tenants/${user.id}/leases/history?limit=10`)
-      .then((res) => {
-        const active = res.data.find((l) => l.status === 'ACTIVE');
-        if (!active) { setNoLease(true); return null; }
-        setLease(active);
-        return api.get<ScheduleEntry[]>(`/leases/${active.id}/schedule`);
-      })
-      .then((entries) => {
-        if (!entries) return;
-        const pending = entries
-          .filter((e) => e.status !== 'PAID')
-          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-        setNextDue(pending[0] ?? null);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+  const { data: schedule, isError: scheduleError } = useQuery({
+    queryKey: ['locataire-schedule', lease?.id],
+    queryFn: () => api.get<ScheduleEntry[]>(`/leases/${lease!.id}/schedule`),
+    enabled: !!lease,
+  });
+  const nextDue = schedule
+    ? [...schedule].filter((e) => e.status !== 'PAID').sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0] ?? null
+    : null;
 
-    paymentsApi.getPayments({ limit: 5 }).then((res) => setPayments(res.data)).catch(() => setError(true));
-  }, [user]);
+  const { data: paymentsRes, isError: paymentsError } = useQuery({
+    queryKey: ['payments', 'recent'],
+    queryFn: () => paymentsApi.getPayments({ limit: 5 }),
+  });
+  const payments: Payment[] = paymentsRes?.data ?? [];
 
+  const loading = leasesLoading;
+  const error = leasesError || scheduleError || paymentsError;
   const enRetard = nextDue?.status === 'OVERDUE';
 
   return (
@@ -75,45 +72,49 @@ export default function LocataireDashboardPage() {
       )}
 
       {loading ? (
-        <Card><CardBody><div className="p-2"><Skeleton /><Skeleton /></div></CardBody></Card>
+        <Card><CardBody><div className="flex flex-col gap-3"><Skeleton className="h-10" /><Skeleton className="h-10" /></div></CardBody></Card>
       ) : noLease ? (
         <Card>
           <EmptyState
-            icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>}
+            icon={<Home />}
             title="Aucun bail actif"
             description="Contactez votre propriétaire ou gestionnaire si vous pensez qu'il s'agit d'une erreur."
           />
         </Card>
       ) : (
         <>
-          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
+              index={0}
               label="Loyer mensuel"
               value={formatFcfa((lease?.monthlyRent ?? 0) + (lease?.monthlyCharges ?? 0))}
               sub={lease?.monthlyCharges ? `Dont ${formatFcfa(lease.monthlyCharges)} de charges` : 'Charges incluses'}
               tone="primary"
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /></svg>}
+              icon={<Wallet className="w-[18px] h-[18px]" />}
             />
             <StatCard
+              index={1}
               label="Prochaine échéance"
               value={nextDue ? new Date(nextDue.dueDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '—'}
               sub={nextDue ? formatFcfa(nextDue.expectedAmount - nextDue.paidAmount) : 'Aucune échéance en attente'}
               tone={enRetard ? 'error' : 'primary'}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
+              icon={<Clock className="w-[18px] h-[18px]" />}
             />
             <StatCard
+              index={2}
               label="Statut"
               value={enRetard ? 'En retard' : 'À jour'}
               sub={enRetard ? 'Régularisez au plus vite' : 'Aucun impayé'}
               tone={enRetard ? 'error' : 'success'}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg>}
+              icon={enRetard ? <AlertTriangle className="w-[18px] h-[18px]" /> : <CheckCircle2 className="w-[18px] h-[18px]" />}
             />
             <StatCard
+              index={3}
               label="Bail actif depuis"
               value={lease ? new Date(lease.startDate).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }) : '—'}
               sub={lease?.endDate ? `Jusqu'au ${new Date(lease.endDate).toLocaleDateString('fr-FR')}` : 'Durée indéterminée'}
-              tone="primary"
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" /></svg>}
+              tone="warning"
+              icon={<Calendar className="w-[18px] h-[18px]" />}
             />
           </div>
 
@@ -121,7 +122,7 @@ export default function LocataireDashboardPage() {
             <Link href="/locataire/paiements/declaration" className="inline-flex items-center gap-2 rounded-lg bg-primary text-white px-5 py-2.5 text-sm font-semibold hover:bg-primary-dark transition-colors">
               Déclarer un paiement
             </Link>
-            <Link href="/locataire/paiements/historique" className="inline-flex items-center gap-2 rounded-lg bg-gray-100 text-gray-700 px-5 py-2.5 text-sm font-semibold hover:bg-gray-200 transition-colors">
+            <Link href="/locataire/paiements/historique" className="inline-flex items-center gap-2 rounded-lg bg-ds-secondary text-foreground px-5 py-2.5 text-sm font-semibold hover:bg-ds-border transition-colors">
               Voir l&apos;historique complet
             </Link>
           </div>
@@ -131,8 +132,8 @@ export default function LocataireDashboardPage() {
               <h2 className="text-sm font-bold text-primary-dark m-0">Mon bien</h2>
             </CardHeader>
             <CardBody>
-              <div className="font-semibold text-sm text-gray-900">{lease?.property.address}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{lease?.property.neighborhood}, {lease?.property.city}</div>
+              <div className="font-semibold text-foreground">{lease?.property.address}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{lease?.property.neighborhood}, {lease?.property.city}</div>
             </CardBody>
           </Card>
 
@@ -146,13 +147,13 @@ export default function LocataireDashboardPage() {
             ) : (
               <div>
                 {payments.map((p, i) => (
-                  <div key={p.id} className={`px-5 py-3.5 flex items-center gap-4 ${i < payments.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                  <div key={p.id} className={`px-5 py-3.5 flex items-center gap-4 ${i < payments.length - 1 ? 'border-b border-ds-border' : ''}`}>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-gray-900">{p.lease?.property?.address ?? 'Bien'}</div>
-                      <div className="text-xs text-gray-500">{new Date(p.createdAt).toLocaleDateString('fr-FR')}</div>
+                      <div className="font-semibold text-foreground">{p.lease?.property?.address ?? 'Bien'}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString('fr-FR')}</div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="font-bold text-sm text-primary-dark tabular-nums mb-1">{formatFcfa(p.paidAmount)}</div>
+                      <div className="font-bold text-primary-dark tabular-nums mb-1">{formatFcfa(p.paidAmount)}</div>
                       <Badge tone={PAYMENT_STATUS_TONE[p.status] ?? 'neutral'}>{PAYMENT_STATUS_LABELS[p.status] ?? p.status}</Badge>
                     </div>
                   </div>

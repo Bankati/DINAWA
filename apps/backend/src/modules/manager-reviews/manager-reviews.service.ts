@@ -74,6 +74,14 @@ export class ManagerReviewsService {
     }
   }
 
+  // Permet au frontend de pré-remplir/basculer sur PATCH plutôt que de
+  // retenter un POST qui échouerait avec le 409 unique-par-relation
+  // (voir create()) — aucune autre information que l'avis de l'appelant
+  // lui-même n'est exposée ici.
+  async findMine(user: AuthenticatedUser, managerId: string): Promise<ManagerReview | null> {
+    return this.prisma.managerReview.findFirst({ where: { managerId, ownerId: user.id } });
+  }
+
   async update(
     user: AuthenticatedUser,
     managerId: string,
@@ -128,6 +136,14 @@ export class ManagerReviewsService {
         ...(query.zone ? { zonesOfIntervention: { has: query.zone } } : {}),
         ...(query.minRating ? { ratingAverage: { gte: query.minRating } } : {}),
       },
+      ...(query.search
+        ? {
+            OR: [
+              { firstName: { contains: query.search, mode: 'insensitive' } },
+              { lastName: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
 
     const [managers, total] = await Promise.all([
@@ -171,6 +187,7 @@ export class ManagerReviewsService {
         id: true,
         firstName: true,
         lastName: true,
+        email: true,
         city: true,
         createdAt: true,
         managerProfile: {
@@ -209,6 +226,7 @@ export class ManagerReviewsService {
       id: manager.id,
       firstName: manager.firstName,
       lastName: manager.lastName,
+      email: manager.email,
       city: manager.city,
       memberSince: manager.createdAt,
       zonesOfIntervention: manager.managerProfile?.zonesOfIntervention ?? [],

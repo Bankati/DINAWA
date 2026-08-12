@@ -1,19 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { useApi, TTL } from '@/lib/use-api';
+import { useQuery } from '@tanstack/react-query';
+import { Users, Home, CreditCard, AlertTriangle } from 'lucide-react';
+import { api } from '@/lib/api';
 import type { StatistiquesPlateforme } from '@/lib/admin';
 import { formatFcfa, formatNumber } from '@/lib/format';
-import { PageHeader, StatCard, Card, CardHeader, CardBody, Skeleton } from '@/components/ui';
+import { PageHeader, StatCard, Card, CardHeader, CardBody, Skeleton } from '@/components/ds';
 import { RentTypeDonut, MonthlyRevenueChart, DashboardFilters, type DashboardFiltersValue } from '@/components/dashboard';
 
 export default function AdminDashboardPage() {
   const now = new Date();
   const [filters, setFilters] = useState<DashboardFiltersValue>({ mois: now.getMonth() + 1, annee: now.getFullYear() });
 
-  const { data: stats, loading, error: errMsg } = useApi<StatistiquesPlateforme>(
-    `/admin/stats?annee=${filters.annee}&mois=${filters.mois}`, TTL.STABLE,
-  );
+  const { data: stats, isLoading: loading, isError: errMsg } = useQuery({
+    queryKey: ['admin-stats', filters.annee, filters.mois],
+    queryFn: () => api.get<StatistiquesPlateforme>(`/admin/stats?annee=${filters.annee}&mois=${filters.mois}`),
+  });
 
   return (
     <div>
@@ -23,7 +26,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {loading ? (
-        <Card><CardBody><div className="p-2"><Skeleton /><Skeleton /></div></CardBody></Card>
+        <Card><CardBody><div className="flex flex-col gap-3"><Skeleton className="h-10" /><Skeleton className="h-10" /></div></CardBody></Card>
       ) : errMsg || !stats ? (
         <Card><CardBody>
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
@@ -32,34 +35,38 @@ export default function AdminDashboardPage() {
         </CardBody></Card>
       ) : (
         <>
-          <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
             <StatCard
+              index={0}
               label="Utilisateurs inscrits"
               value={formatNumber(stats.nombreUtilisateurs)}
               sub={`↑ +${stats.croissanceUtilisateursMois}% ce mois`}
               tone="success"
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>}
+              icon={<Users className="w-[18px] h-[18px]" />}
             />
             <StatCard
+              index={1}
               label="Biens enregistrés"
               value={formatNumber(stats.nombreBiens)}
               sub={`${stats.tauxOccupation}% d'occupation`}
               tone="primary"
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>}
+              icon={<Home className="w-[18px] h-[18px]" />}
             />
             <StatCard
+              index={2}
               label="Volume transactions (mois)"
               value={formatFcfa(stats.volumeTransactionsMois)}
               sub={`Commissions : ${formatFcfa(stats.commissionsMois)}`}
-              tone="primary"
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>}
+              tone="warning"
+              icon={<CreditCard className="w-[18px] h-[18px]" />}
             />
             <StatCard
+              index={3}
               label="Litiges ouverts"
               value={stats.nombreLitigesOuverts}
               sub="à traiter"
-              tone={stats.nombreLitigesOuverts > 0 ? 'error' : 'primary'}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg>}
+              tone={stats.nombreLitigesOuverts > 0 ? 'error' : 'success'}
+              icon={<AlertTriangle className="w-[18px] h-[18px]" />}
             />
           </div>
 
