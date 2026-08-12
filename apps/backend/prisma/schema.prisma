@@ -185,6 +185,11 @@ model User {
   // local/diaspora). Voir /architect révision inscription owner/manager.
   city                      String?
   accountStatus             AccountStatus       @default(ACTIVE)
+  // Motif de la suspension manuelle par un admin (accountStatus =
+  // SUSPENDED_ADMIN uniquement) — remis à null à la réactivation. Les
+  // suspensions automatiques (inactivité/paiement abonnement) ne renseignent
+  // jamais ce champ, leur motif est implicite dans accountStatus lui-même.
+  suspensionReason          String?
   notificationConsent       NotificationConsent @default(NOT_ASKED)
   reminderDaysBefore        Int                 @default(5)
   overdueGraceDays          Int                 @default(3)

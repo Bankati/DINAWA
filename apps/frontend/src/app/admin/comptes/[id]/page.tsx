@@ -8,7 +8,8 @@ import { ArrowLeft } from 'lucide-react';
 import { adminApi } from '@/lib/admin';
 import { initiales } from '@/lib/format';
 import {
-  Card, CardBody, Badge, Button, Skeleton,
+  Card, CardBody, Badge, Button, Skeleton, Label, Textarea,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from '@/components/ds';
 import { toast } from '@/components/ui';
@@ -47,6 +48,13 @@ export default function CompteDetailPage() {
     enabled: !!id,
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [suspendReason, setSuspendReason] = useState('');
+
+  const invalidateUser = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-user', id] });
+    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => adminApi.deleteUser(id),
@@ -56,6 +64,26 @@ export default function CompteDetailPage() {
       router.push('/admin/comptes');
     },
     onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression'),
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: () => adminApi.suspendUser(id, suspendReason.trim()),
+    onSuccess: () => {
+      invalidateUser();
+      toast.success('Compte suspendu.');
+      setShowSuspendModal(false);
+      setSuspendReason('');
+    },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Erreur lors de la suspension'),
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: () => adminApi.reactivateUser(id),
+    onSuccess: () => {
+      invalidateUser();
+      toast.success('Compte réactivé.');
+    },
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Erreur lors de la réactivation'),
   });
 
   if (loading) {
@@ -109,6 +137,9 @@ export default function CompteDetailPage() {
                 ? `${user._count.ownedProperties} bien${user._count.ownedProperties !== 1 ? 's' : ''}`
                 : `${user._count.leasesAsTenant} bail${user._count.leasesAsTenant !== 1 ? 's' : ''}`}
             />
+            {user.accountStatus === 'SUSPENDED_ADMIN' && (
+              <InfoRow label="Motif de suspension" value={user.suspensionReason ?? '—'} />
+            )}
             <InfoRow label="Tentatives connexion échouées" value={user.failedLoginAttempts} />
             <InfoRow
               label="Compte bloqué jusqu'au"
@@ -127,6 +158,26 @@ export default function CompteDetailPage() {
         </CardBody>
       </Card>
 
+      {user.accountStatus !== 'ACTIVE' ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-6 py-5 mt-5">
+          <h2 className="text-sm font-bold text-amber-900 m-0 mb-1.5">Compte suspendu</h2>
+          <p className="text-sm text-amber-800 m-0 mb-4 leading-relaxed">
+            Réactiver ce compte le repasse immédiatement à Actif et lève toutes les restrictions.
+          </p>
+          <Button onClick={() => reactivateMutation.mutate()} loading={reactivateMutation.isPending}>
+            Réactiver ce compte
+          </Button>
+        </div>
+      ) : user.role !== 'ADMIN' ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-6 py-5 mt-5">
+          <h2 className="text-sm font-bold text-amber-900 m-0 mb-1.5">Suspension manuelle</h2>
+          <p className="text-sm text-amber-800 m-0 mb-4 leading-relaxed">
+            Bloque immédiatement les actions de modification pour cet utilisateur, avec notification par email. Réversible à tout moment.
+          </p>
+          <Button variant="secondary" onClick={() => setShowSuspendModal(true)}>Suspendre ce compte</Button>
+        </div>
+      ) : null}
+
       <div className="bg-red-50 border border-red-200 rounded-xl px-6 py-5 mt-5">
         <h2 className="text-sm font-bold text-red-800 m-0 mb-1.5">Zone de danger</h2>
         <p className="text-sm text-red-700 m-0 mb-4 leading-relaxed">
@@ -134,6 +185,23 @@ export default function CompteDetailPage() {
         </p>
         <Button variant="destructive" onClick={() => setShowDeleteModal(true)}>Supprimer ce compte</Button>
       </div>
+
+      <Dialog open={showSuspendModal} onOpenChange={(open) => !suspendMutation.isPending && setShowSuspendModal(open)}>
+        <DialogContent maxWidth={440}>
+          <DialogHeader><DialogTitle>Suspendre ce compte</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">
+            Le motif est communiqué à <strong className="text-foreground">{user.firstName} {user.lastName}</strong> par email.
+          </p>
+          <Label>Motif <span className="text-destructive">*</span></Label>
+          <Textarea className="mt-1.5" rows={3} value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} placeholder="Ex : activité frauduleuse signalée par un locataire" />
+          <div className="flex gap-2.5 justify-end mt-4">
+            <Button variant="secondary" onClick={() => setShowSuspendModal(false)} disabled={suspendMutation.isPending}>Annuler</Button>
+            <Button variant="destructive" onClick={() => suspendMutation.mutate()} disabled={!suspendReason.trim()} loading={suspendMutation.isPending}>
+              Confirmer la suspension
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showDeleteModal} onOpenChange={(open) => !deleteMutation.isPending && setShowDeleteModal(open)}>
         <AlertDialogContent>

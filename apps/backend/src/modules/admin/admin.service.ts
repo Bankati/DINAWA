@@ -1,30 +1,37 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
-
-export type AdminListUsersQuery = { role?: string; search?: string; page?: number; limit?: number };
+import { NotifyService } from '../notify/notify.service';
+import { SUBSCRIPTION_TIERS } from '../../common/constants';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { SuspendUserDto } from './dto/suspend-user.dto';
+import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
+import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly notify: NotifyService,
   ) {}
 
-  async listUsers(query: AdminListUsersQuery) {
-    const { role, search } = query;
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 50;
+  async listUsers(query: ListUsersQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
     const skip = (page - 1) * limit;
 
     const where: Prisma.UserWhereInput = { anonymizedAt: null };
-    if (role) where.role = role as Prisma.UserWhereInput['role'];
-    if (search) {
+    if (query.role) where.role = query.role;
+    if (query.status) where.accountStatus = query.status;
+    if (query.search) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: query.search, mode: 'insensitive' } },
+        { lastName: { contains: query.search, mode: 'insensitive' } },
+        { email: { contains: query.search, mode: 'insensitive' } },
       ];
     }
 
@@ -78,6 +85,8 @@ export class AdminService {
       newUsersLastMonth,
       repartitionParType,
       paiementsAnnee,
+      comptesSuspendus,
+      activeSubscriptions,
     ] = await Promise.all([
       this.prisma.user.count({ where: { anonymizedAt: null } }),
       this.prisma.property.count(),
@@ -108,6 +117,20 @@ export class AdminService {
         where: { status: 'PAID', paidAt: { gte: yearStart, lte: yearEnd } },
         select: { paidAmount: true, paidAt: true },
       }),
+      this.prisma.user.count({
+        where: { anonymizedAt: null, accountStatus: { not: 'ACTIVE' } },
+      }),
+      // MRR théorique — aucune collecte réelle n'existe encore (unité 36,
+      // prélèvement mensuel, reportée). Exclut les abonnements encore en
+      // période bêta gratuite (betaUntil dans le futur), qui ne représentent
+      // aucun revenu actuel malgré un statut ACTIVE.
+      this.prisma.subscription.findMany({
+        where: {
+          status: { in: ['ACTIVE', 'PENDING_CANCELLATION'] },
+          OR: [{ betaUntil: null }, { betaUntil: { lt: now } }],
+        },
+        select: { tier: true },
+      }),
     ]);
 
     const croissance =
@@ -115,13 +138,19 @@ export class AdminService {
         ? Math.round(((newUsersThisMonth - newUsersLastMonth) / newUsersLastMonth) * 100)
         : 0;
 
+    const mrr = activeSubscriptions.reduce(
+      (sum, s) => sum + SUBSCRIPTION_TIERS[s.tier].priceFcfa,
+      0,
+    );
+
     return {
       nombreUtilisateurs: totalUsers,
       nombreBiens: totalProperties,
       tauxOccupation: totalProperties > 0 ? Math.round((activeLeases / totalProperties) * 100) : 0,
       volumeTransactionsMois: revenusMonth._sum.paidAmount ?? 0,
-      commissionsMois: 0,
       nombreLitigesOuverts: 0,
+      comptesSuspendus,
+      mrr,
       croissanceUtilisateursMois: croissance,
       repartitionBiensParType: repartitionParType.map((r) => ({
         type: r.type,
@@ -130,6 +159,224 @@ export class AdminService {
       })),
       revenusMensuels: this.bucketByMonth(paiementsAnnee, annee),
     };
+  }
+
+  // Classement par volume de loyers réellement encaissés — le regroupement
+  // par propriétaire traverse une relation (Payment -> Lease.ownerId), non
+  // exprimable en un seul groupBy Prisma (limité aux colonnes propres au
+  // modèle agrégé). Agrégation en mémoire, cohérente avec l'échelle actuelle
+  // de la plateforme (même choix déjà fait par bucketByMonth ci-dessus).
+  async topOwners(limit = 10, from?: string, to?: string) {
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        status: 'PAID',
+        ...(from || to
+          ? {
+              paidAt: {
+                ...(from ? { gte: new Date(from) } : {}),
+                ...(to ? { lte: new Date(to) } : {}),
+              },
+            }
+          : {}),
+      },
+      select: {
+        paidAmount: true,
+        lease: { select: { owner: { select: { id: true, firstName: true, lastName: true } } } },
+      },
+    });
+
+    const totals = new Map<string, { firstName: string; lastName: string; total: number }>();
+    for (const p of payments) {
+      const { owner } = p.lease;
+      const entry = totals.get(owner.id) ?? {
+        firstName: owner.firstName,
+        lastName: owner.lastName,
+        total: 0,
+      };
+      entry.total += p.paidAmount;
+      totals.set(owner.id, entry);
+    }
+
+    return Array.from(totals.entries())
+      .map(([id, v]) => ({
+        id,
+        firstName: v.firstName,
+        lastName: v.lastName,
+        totalPaidAmount: v.total,
+      }))
+      .sort((a, b) => b.totalPaidAmount - a.totalPaidAmount)
+      .slice(0, limit);
+  }
+
+  async topManagers(limit = 10) {
+    const grouped = await this.prisma.mandate.groupBy({
+      by: ['managerId'],
+      where: { status: 'ACTIVE' },
+      _count: { _all: true },
+      orderBy: { _count: { managerId: 'desc' } },
+      take: limit,
+    });
+    if (grouped.length === 0) return [];
+
+    const managers = await this.prisma.user.findMany({
+      where: { id: { in: grouped.map((g) => g.managerId) } },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const byId = new Map(managers.map((m) => [m.id, m]));
+
+    return grouped.map((g) => ({
+      id: g.managerId,
+      firstName: byId.get(g.managerId)?.firstName ?? '',
+      lastName: byId.get(g.managerId)?.lastName ?? '',
+      activeMandatesCount: g._count._all,
+    }));
+  }
+
+  async listTransactions(query: ListTransactionsQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+
+    const where: Prisma.PaymentWhereInput = {
+      ...(query.source ? { source: query.source } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.paymentMethod ? { paymentMethod: query.paymentMethod } : {}),
+      ...(query.from || query.to
+        ? {
+            paidAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          source: true,
+          status: true,
+          paymentMethod: true,
+          paidAmount: true,
+          paidAt: true,
+          createdAt: true,
+          lease: {
+            select: {
+              tenant: { select: { firstName: true, lastName: true } },
+              owner: { select: { firstName: true, lastName: true } },
+              property: { select: { address: true, city: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async listAuditLogs(query: ListAuditLogsQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+
+    const where: Prisma.AuditLogWhereInput = {
+      ...(query.actorUserId ? { actorUserId: query.actorUserId } : {}),
+      ...(query.action ? { action: { contains: query.action, mode: 'insensitive' } } : {}),
+      ...(query.entityType ? { entityType: query.entityType } : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          action: true,
+          entityType: true,
+          entityId: true,
+          metadata: true,
+          ipAddress: true,
+          createdAt: true,
+          actorUserId: true,
+          actor: { select: { firstName: true, lastName: true, role: true } },
+        },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async suspendUser(id: string, dto: SuspendUserDto): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, accountStatus: true },
+    });
+    if (!user) throw new NotFoundException('Utilisateur introuvable');
+    if (user.role === 'ADMIN') {
+      throw new ForbiddenException('Impossible de suspendre un compte administrateur');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { accountStatus: 'SUSPENDED_ADMIN', suspensionReason: dto.reason },
+    });
+
+    try {
+      await this.notify.notifyUser({
+        userId: id,
+        event: 'account-suspended',
+        variables: { reason: dto.reason },
+      });
+    } catch (error) {
+      this.logger.error(`[admin/suspend] notification échouée pour user=${id}`, error);
+    }
+
+    return { message: 'Compte suspendu' };
+  }
+
+  async reactivateUser(id: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, accountStatus: true },
+    });
+    if (!user) throw new NotFoundException('Utilisateur introuvable');
+    if (user.accountStatus === 'ACTIVE') {
+      throw new ForbiddenException('Ce compte est déjà actif');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        accountStatus: 'ACTIVE',
+        suspensionReason: null,
+        inactivityWarning30SentAt: null,
+        inactivityWarning7SentAt: null,
+        inactivityWarning1SentAt: null,
+      },
+    });
+
+    try {
+      await this.notify.notifyUser({ userId: id, event: 'account-reactivated', variables: {} });
+    } catch (error) {
+      this.logger.error(`[admin/reactivate] notification échouée pour user=${id}`, error);
+    }
+
+    return { message: 'Compte réactivé' };
   }
 
   private bucketByMonth(
@@ -149,7 +396,7 @@ export class AdminService {
   }
 
   async getUserDetail(id: string) {
-    return this.prisma.user.findUniqueOrThrow({
+    const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -159,6 +406,7 @@ export class AdminService {
         lastName: true,
         role: true,
         accountStatus: true,
+        suspensionReason: true,
         city: true,
         failedLoginAttempts: true,
         lockedUntil: true,
@@ -172,6 +420,8 @@ export class AdminService {
         },
       },
     });
+    if (!user) throw new NotFoundException('Utilisateur introuvable');
+    return user;
   }
 
   async deleteUser(id: string): Promise<{ message: string }> {
