@@ -1,10 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ManagerReview, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminService } from './admin.service';
 import { ManagerReviewsService } from '../manager-reviews/manager-reviews.service';
 import { ModerateReviewDto } from '../manager-reviews/dto/moderate-review.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { SuspendUserDto } from './dto/suspend-user.dto';
+import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
+import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -25,21 +29,58 @@ export class AdminController {
     );
   }
 
+  @Get('top-owners')
+  @ApiOperation({ summary: 'Top propriétaires par volume de loyers encaissés (super admin)' })
+  topOwners(
+    @Query('limit') limit?: number,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.adminService.topOwners(limit ? Number(limit) : undefined, from, to);
+  }
+
+  @Get('top-managers')
+  @ApiOperation({ summary: 'Top gestionnaires par nombre de mandats actifs (super admin)' })
+  topManagers(@Query('limit') limit?: number) {
+    return this.adminService.topManagers(limit ? Number(limit) : undefined);
+  }
+
+  @Get('transactions')
+  @ApiOperation({ summary: 'Supervision de tous les paiements de la plateforme (super admin)' })
+  listTransactions(@Query() query: ListTransactionsQueryDto) {
+    return this.adminService.listTransactions(query);
+  }
+
+  @Get('audit-logs')
+  @ApiOperation({
+    summary: 'Journal d’audit de toute action mutante sur la plateforme (super admin)',
+  })
+  listAuditLogs(@Query() query: ListAuditLogsQueryDto) {
+    return this.adminService.listAuditLogs(query);
+  }
+
   @Get('users')
   @ApiOperation({ summary: 'Liste tous les comptes (super admin)' })
-  listUsers(
-    @Query('role') role?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.adminService.listUsers({ role, search, page, limit });
+  listUsers(@Query() query: ListUsersQueryDto) {
+    return this.adminService.listUsers(query);
   }
 
   @Get('users/:id')
   @ApiOperation({ summary: "Détail d'un compte (super admin)" })
   getUserDetail(@Param('id') id: string) {
     return this.adminService.getUserDetail(id);
+  }
+
+  @Post('users/:id/suspend')
+  @ApiOperation({ summary: 'Suspend manuellement un compte non-admin, avec motif (super admin)' })
+  suspendUser(@Param('id') id: string, @Body() dto: SuspendUserDto) {
+    return this.adminService.suspendUser(id, dto);
+  }
+
+  @Post('users/:id/reactivate')
+  @ApiOperation({ summary: 'Lève une suspension et repasse le compte à ACTIVE (super admin)' })
+  reactivateUser(@Param('id') id: string) {
+    return this.adminService.reactivateUser(id);
   }
 
   @Delete('users/:id')
