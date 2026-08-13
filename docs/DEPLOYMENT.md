@@ -107,6 +107,14 @@ Dans Storage, créer les 5 buckets suivants en mode **privé** :
 > sessions) est gérée entièrement côté NestJS depuis le 2026-08-11 (voir
 > `JWT_SECRET` en section 4b). Supabase ne sert que Postgres + Storage.
 
+### 3d. Sauvegardes
+
+Décision explicite du développeur (2026-08-13, `/architect` Phase 11) : les sauvegardes de la base sont **entièrement déléguées à Supabase**, aucun mécanisme applicatif (export périodique, second stockage) n'est construit côté projet.
+
+- **Plan Free actuel** — pas de sauvegardes automatiques garanties par Supabase sur ce plan. Restauration ponctuelle possible via export manuel (`pg_dump`) en cas de besoin, mais aucune politique de rétention automatique.
+- **Migration prévue vers le plan Pro** — inclut les sauvegardes quotidiennes automatiques avec 7 jours de rétention (point-in-time recovery selon l'offre Supabase au moment de la migration, à reconfirmer dans le dashboard Supabase → Database → Backups au moment du changement de plan).
+- **À refaire au moment de la migration Free → Pro** : vérifier dans le dashboard Supabase que les sauvegardes automatiques sont bien actives, et documenter ici la fréquence/rétention réelle observée.
+
 ---
 
 ## 4. Configurer Railway (backend)

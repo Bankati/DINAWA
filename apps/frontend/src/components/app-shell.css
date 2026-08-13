@@ -145,8 +145,15 @@
 .banner-payment { background: #DC2626; color: white; font-size: 14px; margin: -24px -28px 24px; }
 .banner-admin { background: #1F2937; color: white; font-size: 14px; margin: -24px -28px 24px; }
 
-/* ── Mobile : sidebar en overlay, page en défilement naturel (pas de scroll interne) ── */
-@media (max-width: 767px) {
+/* ── Mobile + tablette : sidebar en overlay, page en défilement naturel
+     (pas de scroll interne) ── Seuil remonté de 767px à 1023px le
+     2026-08-13 : entre les deux, la sidebar fixe de 264px restait affichée
+     en permanence alors que .topbar-search (900px) était encore visible,
+     ce qui écrasait/débordait la topbar sur toute la plage tablette
+     (768-1023px, ex. iPad portrait 768px) — aucun breakpoint ne couvrait
+     cette zone. Réutilise le pattern overlay+hamburger déjà éprouvé sur
+     mobile plutôt que d'inventer une mise en page intermédiaire. */
+@media (max-width: 1023px) {
   .app-frame { height: auto; min-height: 100vh; }
   .main-col { height: auto; }
   .main-content { overflow-y: visible; padding: 16px; }

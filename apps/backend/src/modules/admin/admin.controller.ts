@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ManagerReview, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Cacheable } from '../../common/decorators/cacheable.decorator';
+import { CACHE_TTL_DASHBOARD, CACHE_TTL_LIST } from '../../common/constants';
 import { AdminService } from './admin.service';
 import { ManagerReviewsService } from '../manager-reviews/manager-reviews.service';
 import { ModerateReviewDto } from '../manager-reviews/dto/moderate-review.dto';
@@ -21,6 +23,7 @@ export class AdminController {
   ) {}
 
   @Get('stats')
+  @Cacheable(CACHE_TTL_DASHBOARD)
   @ApiOperation({ summary: 'Statistiques globales plateforme (super admin)' })
   getStats(@Query('annee') annee?: number, @Query('mois') mois?: number) {
     return this.adminService.getStats(
@@ -30,6 +33,7 @@ export class AdminController {
   }
 
   @Get('top-owners')
+  @Cacheable(CACHE_TTL_DASHBOARD)
   @ApiOperation({ summary: 'Top propriétaires par volume de loyers encaissés (super admin)' })
   topOwners(
     @Query('limit') limit?: number,
@@ -40,12 +44,14 @@ export class AdminController {
   }
 
   @Get('top-managers')
+  @Cacheable(CACHE_TTL_DASHBOARD)
   @ApiOperation({ summary: 'Top gestionnaires par nombre de mandats actifs (super admin)' })
   topManagers(@Query('limit') limit?: number) {
     return this.adminService.topManagers(limit ? Number(limit) : undefined);
   }
 
   @Get('transactions')
+  @Cacheable(CACHE_TTL_LIST)
   @ApiOperation({ summary: 'Supervision de tous les paiements de la plateforme (super admin)' })
   listTransactions(@Query() query: ListTransactionsQueryDto) {
     return this.adminService.listTransactions(query);
@@ -60,6 +66,7 @@ export class AdminController {
   }
 
   @Get('users')
+  @Cacheable(CACHE_TTL_LIST)
   @ApiOperation({ summary: 'Liste tous les comptes (super admin)' })
   listUsers(@Query() query: ListUsersQueryDto) {
     return this.adminService.listUsers(query);

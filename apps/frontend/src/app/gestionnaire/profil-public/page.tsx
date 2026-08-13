@@ -91,7 +91,7 @@ export default function GestionnaireProfilPublicPage() {
         <Card><CardBody><div className="text-center text-muted-foreground py-8">Chargement…</div></CardBody></Card>
       ) : (
         <div className="flex flex-col gap-5">
-          <div className="grid gap-6 items-start" style={{ gridTemplateColumns: '280px 1fr' }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
             <Card>
               <CardBody>
                 <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">Aperçu public</div>
@@ -129,7 +129,7 @@ export default function GestionnaireProfilPublicPage() {
                 {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600 mb-4">{error}</div>}
                 {success && <div className="bg-green-50 border border-green-200 rounded-lg px-3.5 py-2.5 text-sm text-green-700 font-semibold mb-4">✓ {success}</div>}
                 <form onSubmit={save} className="flex flex-col gap-4">
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     <div>
                       <Label>Prénom <span className="text-destructive">*</span></Label>
                       <Input className="mt-1.5" required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
@@ -143,7 +143,7 @@ export default function GestionnaireProfilPublicPage() {
                     <Label>Email (lecture seule)</Label>
                     <Input className="mt-1.5 bg-ds-secondary text-muted-foreground cursor-not-allowed" value={profile?.email ?? ''} disabled />
                   </div>
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     <div>
                       <Label>Téléphone</Label>
                       <Input className="mt-1.5" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />

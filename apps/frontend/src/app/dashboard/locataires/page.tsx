@@ -356,11 +356,11 @@ export default function LocatairesPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {linkField('Prénom', 'firstName', { required: true, placeholder: 'Ama' })}
                       {linkField('Nom', 'lastName', { required: true, placeholder: 'Kodjo' })}
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {linkField('Téléphone', 'phone', { required: true, placeholder: '90330557' })}
                       {linkField('Email', 'email', { required: true, type: 'email', placeholder: 'ama.kodjo@email.com' })}
                     </div>
@@ -380,7 +380,7 @@ export default function LocatairesPage() {
                     <div className="text-xs text-muted-foreground mt-1.5">Aucun bien vacant ou en travaux disponible pour l&apos;instant.</div>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <Label>Fréquence de paiement <span className="text-destructive">*</span></Label>
                     <Select value={linkForm.paymentFrequency} onValueChange={(v) => setLinkForm((f) => ({ ...f, paymentFrequency: v }))}>
@@ -395,14 +395,14 @@ export default function LocatairesPage() {
                   </div>
                   {linkField('Dépôt de garantie (FCFA)', 'securityDeposit', { type: 'number', min: '0', placeholder: '0' })}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {linkField('Date de début', 'startDate', { required: true, type: 'date' })}
                   {linkField('Date de fin', 'endDate', { type: 'date' })}
                 </div>
                 <div className="border-t border-ds-border pt-4">
                   <div className="text-sm font-bold text-foreground mb-1">Alertes de paiement</div>
                   <div className="text-xs text-muted-foreground mb-3">Laissez vide pour utiliser vos réglages par défaut (Paramètres).</div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {linkField('Rappel avant échéance (jours)', 'reminderDaysBefore', { type: 'number', min: '1', max: '90', placeholder: 'Ex: 5' })}
                     {linkField('Alerte de retard après (jours)', 'overdueAlertWindowDays', { type: 'number', min: '1', max: '90', placeholder: 'Ex: 3' })}
                   </div>

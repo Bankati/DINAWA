@@ -22,7 +22,9 @@ export const AlertDialogContent = forwardRef<
       <AlertDialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-full max-w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-ds-border bg-card p-6 shadow-xl',
+          // Voir dialog.tsx — w-[calc(100%-2rem)] garantit 1rem de marge de
+          // chaque côté sur mobile (audit responsive 2026-08-13).
+          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-ds-border bg-card p-6 shadow-xl',
           'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           className,
         )}

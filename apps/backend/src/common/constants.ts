@@ -52,3 +52,21 @@ export const SUBSCRIPTION_TIERS = {
 // Période bêta — 3 mois gratuits à l'inscription (voir /architect unité 35),
 // y compris pour les comptes rétro-remplis lors de la sortie de cette unité.
 export const BETA_FREE_MONTHS = 3;
+
+// Quotas de rate limiting renforcés sur les endpoints publics les plus
+// exposés à l'abus (voir /architect Phase 11, 2026-08-13) — surchargent le
+// throttler global 'default' (100 req/min/IP, app.module.ts) uniquement sur
+// ces routes précises. ttl en millisecondes, à passer directement à
+// @Throttle({ default: { limit, ttl } }).
+export const THROTTLE_LOGIN = { default: { limit: 10, ttl: 60_000 } };
+export const THROTTLE_SIGNUP = { default: { limit: 5, ttl: 3_600_000 } };
+export const THROTTLE_PASSWORD_RESET_REQUEST = { default: { limit: 5, ttl: 3_600_000 } };
+export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
+
+// Cache serveur des pages de consultation (voir CacheInterceptor,
+// diagnostic de lenteur, 2026-08-13) — en millisecondes. Volontairement
+// courts : l'invalidation automatique couvre les mutations de l'acteur
+// lui-même, ces TTL ne bornent que la fraîcheur perçue par un AUTRE acteur
+// (ex. propriétaire voyant une déclaration de paiement d'un locataire).
+export const CACHE_TTL_DASHBOARD = 20_000;
+export const CACHE_TTL_LIST = 15_000;
