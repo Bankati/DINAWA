@@ -50,7 +50,7 @@ export function CommandPalette({ items, open: openProp, onOpenChange }: CommandP
       open={open}
       onOpenChange={setOpen}
       label="Palette de commandes"
-      className="fixed left-1/2 top-[18%] z-[100] w-full max-w-[560px] -translate-x-1/2 overflow-hidden rounded-2xl border border-ds-border bg-popover text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95"
+      className="fixed left-1/2 top-[18%] z-[100] w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 overflow-hidden rounded-2xl border border-ds-border bg-popover text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95"
     >
       <div className="flex items-center gap-2.5 border-b border-ds-border px-4 py-3">
         <Search className="w-4 h-4 text-muted-foreground shrink-0" />

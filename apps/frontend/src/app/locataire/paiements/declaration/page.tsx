@@ -204,7 +204,7 @@ export default function PaymentDeclarationPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label>Montant déclaré (FCFA) <span className="text-destructive">*</span></Label>
                       <Input className="mt-1.5" type="number" value={declaredAmount} onChange={(e) => setDeclaredAmount(e.target.value)} placeholder="0" required min="1" />

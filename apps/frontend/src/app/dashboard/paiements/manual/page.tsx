@@ -216,7 +216,7 @@ export default function PaiementManualPage() {
 
               {scheduleEntryId && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label>Montant reçu (FCFA) <span className="text-destructive">*</span></Label>
                       <Input className="mt-1.5" type="number" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} required min="1" />

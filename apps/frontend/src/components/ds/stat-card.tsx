@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 export interface StatCardProps {
@@ -34,11 +33,17 @@ const TONE_STYLES: Record<string, { cardBg: string; iconBg: string; progressBar:
 export function StatCard({ label, value, sub, icon, tone = 'primary', progressPercent, index = 0 }: StatCardProps) {
   const styles = TONE_STYLES[tone];
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: index * 0.05, ease: 'easeOut' }}
-      className={cn('bg-gradient-to-br border border-ds-border rounded-xl p-5 flex flex-col gap-3 shadow-sm', styles.cardBg)}
+    <div
+      // Animation d'entrée en CSS pur (tailwindcss-animate, déjà utilisé par
+      // ds/Dialog) plutôt que framer-motion — retiré du bundle de toutes les
+      // pages authentifiées le 2026-08-13 (diagnostic de lenteur, StatCard
+      // est monté sur ~40 pages, framer-motion n'y servait qu'à ce fondu).
+      // fill-mode-both évite le flash "visible" pendant le délai de stagger.
+      className={cn(
+        'bg-gradient-to-br border border-ds-border rounded-xl p-5 flex flex-col gap-3 shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 ease-out',
+        styles.cardBg,
+      )}
+      style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
@@ -58,6 +63,6 @@ export function StatCard({ label, value, sub, icon, tone = 'primary', progressPe
           />
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

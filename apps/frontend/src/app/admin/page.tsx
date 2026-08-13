@@ -95,7 +95,7 @@ export default function AdminDashboardPage() {
             />
           </div>
 
-          <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: '2fr 1fr' }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 mb-5">
             <Card>
               <CardHeader>
                 <h2 className="text-sm font-bold text-primary-dark m-0">Revenus plateforme</h2>

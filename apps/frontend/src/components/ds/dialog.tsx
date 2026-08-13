@@ -36,7 +36,11 @@ export const DialogContent = forwardRef<
         ref={ref}
         style={{ maxWidth }}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-ds-border bg-card p-6 shadow-xl',
+          // w-[calc(100%-2rem)] plutôt que w-full : garantit 1rem de marge de
+          // chaque côté sur mobile (w-full sur un élément fixed = 100vw, la
+          // boîte touchait les deux bords de l'écran — trouvé lors de
+          // l'audit responsive du 2026-08-13).
+          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-ds-border bg-card p-6 shadow-xl',
           'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           'max-h-[90vh] overflow-y-auto',
           className,

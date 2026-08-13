@@ -37,6 +37,7 @@ import { ContactModule } from './modules/contact/contact.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
+import { CacheInterceptor } from './common/interceptors/cache.interceptor';
 
 @Module({
   imports: [
@@ -179,6 +180,13 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditLogInterceptor,
+    },
+    // Cache serveur des pages de consultation coûteuses (@Cacheable(ttlMs)),
+    // invalidation automatique sur les mutations de l'acteur — voir
+    // common/interceptors/cache.interceptor.ts (diagnostic de lenteur, 2026-08-13)
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: CacheInterceptor,
     },
   ],
 })

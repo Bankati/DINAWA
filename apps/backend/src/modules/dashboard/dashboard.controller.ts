@@ -4,8 +4,10 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Cacheable } from '../../common/decorators/cacheable.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { CACHE_TTL_DASHBOARD } from '../../common/constants';
 import { DashboardService, DashboardSummary } from './dashboard.service';
 
 class DashboardQueryDto {
@@ -31,6 +33,7 @@ export class DashboardController {
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
+  @Cacheable(CACHE_TTL_DASHBOARD)
   @ApiOperation({
     summary: 'Résumé dashboard — KPIs, revenus mensuels, biens et paiements récents',
   })

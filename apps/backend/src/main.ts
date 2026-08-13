@@ -48,12 +48,17 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // CORS
+  // CORS — maxAge fait mettre en cache la réponse au préflight OPTIONS côté
+  // navigateur (24h) : sans lui, chaque appel API authentifié (Authorization
+  // + Content-Type déclenchent tous deux un préflight) paie un aller-retour
+  // réseau OPTIONS en plus de la vraie requête, à chaque fois. Trouvé en
+  // diagnostiquant la lenteur ressentie en production (2026-08-13).
   const allowedOrigins = process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:4300'];
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: 86_400,
   });
 
   // Swagger — désactivé en production

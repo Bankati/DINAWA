@@ -272,7 +272,7 @@ export default function DelegationPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <Label>Type de commission</Label>
                 <Select value={form.feeType} onValueChange={(v) => setForm((f) => ({ ...f, feeType: v as 'PERCENTAGE' | 'FLAT' }))}>
@@ -289,7 +289,7 @@ export default function DelegationPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <Label>Date de début <span className="text-destructive">*</span></Label>
                 <Input className="mt-1.5" type="date" required value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
