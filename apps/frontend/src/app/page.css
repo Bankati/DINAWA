@@ -28,11 +28,15 @@ img { max-width: 100%; }
 .s-arrow { width: 18px; height: 18px; }
 
 .hero-slide-controls { display: flex; align-items: center; gap: 14px; }
-.h-arrow { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.3); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .2s, border-color .2s; }
+.h-arrow { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.3); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .2s, border-color .2s; }
 .h-arrow:hover { background: rgba(255,255,255,.24); border-color: rgba(255,255,255,.5); }
 .h-arrow svg { width: 15px; height: 15px; }
 .h-dots { display: flex; gap: 7px; }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); border: none; cursor: pointer; transition: background .25s, width .25s; padding: 0; }
+/* Zone cliquable ≥44px sans agrandir le point visuel (7px) — le ::before
+   étend la zone de clic via un pseudo-élément invisible plus grand,
+   centré sur le point (audit responsive 2026-08-13). */
+.dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); border: none; cursor: pointer; transition: background .25s, width .25s; padding: 0; }
+.dot::before { content: ''; position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .dot.dot-on { background: var(--color-accent); width: 22px; border-radius: 4px; }
 
 /* Colonne droite : mockup téléphone */
@@ -367,7 +371,9 @@ img { max-width: 100%; }
 
 /* Points de pagination */
 .ts-dots { display: flex; justify-content: center; gap: 9px; margin-top: 36px; }
-.ts-dot { width: 9px; height: 9px; border-radius: 50%; background: #D8DEE8; border: none; cursor: pointer; padding: 0; transition: background .25s, width .25s; }
+/* Voir .dot ci-dessus — même technique de zone cliquable élargie. */
+.ts-dot { position: relative; width: 9px; height: 9px; border-radius: 50%; background: #D8DEE8; border: none; cursor: pointer; padding: 0; transition: background .25s, width .25s; }
+.ts-dot::before { content: ''; position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .ts-dot-on { background: var(--color-accent); width: 26px; border-radius: 4px; }
 
 @media (max-width: 900px) {

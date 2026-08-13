@@ -2,8 +2,10 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Cacheable } from '../../common/decorators/cacheable.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { CACHE_TTL_LIST } from '../../common/constants';
 import { TenantsService, PaginatedLeaseHistory, TenantSummary } from './tenants.service';
 import { LeaseHistoryQueryDto } from './dto/lease-history-query.dto';
 
@@ -15,6 +17,7 @@ export class TenantsController {
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
+  @Cacheable(CACHE_TTL_LIST)
   @ApiOperation({
     summary: 'Liste les locataires invités par le propriétaire/gestionnaire courant',
   })

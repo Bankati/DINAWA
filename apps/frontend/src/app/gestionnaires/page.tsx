@@ -323,7 +323,7 @@ function ManagerProfileDialog({ managerId, onClose }: { managerId: string | null
               )}
               {detail.pricingNote && <p className="text-sm text-foreground bg-ds-secondary rounded-lg px-3.5 py-2.5 m-0">{detail.pricingNote}</p>}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="rounded-lg border border-ds-border p-3">
                   <div className="text-xs text-muted-foreground">Biens gérés</div>
                   <div className="text-lg font-bold text-foreground">{detail.portfolio.totalManagedProperties}</div>

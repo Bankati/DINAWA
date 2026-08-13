@@ -175,7 +175,7 @@ export default function GestionnaireDashboard() {
         />
       </div>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: '2fr 1fr' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Revenus mensuels</CardTitle>

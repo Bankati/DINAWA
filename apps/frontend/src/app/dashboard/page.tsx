@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -34,10 +33,12 @@ function initiales2(nom: string): string {
   return nom.split(' ').map((p) => p[0] || '').join('').substring(0, 2).toUpperCase();
 }
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 10 },
-  visible: (delay: number) => ({ opacity: 1, y: 0, transition: { duration: 0.3, delay, ease: 'easeOut' as const } }),
-};
+// Animation d'entrée en CSS pur (tailwindcss-animate) plutôt que
+// framer-motion — retiré le 2026-08-13 (diagnostic de lenteur).
+const FADE_UP_CLASS = 'animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 ease-out';
+function fadeUpDelay(delaySeconds: number): { animationDelay: string } {
+  return { animationDelay: `${delaySeconds * 1000}ms` };
+}
 
 const QUICK_ACTIONS = [
   { href: '/dashboard/biens', label: 'Ajouter un bien', sub: 'Nouveau bien locatif', icon: Plus, tone: 'bg-primary' },
@@ -167,7 +168,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Revenus + Répartition par type ── */}
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0.2} className="chart-alerts-grid">
+      <div className={cn('chart-alerts-grid', FADE_UP_CLASS)} style={fadeUpDelay(0.2)}>
         <Card>
           <CardHeader>
             <CardTitle>Analyse des revenus</CardTitle>
@@ -186,10 +187,10 @@ export default function DashboardPage() {
             {isLoading ? <div className="sk-line" /> : <RentTypeDonut data={repartition} />}
           </CardBody>
         </Card>
-      </motion.div>
+      </div>
 
       {/* ── Actions rapides — tuiles colorées ── */}
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0.25}>
+      <div className={FADE_UP_CLASS} style={fadeUpDelay(0.25)}>
         <Card>
           <CardHeader>
             <CardTitle>Actions rapides</CardTitle>
@@ -214,10 +215,10 @@ export default function DashboardPage() {
             </div>
           </CardBody>
         </Card>
-      </motion.div>
+      </div>
 
       {/* ── Paiements + Biens récents ── */}
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0.3} className="tables-grid">
+      <div className={cn('tables-grid', FADE_UP_CLASS)} style={fadeUpDelay(0.3)}>
         <Card>
           <CardHeader>
             <CardTitle>Derniers paiements</CardTitle>
@@ -291,10 +292,10 @@ export default function DashboardPage() {
             )}
           </CardBody>
         </Card>
-      </motion.div>
+      </div>
 
       {/* ── Actions en attente — uniquement des compteurs réels ── */}
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0.35}>
+      <div className={FADE_UP_CLASS} style={fadeUpDelay(0.35)}>
         <Card>
           <CardHeader>
             <CardTitle>Actions en attente</CardTitle>
@@ -329,7 +330,7 @@ export default function DashboardPage() {
             )}
           </CardBody>
         </Card>
-      </motion.div>
+      </div>
     </div>
   );
 }

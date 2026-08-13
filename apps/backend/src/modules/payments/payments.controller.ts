@@ -15,9 +15,10 @@ import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagg
 import { Response } from 'express';
 import { Payment, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Cacheable } from '../../common/decorators/cacheable.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
-import { MAX_DOCUMENT_BYTES } from '../../common/constants';
+import { CACHE_TTL_LIST, MAX_DOCUMENT_BYTES } from '../../common/constants';
 import { PaymentsService, PaginatedPayments } from './payments.service';
 import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
@@ -53,6 +54,7 @@ export class PaymentsController {
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN, UserRole.TENANT)
+  @Cacheable(CACHE_TTL_LIST)
   @ApiOperation({ summary: 'Historique paginé des paiements, filtrable' })
   findAll(
     @CurrentUser() user: AuthenticatedUser,

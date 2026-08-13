@@ -91,7 +91,7 @@ function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> 
         <Input className="mt-1.5" placeholder="Ex: Rue des Cocotiers, lot 42" {...register('address')} />
         {errors.address && <p className="text-xs text-destructive mt-1">{errors.address.message}</p>}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <Label>Quartier</Label>
           <Input className="mt-1.5" placeholder="Ex: Agbalépédogan" {...register('neighborhood')} />
@@ -103,7 +103,7 @@ function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> 
           {errors.city && <p className="text-xs text-destructive mt-1">{errors.city.message}</p>}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <Label>Surface (m²)</Label>
           <Input className="mt-1.5" type="number" min="1" placeholder="75" {...register('surfaceArea')} />
@@ -113,7 +113,7 @@ function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> 
           <Input className="mt-1.5" type="number" min="1" placeholder="3" {...register('roomsCount')} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <Label>Loyer mensuel (FCFA)</Label>
           <Input className="mt-1.5" type="number" min="0" placeholder="150000" {...register('monthlyRent')} />

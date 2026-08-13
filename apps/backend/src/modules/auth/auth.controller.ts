@@ -1,10 +1,16 @@
 import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import {
+  THROTTLE_LOGIN,
+  THROTTLE_SIGNUP,
+  THROTTLE_PASSWORD_RESET_REQUEST,
+} from '../../common/constants';
 import {
   AuthService,
   AuthMeResponse,
@@ -29,6 +35,7 @@ export class AuthController {
 
   @Post('signup/owner')
   @Public()
+  @Throttle(THROTTLE_SIGNUP)
   @HttpCode(201)
   @ApiOperation({
     summary: 'Inscription propriétaire',
@@ -40,6 +47,7 @@ export class AuthController {
 
   @Post('signup/manager')
   @Public()
+  @Throttle(THROTTLE_SIGNUP)
   @HttpCode(201)
   @ApiOperation({
     summary: 'Inscription gestionnaire',
@@ -68,6 +76,7 @@ export class AuthController {
 
   @Post('signup/tenant')
   @Public()
+  @Throttle(THROTTLE_SIGNUP)
   @ApiOperation({
     summary: "Active le compte locataire créé par l'invitation",
     description:
@@ -83,6 +92,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @Throttle(THROTTLE_LOGIN)
   @ApiOperation({
     summary: 'Connexion par email et mot de passe',
     description:
@@ -107,6 +117,7 @@ export class AuthController {
 
   @Post('password-reset/request')
   @Public()
+  @Throttle(THROTTLE_PASSWORD_RESET_REQUEST)
   @ApiOperation({
     summary: 'Demande un code de réinitialisation de mot de passe',
     description:

@@ -16,9 +16,11 @@ import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagg
 import { Property, UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowWhileSuspended } from '../../common/decorators/allow-while-suspended.decorator';
+import { Cacheable } from '../../common/decorators/cacheable.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import {
+  CACHE_TTL_LIST,
   MAX_DOCUMENT_BYTES,
   MAX_DOCUMENTS_PER_PROPERTY,
   MAX_PHOTOS_PER_PROPERTY,
@@ -62,6 +64,7 @@ export class PropertiesController {
   }
 
   @Get()
+  @Cacheable(CACHE_TTL_LIST)
   @ApiOperation({ summary: "Liste paginée des biens visibles par l'utilisateur courant" })
   findAll(
     @CurrentUser() user: AuthenticatedUser,
