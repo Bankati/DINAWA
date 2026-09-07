@@ -23,7 +23,12 @@ import { RejectPaymentDto } from './dto/reject-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PAYMENT_CONFIRMED } from './payment.events';
-import { PaydunyaService, PaydunyaInvoiceStatus, PaydunyaError } from './paydunya.service';
+import {
+  PaydunyaService,
+  PaydunyaInvoiceStatus,
+  PaydunyaError,
+  checkoutUrlFor,
+} from './paydunya.service';
 import { PAYDUNYA_ABANDON_AFTER_MS } from '../../common/constants';
 
 export type PaymentWithAccess = Prisma.PaymentGetPayload<{
@@ -139,6 +144,27 @@ export class PaymentsService {
     const remaining = scheduleEntry.expectedAmount - scheduleEntry.paidAmount;
     if (remaining <= 0) {
       throw new ConflictException('Cette échéance est déjà réglée');
+    }
+
+    // Garde anti-double appel (trouvé en /review, 2026-09-07) — un
+    // double-clic ou un retry client ne doit jamais créer une deuxième
+    // facture PayDunya distincte pour la même échéance : si un paiement
+    // PENDING avec facture déjà créée existe, on renvoie son checkoutUrl
+    // plutôt que d'en générer un second (qui doublerait le crédit si les
+    // deux étaient payés). Un PENDING sans transactionId (tentative
+    // précédente jamais aboutie chez PayDunya) n'est pas repris ici — voir
+    // le `not: null` — une nouvelle tentative est alors légitime.
+    const existing = await this.prisma.payment.findFirst({
+      where: {
+        scheduleEntryId: scheduleEntry.id,
+        source: 'PAYDUNYA_API',
+        status: 'PENDING',
+        transactionId: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing?.transactionId) {
+      return { paymentId: existing.id, checkoutUrl: checkoutUrlFor(existing.transactionId) };
     }
 
     const payment = await this.prisma.payment.create({
@@ -334,9 +360,15 @@ export class PaymentsService {
   // Revérifie le statut réel d'un Payment PAYDUNYA_API auprès de PayDunya et
   // met à jour en conséquence — réutilisé par le webhook (immédiat) et
   // PaydunyaReconciliationTask (rattrapage périodique, voir /architect
-  // 2026-09-07). Idempotent par construction : un Payment déjà PAID/REJECTED
-  // ne repasse jamais par ce chemin (voir le early-return ci-dessous), donc
-  // deux appels concurrents (webhook + cron) n'ont pas d'effet dupliqué.
+  // 2026-09-07). Idempotence réelle (pas seulement applicative, voir
+  // architecture.md invariant #3) : chaque écriture est un `updateMany({
+  // where: { id, status: 'PENDING' } })` — si le webhook et le cron
+  // s'exécutent en même temps sur le même paiement, un seul des deux gagne
+  // la course (Postgres verrouille la ligne le temps de l'UPDATE), l'autre
+  // voit `count: 0` et sort sans rien faire de plus. Un `findUnique` suivi
+  // d'un `update` séparés ne suffirait pas — la fenêtre entre lecture et
+  // écriture laisserait passer les deux appels (bug trouvé en /review,
+  // 2026-09-07, corrigé ici).
   async reconcilePaydunyaPayment(paymentId: string): Promise<void> {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
@@ -361,11 +393,12 @@ export class PaymentsService {
 
     if (paydunyaStatus === 'completed') {
       const paidAmount = payment.scheduleEntry.paidAmount + payment.paidAmount;
-      const updated = await this.prisma.$transaction(async (tx) => {
-        const confirmed = await tx.payment.update({
-          where: { id: paymentId },
+      const claimed = await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.payment.updateMany({
+          where: { id: paymentId, status: 'PENDING' },
           data: { status: 'PAID', paidAt: new Date() },
         });
+        if (count === 0) return false; // déjà traité par un appel concurrent
         await tx.paymentScheduleEntry.update({
           where: { id: payment.scheduleEntryId },
           data: {
@@ -373,15 +406,17 @@ export class PaymentsService {
             status: computeEntryStatus(paidAmount, payment.scheduleEntry.expectedAmount),
           },
         });
-        return confirmed;
+        return true;
       });
-      this.events.emit(PAYMENT_CONFIRMED, { paymentId: updated.id });
+      if (claimed) {
+        this.events.emit(PAYMENT_CONFIRMED, { paymentId });
+      }
       return;
     }
 
     if (paydunyaStatus === 'cancelled' || paydunyaStatus === 'failed') {
-      await this.prisma.payment.update({
-        where: { id: paymentId },
+      await this.prisma.payment.updateMany({
+        where: { id: paymentId, status: 'PENDING' },
         data: {
           status: 'REJECTED',
           rejectionReason: `Paiement PayDunya ${paydunyaStatus === 'cancelled' ? 'annulé' : 'échoué'}`,
@@ -396,8 +431,8 @@ export class PaymentsService {
     // ce cas en pratique — le webhook n'arrive jamais pour un paiement resté
     // réellement pending côté PayDunya).
     if (Date.now() - payment.createdAt.getTime() > PAYDUNYA_ABANDON_AFTER_MS) {
-      await this.prisma.payment.update({
-        where: { id: paymentId },
+      await this.prisma.payment.updateMany({
+        where: { id: paymentId, status: 'PENDING' },
         data: {
           status: 'REJECTED',
           rejectionReason: 'Paiement PayDunya non confirmé après 24h — expiré',

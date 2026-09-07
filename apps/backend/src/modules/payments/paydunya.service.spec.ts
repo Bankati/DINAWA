@@ -1,4 +1,4 @@
-import { PaydunyaService, PaydunyaError } from './paydunya.service';
+import { PaydunyaService, PaydunyaError, checkoutUrlFor } from './paydunya.service';
 
 const post = jest.fn();
 const get = jest.fn();
@@ -81,6 +81,27 @@ describe('PaydunyaService', () => {
         cancelUrl: 'https://warah.tg/cancel',
       }),
     ).rejects.toThrow(PaydunyaError);
+  });
+
+  it("createInvoice n'effectue qu'un seul essai — jamais de retry (opération non idempotente, /review 2026-09-07)", async () => {
+    post.mockRejectedValue(new Error('ECONNRESET'));
+    const service = new PaydunyaService(makeConfig() as never);
+
+    await expect(
+      service.createInvoice({
+        amount: 55000,
+        description: 'WARAH — test',
+        paymentId: 'payment-1',
+        callbackUrl: 'https://api.warah.tg/api/payments/webhooks/paydunya?paymentId=payment-1',
+        returnUrl: 'https://warah.tg/ok',
+        cancelUrl: 'https://warah.tg/cancel',
+      }),
+    ).rejects.toThrow('ECONNRESET');
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('checkoutUrlFor construit la même URL que createInvoice pour un token donné', () => {
+    expect(checkoutUrlFor('inv-abc')).toBe('https://paydunya.com/checkout/invoice/inv-abc');
   });
 
   it('createInvoice lève PaydunyaError sans appeler PayDunya si les clés manquent', async () => {

@@ -12,14 +12,16 @@ describe('PaymentsService', () => {
     payment: {
       create: jest.Mock;
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       findMany: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     mandate: { findFirst: jest.Mock };
   };
   let tx: {
-    payment: { create: jest.Mock; update: jest.Mock };
+    payment: { create: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
     paymentScheduleEntry: { update: jest.Mock };
   };
   let storage: { upload: jest.Mock };
@@ -76,6 +78,7 @@ describe('PaymentsService', () => {
           .fn()
           .mockResolvedValue(makePayment({ status: 'PAID', source: 'MANUAL_OWNER' })),
         update: jest.fn().mockResolvedValue(makePayment({ status: 'PAID' })),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       paymentScheduleEntry: { update: jest.fn().mockResolvedValue({}) },
     };
@@ -87,9 +90,11 @@ describe('PaymentsService', () => {
           .fn()
           .mockResolvedValue(makePayment({ source: 'PAYDUNYA_API', status: 'PENDING' })),
         findUnique: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
         update: jest.fn().mockResolvedValue(makePayment({ status: 'REJECTED' })),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
     };
@@ -348,6 +353,47 @@ describe('PaymentsService', () => {
       await expect(service.initiate(tenant, dto)).rejects.toThrow('indisponible');
       expect(prisma.payment.create).toHaveBeenCalled();
     });
+
+    it('réutilise une facture PENDING déjà créée plutôt que d’en recréer une seconde (anti double-clic)', async () => {
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 'payment-existing',
+        transactionId: 'pd-token-existing',
+      });
+
+      const result = await service.initiate(tenant, dto);
+
+      const [findFirstArgs] = prisma.payment.findFirst.mock.calls[0] as [
+        {
+          where: {
+            scheduleEntryId: string;
+            source: string;
+            status: string;
+            transactionId: unknown;
+          };
+        },
+      ];
+      expect(findFirstArgs.where).toEqual({
+        scheduleEntryId: 'entry-1',
+        source: 'PAYDUNYA_API',
+        status: 'PENDING',
+        transactionId: { not: null },
+      });
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+      expect(paydunya.createInvoice).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        paymentId: 'payment-existing',
+        checkoutUrl: 'https://paydunya.com/checkout/invoice/pd-token-existing',
+      });
+    });
+
+    it('ignore un PENDING existant sans transactionId (tentative précédente jamais aboutie) et en crée un nouveau', async () => {
+      prisma.payment.findFirst.mockResolvedValue({ id: 'payment-orphan', transactionId: null });
+
+      await service.initiate(tenant, dto);
+
+      expect(prisma.payment.create).toHaveBeenCalled();
+      expect(paydunya.createInvoice).toHaveBeenCalled();
+    });
   });
 
   describe('reconcilePaydunyaPayment', () => {
@@ -383,12 +429,24 @@ describe('PaymentsService', () => {
 
       await service.reconcilePaydunyaPayment('payment-1');
 
-      const [updateArgs] = tx.payment.update.mock.calls[0] as [
-        { where: { id: string }; data: { status: string } },
+      const [updateManyArgs] = tx.payment.updateMany.mock.calls[0] as [
+        { where: { id: string; status: string }; data: { status: string } },
       ];
-      expect(updateArgs.where).toEqual({ id: 'payment-1' });
-      expect(updateArgs.data.status).toBe('PAID');
+      expect(updateManyArgs.where).toEqual({ id: 'payment-1', status: 'PENDING' });
+      expect(updateManyArgs.data.status).toBe('PAID');
+      expect(tx.paymentScheduleEntry.update).toHaveBeenCalled();
       expect(events.emit).toHaveBeenCalledWith(PAYMENT_CONFIRMED, { paymentId: 'payment-1' });
+    });
+
+    it("n'incrémente rien et n'émet aucun événement si un appel concurrent a déjà traité ce paiement (course webhook/cron)", async () => {
+      prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment());
+      paydunya.confirmInvoiceStatus.mockResolvedValue('completed');
+      tx.payment.updateMany.mockResolvedValue({ count: 0 });
+
+      await service.reconcilePaydunyaPayment('payment-1');
+
+      expect(tx.paymentScheduleEntry.update).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
     });
 
     it('passe à REJECTED quand PayDunya confirme "cancelled"', async () => {
@@ -397,8 +455,8 @@ describe('PaymentsService', () => {
 
       await service.reconcilePaydunyaPayment('payment-1');
 
-      expect(prisma.payment.update).toHaveBeenCalledWith({
-        where: { id: 'payment-1' },
+      expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+        where: { id: 'payment-1', status: 'PENDING' },
         data: { status: 'REJECTED', rejectionReason: 'Paiement PayDunya annulé' },
       });
     });
@@ -409,8 +467,8 @@ describe('PaymentsService', () => {
 
       await service.reconcilePaydunyaPayment('payment-1');
 
-      expect(prisma.payment.update).not.toHaveBeenCalled();
-      expect(tx.payment.update).not.toHaveBeenCalled();
+      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+      expect(tx.payment.updateMany).not.toHaveBeenCalled();
     });
 
     it('bascule en REJECTED si toujours "pending" après le délai d’abandon (24h)', async () => {
@@ -421,8 +479,8 @@ describe('PaymentsService', () => {
 
       await service.reconcilePaydunyaPayment('payment-1');
 
-      expect(prisma.payment.update).toHaveBeenCalledWith({
-        where: { id: 'payment-1' },
+      expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+        where: { id: 'payment-1', status: 'PENDING' },
         data: {
           status: 'REJECTED',
           rejectionReason: 'Paiement PayDunya non confirmé après 24h — expiré',
@@ -435,7 +493,7 @@ describe('PaymentsService', () => {
       paydunya.confirmInvoiceStatus.mockRejectedValue(new Error('timeout'));
 
       await expect(service.reconcilePaydunyaPayment('payment-1')).resolves.toBeUndefined();
-      expect(prisma.payment.update).not.toHaveBeenCalled();
+      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
     });
   });
 

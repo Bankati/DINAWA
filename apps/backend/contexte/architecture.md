@@ -195,7 +195,7 @@ Le helper `canActOnProperty(user, propertyId)` dans `src/common/permissions/` es
 
 Quelques endpoints sont volontairement non authentifiés et marqués `@Public()` :
 
-- `POST /api/webhooks/cashpay` — webhook Cashpay (protégé par signature HMAC)
+- `POST /api/payments/webhooks/paydunya` — IPN PayDunya (pas de signature — vérité toujours revérifiée auprès de PayDunya, voir section PayDunya ci-dessous)
 - `GET /api/public/listings` et `/api/public/listings/:slug` — annonces publiques
 - `POST /api/public/listings/:id/contact` — formulaire de contact candidat (rate limité strictement)
 - `GET /api/public/managers` et `/api/public/managers/:id` — annuaire des gestionnaires
@@ -229,16 +229,18 @@ Les templates HTML sont fournis par le client et stockés dans `src/modules/emai
 
 Notifications push web vers les navigateurs ayant consenti. Une `PushSubscription` qui retourne `410 Gone` ou `404` est supprimée immédiatement. Le `WebPushService` est appelé exclusivement par `NotifyService` — jamais directement depuis un controller ou un service métier.
 
-### Cashpay
+### PayDunya
 
-**Non construit à ce jour (reporté le 2026-07-25, décision explicite du développeur)** — la Phase 4 (paiements) a été construite avec les flows manuel et déclaration locataire uniquement (`source = MANUAL_OWNER` / `TENANT_DECLARATION`). Les invariants #3 et #4 ci-dessous, et les gardes correspondantes dans `PaymentsService`, sont déjà en place par anticipation. Description ci-dessous conservée telle que prévue pour le jour où l'intégration reprend :
+**Construit le 2026-09-07** (`/architect` le même jour) — agrégateur mobile money togolais (T-Money, Moov/Flooz). Remplace Cashpay dans le build-plan original (jamais réellement engagé, le client a finalement choisi PayDunya). Deux flux :
 
-Agrégateur de paiement mobile money. Deux flux :
-
-- **Sortant — Initialisation** : `POST` vers l'API Cashpay avec axios (timeout 10s, pas de retry — opération non idempotente). Crée une transaction et renvoie au locataire les instructions de paiement.
-- **Entrant — Webhook** : Cashpay appelle `POST /api/webhooks/cashpay` à la confirmation du paiement. Signature HMAC vérifiée avant tout traitement. Idempotence stricte via contrainte unique sur `transactionId`. Réponse 2xx systématique quand la signature est valide.
+- **Sortant — Initialisation** (`PaydunyaService.createInvoice()`) : `POST /checkout-invoice/create` avec axios (timeout 15s, **volontairement sans retry — opération non idempotente**, un retry après un timeout dont la réponse s'est perdue créerait une seconde facture orpheline chez PayDunya). Crée une facture et renvoie au locataire une `checkoutUrl` hébergée par PayDunya (choix de l'opérateur mobile money sur leur page, pas imposable côté WARAH — voir `PaydunyaService.operatorCodeFor()`, actuellement non appelé).
+- **Entrant — Webhook (IPN)** : PayDunya appelle `POST /api/payments/webhooks/paydunya?paymentId=...` à la confirmation. **Pas de signature vérifiable** (contrairement à ce qui était anticipé pour Cashpay — doc PayDunya reçue confirme un simple POST sans HMAC) : le `paymentId` vient du `callback_url` que WARAH construit lui-même à l'initiation, jamais du corps de la requête ; la vérité du statut est **toujours revérifiée** auprès de PayDunya (`GET /checkout-invoice/confirm/:token`, avec nos propres clés) avant toute écriture — le payload entrant ne sert qu'à savoir _quand_ revérifier. Réponse 2xx systématique (le webhook ne doit jamais échouer visiblement pour PayDunya).
+- **Idempotence réelle** (pas seulement applicative, voir invariant #3) : chaque transition d'état passe par un `updateMany({ where: { id, status: 'PENDING' } })` plutôt qu'un `findUnique` + `update` séparés — un seul appel concurrent (webhook ou cron) peut faire gagner la course, Postgres verrouillant la ligne le temps de l'`UPDATE`.
+- **Filet de sécurité** : `PaydunyaReconciliationTask` (cron, `*/15 * * * *`) revérifie tout `Payment` `PAYDUNYA_API`/`PENDING` resté bloqué >15 min (webhook jamais reçu), bascule en `REJECTED` après 24h sans confirmation.
 
 L'événement `payment.confirmed` est émis après mise à jour réussie et déclenche en aval la génération de quittance et les notifications.
+
+Pas de prélèvement automatique (unité 36 explicitement abandonnée, décision du développeur) — seuls des rappels email sont envoyés, le locataire paie de son propre chef via `POST /api/payments/initiate`.
 
 ### Sentry
 
@@ -254,15 +256,16 @@ Hébergement et CI/CD. Auto-deploy depuis Git. Variables d'environnement gérée
 
 Tous les jobs cron utilisent `@nestjs/schedule` et tournent dans le même conteneur NestJS. Les expressions cron sont centralisées dans `src/common/constants.ts`.
 
-| Job                                                                | Fréquence               | Verrou Postgres | Rôle                                                                                                          |
-| ------------------------------------------------------------------ | ----------------------- | :-------------: | ------------------------------------------------------------------------------------------------------------- |
-| `reminders.task.ts`                                                | Toutes les heures       |     **oui**     | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire    |
-| `overdue.task.ts`                                                  | Toutes les heures       |     **oui**     | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire    |
-| `payment-declaration-reminders.task.ts` **(construit 2026-07-25)** | Tous les jours à 8h UTC |     **oui**     | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours |
-| `inactivity.task.ts`                                               | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                 |
-| `listing-suspension.task.ts`                                       | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                   |
-| `monthly-reports.task.ts`                                          | Le 1er du mois à 8h UTC |     **oui**     | Générer et envoyer les rapports mensuels aux propriétaires mandants                                           |
-| `subscription-billing.task.ts`                                     | Le 1er du mois à 6h UTC |     **oui**     | Prélever les abonnements actifs via Cashpay, gérer les retries et suspensions                                 |
+| Job                                                                | Fréquence               | Verrou Postgres | Rôle                                                                                                                                                                             |
+| ------------------------------------------------------------------ | ----------------------- | :-------------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reminders.task.ts`                                                | Toutes les heures       |     **oui**     | Envoyer les rappels d'échéance aux locataires selon `reminderDaysBefore` configuré par chaque propriétaire                                                                       |
+| `overdue.task.ts`                                                  | Toutes les heures       |     **oui**     | Détecter les échéances en retard, mettre à jour le statut `OVERDUE`, notifier le propriétaire/gestionnaire                                                                       |
+| `payment-declaration-reminders.task.ts` **(construit 2026-07-25)** | Tous les jours à 8h UTC |     **oui**     | Rappeler au propriétaire/gestionnaire les déclarations de paiement en attente depuis ≥ 3 jours puis ≥ 7 jours                                                                    |
+| `inactivity.task.ts`                                               | Tous les jours à 7h UTC |     **oui**     | Détecter et suspendre les comptes sans bien depuis 60 jours, envoyer les rappels J-30/J-7/J-1                                                                                    |
+| `listing-suspension.task.ts`                                       | Tous les jours          |       non       | Suspendre les annonces actives depuis 90 jours sans contact                                                                                                                      |
+| `monthly-reports.task.ts`                                          | Le 1er du mois à 8h UTC |     **oui**     | Générer et envoyer les rapports mensuels aux propriétaires mandants                                                                                                              |
+| `subscription-billing.task.ts`                                     | —                       |        —        | **Jamais construit — unité 36 explicitement abandonnée** (décision développeur, 2026-09-07) : pas de prélèvement à l'initiative du marchand, seuls des rappels email sont prévus |
+| `paydunya-reconciliation.task.ts` **(construit 2026-09-07)**       | Toutes les 15 min       |     **oui**     | Revérifier auprès de PayDunya tout `Payment` `PAYDUNYA_API`/`PENDING` resté bloqué (webhook jamais reçu), basculer en `REJECTED` après 24h                                       |
 
 Les jobs marqués « verrou Postgres » utilisent `pg_try_advisory_lock` pour éviter la double exécution si plusieurs instances NestJS tournent en parallèle. Toute itération à l'intérieur d'une boucle est isolée dans son propre try/catch.
 
@@ -308,9 +311,9 @@ Règles que le codebase ne doit **jamais** violer. Une violation est un bug crit
 
 2. **Toute action sur un bien passe par `canActOnProperty()`.** Aucune vérification d'autorisation inline (`if (property.ownerId === user.id)`) n'est tolérée dans les services métier.
 
-3. **Le webhook Cashpay est strictement idempotent.** L'idempotence repose sur la contrainte unique côté DB sur `transactionId` — jamais sur une vérification applicative seule.
+3. **Le webhook PayDunya est strictement idempotent.** Chaque transition d'état (`PaymentsService.reconcilePaydunyaPayment()`) passe par un `updateMany({ where: { id, status: 'PENDING' } })`, jamais un `findUnique` + `update` séparés — l'idempotence repose sur cette écriture conditionnelle atomique côté DB, jamais sur une vérification applicative seule (un bug exactement de cette nature a été trouvé et corrigé en `/review` le 2026-09-07).
 
-4. **Un paiement `source = CASHPAY_API` ne peut jamais être re-confirmé ni rejeté manuellement.** Le webhook est la source de vérité unique pour ces paiements. Les endpoints de confirmation manuelle rejettent toute action sur eux.
+4. **Un paiement `source = PAYDUNYA_API` ne peut jamais être re-confirmé ni rejeté manuellement.** Le webhook/la réconciliation sont la source de vérité unique pour ces paiements. Les endpoints de confirmation manuelle rejettent toute action sur eux.
 
 5. **Les quittances, rapports mensuels et factures d'abonnement ne sont jamais stockés.** Aucun modèle Prisma `Receipt`, `MonthlyReport`, `Invoice` ne stocke un PDF. Aucun bucket Storage ne les contient. Génération à la volée systématique.
 
@@ -342,4 +345,4 @@ Règles que le codebase ne doit **jamais** violer. Une violation est un bug crit
 
 19. **Aucune URL publique permanente pour un fichier privé.** Toute URL servie au client est signée avec expiration 15 minutes maximum.
 
-20. **Aucun déploiement en production sans tests d'intégration passants sur les flows critiques** : webhook Cashpay (idempotence), déclaration locataire → confirmation, auth Supabase, mandats, calcul des échéances, blocage 2 mois, `canActOnProperty()`.
+20. **Aucun déploiement en production sans tests d'intégration passants sur les flows critiques** : webhook PayDunya (idempotence), déclaration locataire → confirmation, auth interne, mandats, calcul des échéances, blocage 2 mois, `canActOnProperty()`. _(Note : à ce jour, seuls des tests unitaires avec Prisma mocké couvrent le webhook PayDunya — aucun test e2e contre une vraie transaction concurrente. Le mock ne peut pas révéler une course comme celle trouvée en `/review` 2026-09-07.)_

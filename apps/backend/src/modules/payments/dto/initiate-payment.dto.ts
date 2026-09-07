@@ -13,7 +13,15 @@ export class InitiatePaymentDto {
   @IsString()
   scheduleEntryId!: string;
 
-  @ApiProperty({ enum: PAYDUNYA_PAYMENT_METHODS })
+  // Préférence indicative pour nos propres statistiques/affichage — ne
+  // restreint pas le choix de l'opérateur sur la page PayDunya (Checkout
+  // Invoice ne permet pas d'imposer un opérateur, voir PaydunyaService).
+  // Constaté en /review 2026-09-07, assumé plutôt que corrigé (nécessiterait
+  // le flux Softpay, non documenté avec certitude).
+  @ApiProperty({
+    enum: PAYDUNYA_PAYMENT_METHODS,
+    description: 'Préférence indicative — ne restreint pas le choix réel sur la page PayDunya',
+  })
   @IsIn(PAYDUNYA_PAYMENT_METHODS)
   paymentMethod!: PaydunyaPaymentMethod;
 }

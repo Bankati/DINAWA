@@ -25,9 +25,16 @@ export type PaydunyaInvoice = {
 export type PaydunyaInvoiceStatus = 'pending' | 'completed' | 'cancelled' | 'failed';
 
 // Erreur métier PayDunya (facture refusée, compte marchand mal configuré,
-// etc.) — distincte d'une erreur réseau/timeout (retryée avant d'atteindre
-// ce point, voir postWithRetry ci-dessous).
+// etc.) — distincte d'une erreur réseau/timeout.
 export class PaydunyaError extends Error {}
+
+// Construit l'URL de paiement à partir d'un token de facture — utilisé à la
+// création (createInvoice) et pour réutiliser une facture déjà créée sans
+// en recréer une seconde (voir PaymentsService.initiate(), garde anti-double
+// appel ajoutée en /review 2026-09-07).
+export function checkoutUrlFor(token: string): string {
+  return `https://paydunya.com/checkout/invoice/${token}`;
+}
 
 // Wrapper sur l'API PayDunya "Checkout Invoice" (voir /architect 2026-09-07).
 // Le flux Softpay (charge directe par opérateur, sans redirection) existe
@@ -80,6 +87,13 @@ export class PaydunyaService {
     return this.enabled;
   }
 
+  // `paymentMethod` (TMONEY/FLOOZ) est une préférence indicative côté WARAH
+  // — Checkout Invoice ne permet pas de l'imposer à PayDunya (le locataire
+  // choisit librement son opérateur sur leur page de paiement). Le flux
+  // Softpay permettrait de forcer l'opérateur mais sa forme exacte de
+  // requête n'a pas été confirmée dans la doc reçue (voir commentaire de
+  // classe). Cette méthode reste disponible pour ce jour-là ; non appelée
+  // actuellement (constaté en /review 2026-09-07 — assumé, pas un oubli).
   operatorCodeFor(method: 'TMONEY' | 'FLOOZ'): string {
     return OPERATOR_CODE[method];
   }
@@ -88,6 +102,13 @@ export class PaydunyaService {
   // checkoutUrl (choix de l'opérateur mobile money inclus dans leur
   // interface). Le Payment reste PENDING côté WARAH jusqu'à confirmation
   // (webhook IPN ou cron de réconciliation, voir PaymentsService).
+  // Volontairement UN SEUL essai, sans retry — opération non idempotente
+  // (chaque appel réussi crée une facture distincte chez PayDunya) : un
+  // retry après un timeout dont la réponse s'est perdue créerait une
+  // seconde facture orpheline pour le même Payment. Un retry avait été
+  // ajouté par erreur ici puis retiré en /review (2026-09-07) — voir
+  // architecture.md, section PayDunya, qui documentait déjà cette règle
+  // avant même l'implémentation.
   async createInvoice(params: {
     amount: number;
     description: string;
@@ -100,33 +121,33 @@ export class PaydunyaService {
       throw new PaydunyaError('PayDunya non configuré (clés API manquantes)');
     }
 
-    const data = await this.postWithRetry<{
-      response_code?: string;
-      token?: string;
-      response_text?: string;
-    }>('/checkout-invoice/create', {
-      invoice: {
-        total_amount: params.amount,
-        description: params.description,
-      },
-      store: { name: 'WARAH' },
-      actions: {
-        callback_url: params.callbackUrl,
-        return_url: params.returnUrl,
-        cancel_url: params.cancelUrl,
-      },
-      custom_data: { paymentId: params.paymentId },
-    });
+    const response = await withTimeout(
+      this.http.post<{ response_code?: string; token?: string; response_text?: string }>(
+        '/checkout-invoice/create',
+        {
+          invoice: {
+            total_amount: params.amount,
+            description: params.description,
+          },
+          store: { name: 'WARAH' },
+          actions: {
+            callback_url: params.callbackUrl,
+            return_url: params.returnUrl,
+            cancel_url: params.cancelUrl,
+          },
+          custom_data: { paymentId: params.paymentId },
+        },
+      ),
+      CALL_TIMEOUT_MS,
+    );
+    const data = response.data;
 
     if (data.response_code !== '00' || !data.token) {
       this.logger.error(`[paydunya/create-invoice] échec — ${JSON.stringify(data)}`);
       throw new PaydunyaError(data.response_text ?? 'Échec de création de la facture PayDunya');
     }
 
-    return {
-      token: data.token,
-      checkoutUrl: `https://paydunya.com/checkout/invoice/${data.token}`,
-    };
+    return { token: data.token, checkoutUrl: checkoutUrlFor(data.token) };
   }
 
   // Revérifie le statut réel d'une facture auprès de PayDunya — jamais fait
@@ -146,21 +167,13 @@ export class PaydunyaService {
     return 'pending';
   }
 
-  // Retry uniquement sur les échecs réseau/timeout réels (axios ne throw que
-  // dans ces cas ou sur un statut HTTP non-2xx) — jamais sur un refus métier
-  // PayDunya, qui revient en 200 avec response_code ≠ "00" et n'entre donc
-  // jamais dans ce chemin (voir code-standards.md, "Timeouts et retry").
-  private async postWithRetry<T>(path: string, body: unknown): Promise<T> {
-    const { default: pRetry } = await import('p-retry');
-    return pRetry(
-      async () => {
-        const response = await withTimeout(this.http.post<T>(path, body), CALL_TIMEOUT_MS);
-        return response.data;
-      },
-      { retries: 2, minTimeout: 1000, maxTimeout: 8000 },
-    );
-  }
-
+  // Retry réservé aux opérations idempotentes — confirmInvoiceStatus() est
+  // un GET sans effet de bord, sûr à rejouer sur échec réseau/timeout réel
+  // (axios ne throw que dans ces cas ou sur un statut HTTP non-2xx) ; jamais
+  // sur un refus métier PayDunya, qui revient en 200 avec response_code ≠
+  // "00" et n'entre donc jamais dans ce chemin. createInvoice() n'utilise
+  // volontairement PAS ce helper — voir son commentaire (opération non
+  // idempotente).
   private async getWithRetry<T>(path: string): Promise<T> {
     const { default: pRetry } = await import('p-retry');
     return pRetry(
