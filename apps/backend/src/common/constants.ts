@@ -70,3 +70,14 @@ export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
 // (ex. propriétaire voyant une déclaration de paiement d'un locataire).
 export const CACHE_TTL_DASHBOARD = 20_000;
 export const CACHE_TTL_LIST = 15_000;
+
+// Réconciliation PayDunya (voir /architect 2026-09-07, unités 17/18 adaptées
+// à PayDunya au lieu de Cashpay) — filet de sécurité pour les webhooks (IPN)
+// jamais reçus. Passage toutes les 15 min ; un Payment PENDING plus récent
+// que PAYDUNYA_RECONCILE_AFTER_MS n'est pas encore revérifié (laisse le temps
+// au webhook normal d'arriver en premier). Au-delà de
+// PAYDUNYA_ABANDON_AFTER_MS sans confirmation, le paiement est basculé en
+// REJECTED pour permettre au locataire de relancer proprement.
+export const CRON_PAYDUNYA_RECONCILIATION = '*/15 * * * *';
+export const PAYDUNYA_RECONCILE_AFTER_MS = 15 * 60 * 1000;
+export const PAYDUNYA_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;

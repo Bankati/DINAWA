@@ -75,18 +75,52 @@ class EnvironmentVariables {
   @IsString()
   VAPID_SUBJECT!: string;
 
-  // Cashpay (optionnel — non disponible en dev sans compte marchand)
+  // PayDunya (optionnel — non disponible en dev sans compte marchand). Agrégateur
+  // mobile money du client depuis le 2026-09-07 (voir /architect du même jour —
+  // Cashpay n'a jamais été branché en réalité). Master key commune aux deux
+  // modes ; jeu de 3 clés distinct par mode (test = bac à sable PayDunya, aucun
+  // vrai argent ; live = production réelle).
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_MODE?: 'test' | 'live' = 'test';
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_MASTER_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_TEST_PUBLIC_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_TEST_PRIVATE_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_TEST_TOKEN?: string;
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_LIVE_PUBLIC_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_LIVE_PRIVATE_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  PAYDUNYA_LIVE_TOKEN?: string;
+
+  // URL publique de ce backend (avec suffixe /api, même convention que
+  // NEXT_PUBLIC_API_URL côté frontend) — nécessaire pour construire le
+  // callback_url envoyé à PayDunya lors de la création d'une facture (voir
+  // PaymentsService.initiate()). PayDunya doit pouvoir nous rappeler depuis
+  // l'extérieur — inutile en local sans tunnel (ngrok) : le cron de
+  // réconciliation reste le seul filet de sécurité en dev.
   @IsUrl({ require_tld: false })
   @IsOptional()
-  CASHPAY_API_URL?: string;
-
-  @IsString()
-  @IsOptional()
-  CASHPAY_API_KEY?: string;
-
-  @IsString()
-  @IsOptional()
-  CASHPAY_WEBHOOK_SECRET?: string;
+  API_BASE_URL?: string = 'http://localhost:3001/api';
 
   // Sentry (optionnel — désactivé si absent)
   @IsUrl()
@@ -111,7 +145,7 @@ class EnvironmentVariables {
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {
-  // Une variable optionnelle laissée vide dans .env (`CASHPAY_API_URL=`) est lue
+  // Une variable optionnelle laissée vide dans .env (`PAYDUNYA_MASTER_KEY=`) est lue
   // comme une chaîne vide, pas `undefined` — @IsOptional() ne l'ignore donc pas.
   // On normalise ici pour que "vide" et "absente" soient traités de la même façon.
   const sanitized = Object.fromEntries(

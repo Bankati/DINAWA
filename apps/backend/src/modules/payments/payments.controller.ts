@@ -24,6 +24,7 @@ import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
 import { RejectPaymentDto } from './dto/reject-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -50,6 +51,21 @@ export class PaymentsController {
     @UploadedFile() proof?: Express.Multer.File,
   ): Promise<Payment> {
     return this.paymentsService.createManual(user, dto, proof);
+  }
+
+  @Post('initiate')
+  @Roles(UserRole.TENANT)
+  @ApiOperation({
+    summary: 'Initie un paiement PayDunya (mobile money) sur sa propre échéance',
+    description:
+      'Le locataire est redirigé vers checkoutUrl pour compléter le paiement — le montant est ' +
+      'toujours le solde restant de l’échéance, jamais saisi par le client.',
+  })
+  initiate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: InitiatePaymentDto,
+  ): Promise<{ paymentId: string; checkoutUrl: string }> {
+    return this.paymentsService.initiate(user, dto);
   }
 
   @Get()

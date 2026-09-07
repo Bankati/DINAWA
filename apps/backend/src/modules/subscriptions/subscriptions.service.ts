@@ -93,8 +93,9 @@ export class SubscriptionsService {
   }
 
   // Purement déclaratif pour l'instant — sans conséquence de facturation
-  // réelle tant que l'unité 36 (prélèvement automatique, reportée en
-  // attendant les agréments Cashpay) n'existe pas.
+  // réelle : l'unité 36 (prélèvement automatique) a été explicitement
+  // abandonnée (décision développeur, /architect 2026-09-07), aucun débit à
+  // l'initiative du marchand n'existera jamais ici.
   async cancel(user: AuthenticatedUser): Promise<Subscription> {
     const subscription = await this.getSubscriptionOrThrow(this.prisma, user.id);
 

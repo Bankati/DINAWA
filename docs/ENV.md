@@ -69,16 +69,24 @@ NestJS.
 | `VAPID_PRIVATE_KEY` | ✅          | Idem                               | Clé privée VAPID — JAMAIS exposée                                  |
 | `VAPID_SUBJECT`     | ✅          | —                                  | Contact pour les serveurs push. Format : `mailto:contact@warah.tg` |
 
-### Cashpay / Semoa (mobile money)
+### PayDunya (mobile money — T-Money & Moov/Flooz Togo)
 
-Ces variables sont optionnelles tant que le compte marchand n'est pas créé.
-Sans elles, les endpoints de paiement retournent `503 Service Unavailable`.
+Ces variables sont optionnelles tant que le compte marchand n'est pas configuré.
+Sans elles, `POST /api/payments/initiate` retourne `503 Service Unavailable`.
+Master key commune aux deux modes ; jeu de 3 clés distinct par mode (`test` =
+bac à sable PayDunya, aucun vrai argent ; `live` = production réelle).
 
-| Variable                 | Obligatoire | Description                                                 |
-| ------------------------ | ----------- | ----------------------------------------------------------- |
-| `CASHPAY_API_URL`        | ➖          | URL de base de l'API Cashpay fournie par Semoa              |
-| `CASHPAY_API_KEY`        | ➖          | Clé d'authentification API Cashpay                          |
-| `CASHPAY_WEBHOOK_SECRET` | ➖          | Secret HMAC pour valider la signature des webhooks entrants |
+| Variable                    | Obligatoire | Description                                                                                                                                                      |
+| --------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAYDUNYA_MODE`             | ➖          | `test` ou `live`. Défaut : `test`                                                                                                                                |
+| `PAYDUNYA_MASTER_KEY`       | ➖          | Master key du compte marchand — identique en test et en production                                                                                               |
+| `PAYDUNYA_TEST_PUBLIC_KEY`  | ➖          | Clé publique du mode Test                                                                                                                                        |
+| `PAYDUNYA_TEST_PRIVATE_KEY` | ➖          | Clé privée du mode Test                                                                                                                                          |
+| `PAYDUNYA_TEST_TOKEN`       | ➖          | Token d'API du mode Test                                                                                                                                         |
+| `PAYDUNYA_LIVE_PUBLIC_KEY`  | ➖          | Clé publique du mode Live                                                                                                                                        |
+| `PAYDUNYA_LIVE_PRIVATE_KEY` | ➖          | Clé privée du mode Live                                                                                                                                          |
+| `PAYDUNYA_LIVE_TOKEN`       | ➖          | Token d'API du mode Live                                                                                                                                         |
+| `API_BASE_URL`              | ➖          | URL publique de ce backend avec /api (ex. https://warah-api.up.railway.app/api) — sert à construire le callback_url PayDunya. Défaut : http://localhost:3001/api |
 
 ### Sentry (monitoring)
 
@@ -144,23 +152,20 @@ npx web-push generate-vapid-keys
 Stocker `Public Key` dans `VAPID_PUBLIC_KEY` (Railway). Non utilisée côté frontend actuellement (voir note §2).
 Stocker `Private Key` dans `VAPID_PRIVATE_KEY` (Railway uniquement).
 
-### Secret HMAC Cashpay
+### Clés PayDunya
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-À configurer dans `CASHPAY_WEBHOOK_SECRET` (Railway).
-Communiquer ce secret à Semoa pour qu'ils signent leurs webhooks avec.
+Générées depuis le dashboard PayDunya (Intégrer notre API → Applications) —
+voir docs/DEPLOYMENT.md. Rien à générer soi-même côté WARAH, contrairement
+aux clés VAPID ou au secret d'invitation.
 
 ---
 
 ## Récapitulatif — Où configurer quoi
 
-| Service                | Variables à configurer                                                                                                      |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **`.env` local** (dev) | Toutes les variables backend (copier `.env.example`)                                                                        |
-| **Railway**            | `NODE_ENV`, `DATABASE_URL`, `SUPABASE_*`, `JWT_SECRET`, `RESEND_*`, `VAPID_*`, `CASHPAY_*`, `SENTRY_DSN`, `ALLOWED_ORIGINS` |
-| **Vercel**             | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SENTRY_DSN`                                                                             |
-| **GitHub Secrets**     | `RAILWAY_TOKEN`                                                                                                             |
-| **GitHub Variables**   | `RAILWAY_SERVICE_NAME`                                                                                                      |
+| Service                | Variables à configurer                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **`.env` local** (dev) | Toutes les variables backend (copier `.env.example`)                                                                         |
+| **Railway**            | `NODE_ENV`, `DATABASE_URL`, `SUPABASE_*`, `JWT_SECRET`, `RESEND_*`, `VAPID_*`, `PAYDUNYA_*`, `SENTRY_DSN`, `ALLOWED_ORIGINS` |
+| **Vercel**             | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SENTRY_DSN`                                                                              |
+| **GitHub Secrets**     | `RAILWAY_TOKEN`                                                                                                              |
+| **GitHub Variables**   | `RAILWAY_SERVICE_NAME`                                                                                                       |

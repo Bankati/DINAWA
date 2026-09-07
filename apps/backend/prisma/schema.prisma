@@ -104,7 +104,7 @@ enum PaymentStatus {
 }
 
 enum PaymentSource {
-  CASHPAY_API
+  PAYDUNYA_API
   MANUAL_OWNER
   TENANT_DECLARATION
 }
@@ -470,10 +470,12 @@ model PaymentScheduleEntry {
   @@map("payment_schedule_entries")
 }
 
-// Un Payment source = CASHPAY_API ne peut jamais être re-confirmé ni
+// Un Payment source = PAYDUNYA_API ne peut jamais être re-confirmé ni
 // rejeté manuellement (voir invariants architecture.md #4) — l'idempotence
 // du webhook repose sur transactionId unique, jamais sur une vérification
-// applicative seule.
+// applicative seule. Agrégateur PayDunya depuis le 2026-09-07 (le client a
+// changé d'agrégateur — Cashpay n'a jamais été branché en réalité, voir
+// /architect du même jour).
 model Payment {
   id                String               @id @default(cuid())
   scheduleEntryId   String
