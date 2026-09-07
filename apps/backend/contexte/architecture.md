@@ -17,7 +17,7 @@ Périmètre : backend uniquement (API REST consommée par un frontend Next.js, `
 | File Storage       | Supabase Storage                    | Photos de biens, documents administratifs, pièces d'identité, justificatifs                      |
 | Email              | Resend                              | Envoi transactionnel (auth, OTP, quittances, rappels, alertes, rapports)                         |
 | Push Notifications | `web-push` (VAPID)                  | Notifications push web vers les navigateurs des utilisateurs ayant consenti                      |
-| Mobile Money       | Cashpay (Semoa)                     | Encaissement T-Money (Togocom) et Flooz (Moov Africa) + webhook de confirmation                  |
+| Mobile Money       | PayDunya                            | Encaissement T-Money (Togocom) et Flooz (Moov Africa) + webhook (IPN) de confirmation            |
 | OCR                | Tesseract.js                        | Vérification automatique des cartes nationales d'identité togolaises                             |
 | PDF                | PDFKit                              | Génération à la volée des quittances, rapports mensuels, exports, factures                       |
 | XLSX               | ExcelJS                             | Export des paiements en format tableur, en streaming                                             |
@@ -25,7 +25,7 @@ Périmètre : backend uniquement (API REST consommée par un frontend Next.js, `
 | Validation         | class-validator + class-transformer | Validation des DTOs via `ValidationPipe` global et des variables d'environnement                 |
 | Cron Jobs          | `@nestjs/schedule`                  | Rappels d'échéance, alertes d'impayés, blocage d'inactivité, rapports mensuels, prélèvements     |
 | Events             | `@nestjs/event-emitter`             | Événements internes asynchrones (`payment.confirmed`, etc.)                                      |
-| HTTP Client        | axios + p-retry                     | Appels sortants Cashpay avec timeouts et retry borné                                             |
+| HTTP Client        | axios + p-retry                     | Appels sortants PayDunya (timeout, retry borné réservé aux opérations idempotentes)              |
 | Logging            | nestjs-pino + pino                  | Logging structuré JSON avec correlation ID et redaction des données sensibles                    |
 | Monitoring         | `@sentry/node`                      | Capture des exceptions non gérées et erreurs 5xx en production                                   |
 | API Docs           | `@nestjs/swagger`                   | Documentation OpenAPI accessible sur `/api/docs` en dev                                          |
@@ -59,7 +59,7 @@ Structure du projet, en respectant strictement la modularité NestJS.
 - `src/modules/properties/` — CRUD biens immobiliers, statuts, photos et documents associés
 - `src/modules/tenants/` — blocage locataire↔bien (`TenantPropertyBlock`), historiques baux par bien et par locataire (la création/invitation du locataire reste dans `src/modules/auth/`, voir unité 14)
 - `src/modules/leases/` — création et résiliation des baux, génération du calendrier d'échéances (`POST /api/leases`, `POST /api/leases/:id/terminate`)
-- `src/modules/payments/` — initialisation Cashpay, webhook Cashpay, saisie manuelle propriétaire/gestionnaire, déclaration locataire, historique, export
+- `src/modules/payments/` — initialisation PayDunya, webhook PayDunya, saisie manuelle propriétaire/gestionnaire, déclaration locataire, historique, export
 - `src/modules/receipts/` — génération à la volée des quittances PDF (jamais stockées)
 - `src/modules/listings/` — publication d'annonces, page publique, contact candidat, modération
 - `src/modules/mandates/` — création/révocation des mandats gestionnaire ↔ propriétaire ↔ bien, transfert des droits opérationnels
@@ -293,7 +293,7 @@ Validées au démarrage via `class-validator` dans `src/config/env.validation.ts
 - **Sentry** capture les erreurs 5xx et les exceptions non gérées en production
 - **Logs structurés Pino** ingérés par Railway (et exportables si nécessaire vers un service externe)
 - **Health checks** sondés par Railway en continu
-- **Alertes** configurées sur les seuils critiques (taux 5xx > 1 % sur 5 min, webhooks Cashpay en échec > 3 consécutifs, jobs cron qui n'ont pas tourné à l'heure prévue, latence p95 > 1s)
+- **Alertes** configurées sur les seuils critiques (taux 5xx > 1 % sur 5 min, webhooks PayDunya en échec > 3 consécutifs, jobs cron qui n'ont pas tourné à l'heure prévue, latence p95 > 1s)
 
 ### Sauvegardes
 
