@@ -311,7 +311,7 @@ Règles que le codebase ne doit **jamais** violer. Une violation est un bug crit
 
 2. **Toute action sur un bien passe par `canActOnProperty()`.** Aucune vérification d'autorisation inline (`if (property.ownerId === user.id)`) n'est tolérée dans les services métier.
 
-3. **Le webhook PayDunya est strictement idempotent.** Chaque transition d'état (`PaymentsService.reconcilePaydunyaPayment()`) passe par un `updateMany({ where: { id, status: 'PENDING' } })`, jamais un `findUnique` + `update` séparés — l'idempotence repose sur cette écriture conditionnelle atomique côté DB, jamais sur une vérification applicative seule (un bug exactement de cette nature a été trouvé et corrigé en `/review` le 2026-09-07).
+3. **Le webhook PayDunya est strictement idempotent.** Chaque transition d'état (`PaymentsService.reconcilePaydunyaPayment()`) passe par un `updateMany({ where: { id, status: 'PENDING' } })`, jamais un `findUnique` + `update` séparés — l'idempotence repose sur cette écriture conditionnelle atomique côté DB, jamais sur une vérification applicative seule. Le crédit de l'échéance associée utilise `paidAmount: { increment }` (jamais un `SET` sur une valeur lue avant l'appel réseau à PayDunya). Un seul `Payment` `PAYDUNYA_API` `PENDING` par échéance à la fois — index unique partiel `payments_schedule_entry_paydunya_pending_unique`, P2002 remappé en 409 dans `initiate()`. (Deux bugs de cette famille trouvés et corrigés en `/review` les 2026-09-07 et 2026-09-10.)
 
 4. **Un paiement `source = PAYDUNYA_API` ne peut jamais être re-confirmé ni rejeté manuellement.** Le webhook/la réconciliation sont la source de vérité unique pour ces paiements. Les endpoints de confirmation manuelle rejettent toute action sur eux.
 

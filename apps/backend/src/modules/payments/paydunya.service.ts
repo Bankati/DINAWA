@@ -28,11 +28,13 @@ export type PaydunyaInvoiceStatus = 'pending' | 'completed' | 'cancelled' | 'fai
 // etc.) — distincte d'une erreur réseau/timeout.
 export class PaydunyaError extends Error {}
 
-// Construit l'URL de paiement à partir d'un token de facture — utilisé à la
-// création (createInvoice) et pour réutiliser une facture déjà créée sans
-// en recréer une seconde (voir PaymentsService.initiate(), garde anti-double
-// appel ajoutée en /review 2026-09-07).
-export function checkoutUrlFor(token: string): string {
+// Repli UNIQUEMENT si PayDunya ne renvoie pas d'URL exploitable dans sa
+// réponse de création (ne devrait jamais arriver). Best-effort, hôte de
+// production : ne fonctionne pas en sandbox (l'URL de test PayDunya a un
+// chemin différent). La vraie URL vient toujours de la réponse PayDunya
+// (`response_text`), stockée sur `Payment.paydunyaCheckoutUrl` — voir
+// createInvoice() et PaymentsService.initiate() (/review 2026-09-10).
+export function fallbackCheckoutUrl(token: string): string {
   return `https://paydunya.com/checkout/invoice/${token}`;
 }
 
@@ -122,22 +124,24 @@ export class PaydunyaService {
     }
 
     const response = await withTimeout(
-      this.http.post<{ response_code?: string; token?: string; response_text?: string }>(
-        '/checkout-invoice/create',
-        {
-          invoice: {
-            total_amount: params.amount,
-            description: params.description,
-          },
-          store: { name: 'WARAH' },
-          actions: {
-            callback_url: params.callbackUrl,
-            return_url: params.returnUrl,
-            cancel_url: params.cancelUrl,
-          },
-          custom_data: { paymentId: params.paymentId },
+      this.http.post<{
+        response_code?: string;
+        token?: string;
+        response_text?: string;
+        invoice_url?: string;
+      }>('/checkout-invoice/create', {
+        invoice: {
+          total_amount: params.amount,
+          description: params.description,
         },
-      ),
+        store: { name: 'WARAH' },
+        actions: {
+          callback_url: params.callbackUrl,
+          return_url: params.returnUrl,
+          cancel_url: params.cancelUrl,
+        },
+        custom_data: { paymentId: params.paymentId },
+      }),
       CALL_TIMEOUT_MS,
     );
     const data = response.data;
@@ -147,7 +151,14 @@ export class PaydunyaService {
       throw new PaydunyaError(data.response_text ?? 'Échec de création de la facture PayDunya');
     }
 
-    return { token: data.token, checkoutUrl: checkoutUrlFor(data.token) };
+    // Sur succès PayDunya renvoie l'URL de paiement dans `response_text` (et
+    // parfois `invoice_url`) — c'est la seule URL fiable (sandbox vs prod ont
+    // des hôtes différents). On ne la reconstruit jamais nous-mêmes ; repli
+    // best-effort seulement si la réponse n'en contient aucune (anormal).
+    const returnedUrl = [data.invoice_url, data.response_text].find(
+      (u): u is string => typeof u === 'string' && u.startsWith('http'),
+    );
+    return { token: data.token, checkoutUrl: returnedUrl ?? fallbackCheckoutUrl(data.token) };
   }
 
   // Revérifie le statut réel d'une facture auprès de PayDunya — jamais fait

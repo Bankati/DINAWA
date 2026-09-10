@@ -28,20 +28,17 @@ describe('PaydunyaReconciliationTask', () => {
     );
   });
 
-  it('ne cible que les Payment PAYDUNYA_API PENDING avec transactionId, restés bloqués au-delà du seuil', async () => {
+  it('cible les Payment PAYDUNYA_API PENDING bloqués au-delà du seuil, sans filtre transactionId (orphelins inclus), batch borné', async () => {
     await task.run();
 
     const [findManyArgs] = prisma.payment.findMany.mock.calls[0] as [
-      { where: Record<string, unknown>; take: number },
+      { where: { source: string; status: string; createdAt: { lt: Date } }; take: number },
     ];
-    expect(findManyArgs.where).toEqual(
-      expect.objectContaining({
-        source: 'PAYDUNYA_API',
-        status: 'PENDING',
-        transactionId: { not: null },
-      }),
-    );
-    expect(findManyArgs.take).toBe(100);
+    expect(findManyArgs.where.source).toBe('PAYDUNYA_API');
+    expect(findManyArgs.where.status).toBe('PENDING');
+    expect(findManyArgs.where.createdAt.lt).toBeInstanceOf(Date);
+    expect(findManyArgs.where).not.toHaveProperty('transactionId');
+    expect(findManyArgs.take).toBe(30);
   });
 
   it('réconcilie chaque candidat trouvé', async () => {
@@ -54,10 +51,12 @@ describe('PaydunyaReconciliationTask', () => {
   });
 
   it("continue sur les autres candidats si l'un échoue", async () => {
-    prisma.payment.findMany.mockResolvedValue([{ id: 'payment-1' }, { id: 'payment-2' }]);
+    prisma.payment.findMany.mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => ({ id: `payment-${i}` })),
+    );
     paymentsService.reconcilePaydunyaPayment.mockRejectedValueOnce(new Error('boom'));
 
     await expect(task.run()).resolves.toBeUndefined();
-    expect(paymentsService.reconcilePaydunyaPayment).toHaveBeenCalledTimes(2);
+    expect(paymentsService.reconcilePaydunyaPayment).toHaveBeenCalledTimes(8);
   });
 });

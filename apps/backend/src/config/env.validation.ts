@@ -2,6 +2,7 @@ import {
   IsString,
   IsOptional,
   IsEnum,
+  IsIn,
   IsUrl,
   IsInt,
   IsEmail,
@@ -80,7 +81,10 @@ class EnvironmentVariables {
   // Cashpay n'a jamais été branché en réalité). Master key commune aux deux
   // modes ; jeu de 3 clés distinct par mode (test = bac à sable PayDunya, aucun
   // vrai argent ; live = production réelle).
-  @IsString()
+  // @IsIn strict — une faute de frappe ('live ', 'LIVE', 'production') doit
+  // faire crasher le démarrage, pas retomber silencieusement sur les clés
+  // sandbox en production (trouvé en /review 2026-09-10).
+  @IsIn(['test', 'live'])
   @IsOptional()
   PAYDUNYA_MODE?: 'test' | 'live' = 'test';
 

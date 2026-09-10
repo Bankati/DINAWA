@@ -1,4 +1,4 @@
-import { PaydunyaService, PaydunyaError, checkoutUrlFor } from './paydunya.service';
+import { PaydunyaService, PaydunyaError, fallbackCheckoutUrl } from './paydunya.service';
 
 const post = jest.fn();
 const get = jest.fn();
@@ -48,8 +48,14 @@ describe('PaydunyaService', () => {
     expect(service.operatorCodeFor('FLOOZ')).toBe('moov-togo');
   });
 
-  it('createInvoice renvoie le token et construit la checkoutUrl sur succès', async () => {
-    post.mockResolvedValue({ data: { response_code: '00', token: 'inv-abc' } });
+  it("createInvoice utilise l'URL renvoyée par PayDunya (jamais reconstruite — sandbox vs prod)", async () => {
+    post.mockResolvedValue({
+      data: {
+        response_code: '00',
+        token: 'inv-abc',
+        response_text: 'https://paydunya.com/sandbox-checkout/invoice/inv-abc',
+      },
+    });
     const service = new PaydunyaService(makeConfig() as never);
 
     const invoice = await service.createInvoice({
@@ -63,8 +69,24 @@ describe('PaydunyaService', () => {
 
     expect(invoice).toEqual({
       token: 'inv-abc',
-      checkoutUrl: 'https://paydunya.com/checkout/invoice/inv-abc',
+      checkoutUrl: 'https://paydunya.com/sandbox-checkout/invoice/inv-abc',
     });
+  });
+
+  it("createInvoice retombe sur l'URL best-effort si PayDunya n'en renvoie aucune", async () => {
+    post.mockResolvedValue({ data: { response_code: '00', token: 'inv-abc' } });
+    const service = new PaydunyaService(makeConfig() as never);
+
+    const invoice = await service.createInvoice({
+      amount: 55000,
+      description: 'WARAH — test',
+      paymentId: 'payment-1',
+      callbackUrl: 'https://api.warah.tg/api/payments/webhooks/paydunya?paymentId=payment-1',
+      returnUrl: 'https://warah.tg/ok',
+      cancelUrl: 'https://warah.tg/cancel',
+    });
+
+    expect(invoice.checkoutUrl).toBe('https://paydunya.com/checkout/invoice/inv-abc');
   });
 
   it('createInvoice lève PaydunyaError si response_code ≠ "00"', async () => {
@@ -100,8 +122,8 @@ describe('PaydunyaService', () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 
-  it('checkoutUrlFor construit la même URL que createInvoice pour un token donné', () => {
-    expect(checkoutUrlFor('inv-abc')).toBe('https://paydunya.com/checkout/invoice/inv-abc');
+  it('fallbackCheckoutUrl construit une URL de production best-effort', () => {
+    expect(fallbackCheckoutUrl('inv-abc')).toBe('https://paydunya.com/checkout/invoice/inv-abc');
   });
 
   it('createInvoice lève PaydunyaError sans appeler PayDunya si les clés manquent', async () => {

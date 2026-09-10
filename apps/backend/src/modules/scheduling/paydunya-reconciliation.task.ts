@@ -7,6 +7,14 @@ import { CRON_PAYDUNYA_RECONCILIATION, PAYDUNYA_RECONCILE_AFTER_MS } from '../..
 
 const ADVISORY_LOCK_KEY = 'paydunya-reconciliation-task';
 
+// Bornes de traitement par exécution (trouvé en /review 2026-09-10) : chaque
+// reconcilePaydunyaPayment() fait un appel PayDunya jusqu'à ~45s dans le pire
+// cas (timeout 15s × 3 tentatives). BATCH × PARALLELISM plafonne la durée
+// d'un run bien en dessous de l'intervalle de 15 min même si PayDunya est
+// lent — au-delà, le reste est repris au prochain passage.
+const RECONCILE_BATCH = 30;
+const RECONCILE_PARALLELISM = 5;
+
 // Filet de sécurité pour les webhooks (IPN) PayDunya jamais reçus (voir
 // /architect 2026-09-07, build-plan.md unité 18 adaptée à PayDunya) —
 // revérifie périodiquement les Payment PAYDUNYA_API restés PENDING plus
@@ -36,23 +44,29 @@ export class PaydunyaReconciliationTask {
   private async execute(): Promise<void> {
     const cutoff = new Date(Date.now() - PAYDUNYA_RECONCILE_AFTER_MS);
 
+    // Pas de filtre `transactionId` : reconcilePaydunyaPayment() gère aussi
+    // les orphelins (facture créée mais référence non persistée) — il les
+    // rejette passé le délai d'abandon (trouvé en /review 2026-09-10).
     const candidates = await this.prisma.payment.findMany({
       where: {
         source: 'PAYDUNYA_API',
         status: 'PENDING',
-        transactionId: { not: null },
         createdAt: { lt: cutoff },
       },
       select: { id: true },
-      take: 100,
+      orderBy: { createdAt: 'asc' },
+      take: RECONCILE_BATCH,
     });
 
-    for (const { id } of candidates) {
-      try {
-        await this.paymentsService.reconcilePaydunyaPayment(id);
-      } catch (error) {
-        this.logger.error(`[paydunya-reconciliation] échec pour payment=${id}`, error);
-      }
+    for (let i = 0; i < candidates.length; i += RECONCILE_PARALLELISM) {
+      const slice = candidates.slice(i, i + RECONCILE_PARALLELISM);
+      await Promise.all(
+        slice.map(({ id }) =>
+          this.paymentsService.reconcilePaydunyaPayment(id).catch((error: unknown) => {
+            this.logger.error(`[paydunya-reconciliation] échec pour payment=${id}`, error);
+          }),
+        ),
+      );
     }
   }
 }

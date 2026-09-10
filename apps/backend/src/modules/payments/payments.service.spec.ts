@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_CONFIRMED } from './payment.events';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
@@ -80,7 +81,9 @@ describe('PaymentsService', () => {
         update: jest.fn().mockResolvedValue(makePayment({ status: 'PAID' })),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      paymentScheduleEntry: { update: jest.fn().mockResolvedValue({}) },
+      paymentScheduleEntry: {
+        update: jest.fn().mockResolvedValue({ paidAmount: 55000, expectedAmount: 55000 }),
+      },
     };
     prisma = {
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)),
@@ -319,7 +322,7 @@ describe('PaymentsService', () => {
       await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
     });
 
-    it('crée un Payment PENDING/PAYDUNYA_API pour le solde restant et renvoie la checkoutUrl', async () => {
+    it('crée un Payment PENDING/PAYDUNYA_API, persiste token + URL PayDunya, renvoie la checkoutUrl renvoyée', async () => {
       prisma.paymentScheduleEntry.findUnique.mockResolvedValue(
         makeScheduleEntry({ paidAmount: 20000 }),
       );
@@ -339,7 +342,10 @@ describe('PaymentsService', () => {
       );
       expect(prisma.payment.update).toHaveBeenCalledWith({
         where: { id: 'payment-1' },
-        data: { transactionId: 'pd-token-1' },
+        data: {
+          transactionId: 'pd-token-1',
+          paydunyaCheckoutUrl: 'https://paydunya.com/checkout/invoice/pd-token-1',
+        },
       });
       expect(result).toEqual({
         paymentId: 'payment-1',
@@ -347,52 +353,82 @@ describe('PaymentsService', () => {
       });
     });
 
-    it('lève ServiceUnavailableException si PayDunya échoue, sans laisser le Payment sans trace', async () => {
+    it('lève ServiceUnavailableException si la création de facture PayDunya échoue', async () => {
       paydunya.createInvoice.mockRejectedValue(new Error('réseau down'));
 
       await expect(service.initiate(tenant, dto)).rejects.toThrow('indisponible');
       expect(prisma.payment.create).toHaveBeenCalled();
     });
 
-    it('réutilise une facture PENDING déjà créée plutôt que d’en recréer une seconde (anti double-clic)', async () => {
+    it('lève ServiceUnavailableException "incident technique" si la persistance de la référence échoue après création de la facture', async () => {
+      prisma.payment.update.mockRejectedValue(new Error('DB down'));
+
+      await expect(service.initiate(tenant, dto)).rejects.toThrow('incident technique');
+      expect(paydunya.createInvoice).toHaveBeenCalled();
+    });
+
+    it('remappe un P2002 (deux initiate() concurrents) en 409 au lieu d’un 500 brut', async () => {
+      prisma.payment.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: '5.22.0',
+        }),
+      );
+
+      await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
+    });
+
+    it('rejoue la facture PENDING existante si son montant correspond encore au solde restant', async () => {
       prisma.payment.findFirst.mockResolvedValue({
         id: 'payment-existing',
         transactionId: 'pd-token-existing',
+        paydunyaCheckoutUrl: 'https://paydunya.com/sandbox-checkout/invoice/pd-token-existing',
+        paidAmount: 55000,
       });
 
       const result = await service.initiate(tenant, dto);
 
-      const [findFirstArgs] = prisma.payment.findFirst.mock.calls[0] as [
-        {
-          where: {
-            scheduleEntryId: string;
-            source: string;
-            status: string;
-            transactionId: unknown;
-          };
-        },
-      ];
-      expect(findFirstArgs.where).toEqual({
-        scheduleEntryId: 'entry-1',
-        source: 'PAYDUNYA_API',
-        status: 'PENDING',
-        transactionId: { not: null },
-      });
       expect(prisma.payment.create).not.toHaveBeenCalled();
       expect(paydunya.createInvoice).not.toHaveBeenCalled();
       expect(result).toEqual({
         paymentId: 'payment-existing',
-        checkoutUrl: 'https://paydunya.com/checkout/invoice/pd-token-existing',
+        checkoutUrl: 'https://paydunya.com/sandbox-checkout/invoice/pd-token-existing',
       });
     });
 
-    it('ignore un PENDING existant sans transactionId (tentative précédente jamais aboutie) et en crée un nouveau', async () => {
-      prisma.payment.findFirst.mockResolvedValue({ id: 'payment-orphan', transactionId: null });
+    it('refuse (409) de rejouer une facture PENDING dont le montant ne correspond plus au solde restant', async () => {
+      prisma.paymentScheduleEntry.findUnique.mockResolvedValue(
+        makeScheduleEntry({ paidAmount: 20000 }), // solde restant = 35000
+      );
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 'payment-existing',
+        transactionId: 'pd-token-existing',
+        paydunyaCheckoutUrl: 'https://paydunya.com/checkout/invoice/pd-token-existing',
+        paidAmount: 55000, // ancienne facture au montant plein
+      });
+
+      await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
+      expect(paydunya.createInvoice).not.toHaveBeenCalled();
+    });
+
+    it('réutilise la ligne PENDING orpheline (sans référence PayDunya) au lieu d’en créer une nouvelle', async () => {
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 'payment-orphan',
+        transactionId: null,
+        paydunyaCheckoutUrl: null,
+        paidAmount: 55000,
+      });
+      prisma.payment.update.mockResolvedValue({ id: 'payment-orphan' });
 
       await service.initiate(tenant, dto);
 
-      expect(prisma.payment.create).toHaveBeenCalled();
-      expect(paydunya.createInvoice).toHaveBeenCalled();
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+      expect(prisma.payment.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'payment-orphan' } }),
+      );
+      expect(paydunya.createInvoice).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentId: 'payment-orphan' }),
+      );
     });
   });
 
@@ -417,10 +453,34 @@ describe('PaymentsService', () => {
       expect(paydunya.confirmInvoiceStatus).not.toHaveBeenCalled();
     });
 
-    it('ne fait rien si aucun transactionId (facture jamais créée)', async () => {
-      prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment({ transactionId: null }));
+    it('ne fait rien pour un orphelin (transactionId null) encore dans le délai d’abandon', async () => {
+      prisma.payment.findUnique.mockResolvedValue(
+        makePaydunyaPayment({ transactionId: null, createdAt: new Date() }),
+      );
       await service.reconcilePaydunyaPayment('payment-1');
       expect(paydunya.confirmInvoiceStatus).not.toHaveBeenCalled();
+      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejette un orphelin (transactionId null) passé le délai d’abandon', async () => {
+      prisma.payment.findUnique.mockResolvedValue(
+        makePaydunyaPayment({
+          transactionId: null,
+          createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        }),
+      );
+
+      await service.reconcilePaydunyaPayment('payment-1');
+
+      expect(paydunya.confirmInvoiceStatus).not.toHaveBeenCalled();
+      expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+        where: { id: 'payment-1', status: 'PENDING' },
+        data: {
+          status: 'REJECTED',
+          rejectionReason:
+            'Paiement PayDunya sans référence de transaction — incident technique, à relancer',
+        },
+      });
     });
 
     it('passe à PAID et émet payment.confirmed quand PayDunya confirme "completed"', async () => {
@@ -434,7 +494,11 @@ describe('PaymentsService', () => {
       ];
       expect(updateManyArgs.where).toEqual({ id: 'payment-1', status: 'PENDING' });
       expect(updateManyArgs.data.status).toBe('PAID');
-      expect(tx.paymentScheduleEntry.update).toHaveBeenCalled();
+      // Incrément atomique, jamais un SET sur valeur périmée (/review 2026-09-10)
+      expect(tx.paymentScheduleEntry.update).toHaveBeenCalledWith({
+        where: { id: 'entry-1' },
+        data: { paidAmount: { increment: 55000 } },
+      });
       expect(events.emit).toHaveBeenCalledWith(PAYMENT_CONFIRMED, { paymentId: 'payment-1' });
     });
 

@@ -23,12 +23,7 @@ import { RejectPaymentDto } from './dto/reject-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PAYMENT_CONFIRMED } from './payment.events';
-import {
-  PaydunyaService,
-  PaydunyaInvoiceStatus,
-  PaydunyaError,
-  checkoutUrlFor,
-} from './paydunya.service';
+import { PaydunyaService, PaydunyaInvoiceStatus, PaydunyaError } from './paydunya.service';
 import { PAYDUNYA_ABANDON_AFTER_MS } from '../../common/constants';
 
 export type PaymentWithAccess = Prisma.PaymentGetPayload<{
@@ -146,43 +141,66 @@ export class PaymentsService {
       throw new ConflictException('Cette échéance est déjà réglée');
     }
 
-    // Garde anti-double appel (trouvé en /review, 2026-09-07) — un
-    // double-clic ou un retry client ne doit jamais créer une deuxième
-    // facture PayDunya distincte pour la même échéance : si un paiement
-    // PENDING avec facture déjà créée existe, on renvoie son checkoutUrl
-    // plutôt que d'en générer un second (qui doublerait le crédit si les
-    // deux étaient payés). Un PENDING sans transactionId (tentative
-    // précédente jamais aboutie chez PayDunya) n'est pas repris ici — voir
-    // le `not: null` — une nouvelle tentative est alors légitime.
+    // Un seul Payment PAYDUNYA_API PENDING à la fois par échéance (garanti par
+    // l'index unique partiel `payments_schedule_entry_paydunya_pending_unique`,
+    // migration 20260910...). Trois cas (durci en /review 2026-09-10) :
     const existing = await this.prisma.payment.findFirst({
-      where: {
-        scheduleEntryId: scheduleEntry.id,
-        source: 'PAYDUNYA_API',
-        status: 'PENDING',
-        transactionId: { not: null },
-      },
-      orderBy: { createdAt: 'desc' },
+      where: { scheduleEntryId: scheduleEntry.id, source: 'PAYDUNYA_API', status: 'PENDING' },
     });
-    if (existing?.transactionId) {
-      return { paymentId: existing.id, checkoutUrl: checkoutUrlFor(existing.transactionId) };
+
+    // 1. Facture déjà créée chez PayDunya → on rejoue son URL telle quelle,
+    //    SAUF si le solde restant a bougé depuis (paiement manuel partiel) —
+    //    dans ce cas on refuse plutôt que renvoyer une URL au mauvais montant.
+    if (existing?.transactionId && existing.paydunyaCheckoutUrl) {
+      if (existing.paidAmount !== remaining) {
+        throw new ConflictException(
+          `Un paiement de ${existing.paidAmount} FCFA est déjà en cours pour cette échéance — attendez sa confirmation ou son expiration avant d'en relancer un`,
+        );
+      }
+      return { paymentId: existing.id, checkoutUrl: existing.paydunyaCheckoutUrl };
     }
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        scheduleEntryId: scheduleEntry.id,
-        leaseId: scheduleEntry.leaseId,
-        source: 'PAYDUNYA_API',
-        status: 'PENDING',
-        paymentMethod: dto.paymentMethod,
-        paidAmount: remaining,
-      },
-    });
+    let payment: Payment;
+    if (existing) {
+      // 2. Orphelin : ligne PENDING d'une tentative précédente où la création
+      //    de facture a échoué avant d'être persistée. On la réutilise (et on
+      //    réaligne le montant si le solde a bougé) plutôt que de bloquer le
+      //    locataire 24h sur l'index unique.
+      payment = await this.prisma.payment.update({
+        where: { id: existing.id },
+        data: { paidAmount: remaining, paymentMethod: dto.paymentMethod },
+      });
+    } else {
+      // 3. Aucun PENDING — création. Deux `initiate()` réellement concurrents :
+      //    l'index unique fait échouer le perdant en P2002, remappé en 409
+      //    (même pattern que MandatesService).
+      try {
+        payment = await this.prisma.payment.create({
+          data: {
+            scheduleEntryId: scheduleEntry.id,
+            leaseId: scheduleEntry.leaseId,
+            source: 'PAYDUNYA_API',
+            status: 'PENDING',
+            paymentMethod: dto.paymentMethod,
+            paidAmount: remaining,
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new ConflictException(
+            'Un paiement est déjà en cours pour cette échéance — réessayez dans un instant',
+          );
+        }
+        throw error;
+      }
+    }
 
     const apiBaseUrl = this.config.getOrThrow<string>('API_BASE_URL');
     const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
 
+    let invoice: { token: string; checkoutUrl: string };
     try {
-      const invoice = await this.paydunya.createInvoice({
+      invoice = await this.paydunya.createInvoice({
         amount: remaining,
         description: `WARAH — ${scheduleEntry.lease.property.address}`,
         paymentId: payment.id,
@@ -190,25 +208,55 @@ export class PaymentsService {
         returnUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=success`,
         cancelUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=cancelled`,
       });
-
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { transactionId: invoice.token },
-      });
-
-      return { paymentId: payment.id, checkoutUrl: invoice.checkoutUrl };
     } catch (error) {
-      // La facture Payment reste PENDING sans transactionId — invisible pour
-      // le cron de réconciliation (qui exige transactionId non-null, voir
-      // reconcilePaydunyaPayment()), donc sans effet de bord si le locataire
-      // réessaie juste après (nouvel appel initiate() = nouveau Payment).
-      this.logger.error(`[paydunya/initiate] échec pour payment=${payment.id}`, error);
+      // Aucune facture créée chez PayDunya — le Payment reste PENDING sans
+      // transactionId ni URL ; le cron de réconciliation le rejettera passé
+      // le délai d'abandon (voir reconcilePaydunyaPayment()).
+      this.logger.error(
+        `[paydunya/initiate] échec création facture pour payment=${payment.id}`,
+        error,
+      );
       const message =
         error instanceof PaydunyaError
           ? error.message
           : 'Le service de paiement est momentanément indisponible, réessayez dans quelques instants';
       throw new ServiceUnavailableException(message);
     }
+
+    // La facture EXISTE déjà chez PayDunya à ce stade — persister sa
+    // référence est critique (sans elle le paiement du locataire devient
+    // irréconciliable). Écriture locale idempotente : on retente avant
+    // d'abandonner, et en dernier recours on loggue token + paymentId en
+    // ERROR pour rattrapage manuel (trouvé en /review 2026-09-10).
+    try {
+      await this.persistPaydunyaReference(payment.id, invoice.token, invoice.checkoutUrl);
+    } catch (error) {
+      this.logger.error(
+        `[paydunya/initiate] CRITIQUE — facture créée mais référence non persistée. payment=${payment.id} token=${invoice.token} url=${invoice.checkoutUrl}`,
+        error,
+      );
+      throw new ServiceUnavailableException(
+        'Paiement initié mais un incident technique est survenu — vérifiez votre historique avant de relancer',
+      );
+    }
+
+    return { paymentId: payment.id, checkoutUrl: invoice.checkoutUrl };
+  }
+
+  private async persistPaydunyaReference(
+    paymentId: string,
+    transactionId: string,
+    checkoutUrl: string,
+  ): Promise<void> {
+    const { default: pRetry } = await import('p-retry');
+    await pRetry(
+      () =>
+        this.prisma.payment.update({
+          where: { id: paymentId },
+          data: { transactionId, paydunyaCheckoutUrl: checkoutUrl },
+        }),
+      { retries: 3, minTimeout: 200, maxTimeout: 2000 },
+    );
   }
 
   async findAll(user: AuthenticatedUser, query: ListPaymentsQueryDto): Promise<PaginatedPayments> {
@@ -377,9 +425,25 @@ export class PaymentsService {
     if (!payment || payment.source !== 'PAYDUNYA_API' || payment.status !== 'PENDING') {
       return;
     }
+
+    const isAbandoned = Date.now() - payment.createdAt.getTime() > PAYDUNYA_ABANDON_AFTER_MS;
+
     if (!payment.transactionId) {
-      // Facture jamais créée avec succès chez PayDunya (échec réseau à
-      // l'initiation, voir initiate()) — rien à vérifier auprès d'eux.
+      // Facture jamais créée chez PayDunya (échec réseau à l'initiation), ou
+      // créée mais référence jamais persistée (incident rare, voir
+      // initiate()). Rien à revérifier faute de référence. Passé le délai
+      // d'abandon on rejette quand même pour ne pas laisser la ligne PENDING
+      // indéfiniment (trouvé en /review 2026-09-10).
+      if (isAbandoned) {
+        await this.prisma.payment.updateMany({
+          where: { id: paymentId, status: 'PENDING' },
+          data: {
+            status: 'REJECTED',
+            rejectionReason:
+              'Paiement PayDunya sans référence de transaction — incident technique, à relancer',
+          },
+        });
+      }
       return;
     }
 
@@ -392,19 +456,24 @@ export class PaymentsService {
     }
 
     if (paydunyaStatus === 'completed') {
-      const paidAmount = payment.scheduleEntry.paidAmount + payment.paidAmount;
       const claimed = await this.prisma.$transaction(async (tx) => {
         const { count } = await tx.payment.updateMany({
           where: { id: paymentId, status: 'PENDING' },
           data: { status: 'PAID', paidAt: new Date() },
         });
         if (count === 0) return false; // déjà traité par un appel concurrent
+        // Incrément atomique — jamais un SET sur une valeur lue avant l'appel
+        // réseau (~45s) : un paiement manuel ou un 2e paiement sur la même
+        // échéance pendant cette fenêtre ne doit pas être écrasé (invariant
+        // #3, résidu corrigé en /review 2026-09-10). Le statut se recalcule
+        // sur la valeur fraîche renvoyée par l'incrément.
+        const entry = await tx.paymentScheduleEntry.update({
+          where: { id: payment.scheduleEntryId },
+          data: { paidAmount: { increment: payment.paidAmount } },
+        });
         await tx.paymentScheduleEntry.update({
           where: { id: payment.scheduleEntryId },
-          data: {
-            paidAmount,
-            status: computeEntryStatus(paidAmount, payment.scheduleEntry.expectedAmount),
-          },
+          data: { status: computeEntryStatus(entry.paidAmount, entry.expectedAmount) },
         });
         return true;
       });
@@ -430,7 +499,7 @@ export class PaymentsService {
     // locataire (voir PaydunyaReconciliationTask, seul appelant qui atteint
     // ce cas en pratique — le webhook n'arrive jamais pour un paiement resté
     // réellement pending côté PayDunya).
-    if (Date.now() - payment.createdAt.getTime() > PAYDUNYA_ABANDON_AFTER_MS) {
+    if (isAbandoned) {
       await this.prisma.payment.updateMany({
         where: { id: paymentId, status: 'PENDING' },
         data: {

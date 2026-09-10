@@ -476,28 +476,39 @@ model PaymentScheduleEntry {
 // applicative seule. Agrégateur PayDunya depuis le 2026-09-07 (le client a
 // changé d'agrégateur — Cashpay n'a jamais été branché en réalité, voir
 // /architect du même jour).
+//
+// Un seul Payment PAYDUNYA_API PENDING à la fois par échéance — garantie
+// par l'index unique partiel `payments_schedule_entry_paydunya_pending_unique`
+// (migration 20260910..., non exprimable dans ce schéma : Prisma ne gère pas
+// les index partiels WHERE ...). Empêche deux `initiate()` concurrents de
+// créer deux factures PayDunya pour la même échéance (trouvé en /review
+// 2026-09-10).
 model Payment {
-  id                String               @id @default(cuid())
-  scheduleEntryId   String
-  scheduleEntry     PaymentScheduleEntry @relation(fields: [scheduleEntryId], references: [id])
-  leaseId           String
-  lease             Lease                @relation(fields: [leaseId], references: [id])
-  source            PaymentSource
-  status            PaymentStatus        @default(PENDING)
-  paymentMethod     PaymentMethod?
-  paidAmount        Int
-  paidAt            DateTime?            @db.Timestamptz(6)
-  transactionId     String?              @unique
-  proofStoragePath  String?
-  note              String?
-  recordedByUserId  String?
-  recordedBy        User?                @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
-  confirmedByUserId String?
-  confirmedBy       User?                @relation("PaymentConfirmedBy", fields: [confirmedByUserId], references: [id])
-  confirmedAt       DateTime?            @db.Timestamptz(6)
-  rejectionReason   String?
-  createdAt         DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime             @updatedAt @db.Timestamptz(6)
+  id                  String               @id @default(cuid())
+  scheduleEntryId     String
+  scheduleEntry       PaymentScheduleEntry @relation(fields: [scheduleEntryId], references: [id])
+  leaseId             String
+  lease               Lease                @relation(fields: [leaseId], references: [id])
+  source              PaymentSource
+  status              PaymentStatus        @default(PENDING)
+  paymentMethod       PaymentMethod?
+  paidAmount          Int
+  paidAt              DateTime?            @db.Timestamptz(6)
+  transactionId       String?              @unique
+  // URL de paiement telle que renvoyée par PayDunya (jamais reconstruite —
+  // l'hôte diffère entre sandbox et prod). Rejouée à l'identique si le
+  // locataire relance un paiement encore PENDING (voir initiate()).
+  paydunyaCheckoutUrl String?
+  proofStoragePath    String?
+  note                String?
+  recordedByUserId    String?
+  recordedBy          User?                @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
+  confirmedByUserId   String?
+  confirmedBy         User?                @relation("PaymentConfirmedBy", fields: [confirmedByUserId], references: [id])
+  confirmedAt         DateTime?            @db.Timestamptz(6)
+  rejectionReason     String?
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
 
   declaration PaymentDeclaration?
 
