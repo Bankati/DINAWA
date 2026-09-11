@@ -3,7 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { withTimeout } from '../../common/utils/with-timeout';
 
-const PAYDUNYA_BASE_URL = 'https://app.paydunya.com/api/v1';
+// Deux hôtes distincts selon le mode — erreur trouvée le 2026-09-11 (doc
+// PayDunya officielle transmise par le N+1 du développeur) : le mode test
+// N'UTILISE PAS `api/v1`, il a son propre préfixe `sandbox-api/v1`. Le code
+// tapait jusqu'ici toujours sur l'hôte production, avec des clés test — ce
+// qui produit exactement `"Invalid Masterkey Specified"` côté PayDunya
+// (clés test sur l'API live). Ce n'était donc pas un problème de valeur de
+// clé comme supposé initialement, mais de configuration d'environnement —
+// l'API elle-même n'a jamais été en cause.
+const PAYDUNYA_BASE_URL = {
+  test: 'https://app.paydunya.com/sandbox-api/v1',
+  live: 'https://app.paydunya.com/api/v1',
+} as const;
 const CALL_TIMEOUT_MS = 15_000;
 
 // Correspondance entre notre enum interne (ce que voient nos utilisateurs —
@@ -54,10 +65,6 @@ export class PaydunyaService {
   constructor(config: ConfigService) {
     const mode = config.get<string>('PAYDUNYA_MODE') ?? 'test';
     const masterKey = config.get<string>('PAYDUNYA_MASTER_KEY') ?? '';
-    const publicKey =
-      config.get<string>(
-        mode === 'live' ? 'PAYDUNYA_LIVE_PUBLIC_KEY' : 'PAYDUNYA_TEST_PUBLIC_KEY',
-      ) ?? '';
     const privateKey =
       config.get<string>(
         mode === 'live' ? 'PAYDUNYA_LIVE_PRIVATE_KEY' : 'PAYDUNYA_TEST_PRIVATE_KEY',
@@ -65,15 +72,17 @@ export class PaydunyaService {
     const token =
       config.get<string>(mode === 'live' ? 'PAYDUNYA_LIVE_TOKEN' : 'PAYDUNYA_TEST_TOKEN') ?? '';
 
-    this.enabled = Boolean(masterKey && publicKey && privateKey && token);
+    // Master/Private/Token seuls sont requis pour créer/confirmer une
+    // facture (doc PayDunya, 2026-09-11) — la clé publique n'entre dans
+    // aucun de ces deux appels, jamais envoyée en en-tête ici.
+    this.enabled = Boolean(masterKey && privateKey && token);
 
     this.http = axios.create({
-      baseURL: PAYDUNYA_BASE_URL,
+      baseURL: PAYDUNYA_BASE_URL[mode === 'live' ? 'live' : 'test'],
       headers: {
         'Content-Type': 'application/json',
         'PAYDUNYA-MASTER-KEY': masterKey,
         'PAYDUNYA-PRIVATE-KEY': privateKey,
-        'PAYDUNYA-PUBLIC-KEY': publicKey,
         'PAYDUNYA-TOKEN': token,
       },
     });

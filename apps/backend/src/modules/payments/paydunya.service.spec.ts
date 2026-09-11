@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { PaydunyaService, PaydunyaError, fallbackCheckoutUrl } from './paydunya.service';
 
 const post = jest.fn();
@@ -37,9 +38,42 @@ describe('PaydunyaService', () => {
     expect(service.isEnabled()).toBe(false);
   });
 
-  it('est activé quand les 4 clés du mode courant sont présentes', () => {
-    const service = new PaydunyaService(makeConfig() as never);
+  it('est activé quand master/private/token du mode courant sont présents (clé publique non requise)', () => {
+    const service = new PaydunyaService(makeConfig({ PAYDUNYA_TEST_PUBLIC_KEY: '' }) as never);
     expect(service.isEnabled()).toBe(true);
+  });
+
+  it("utilise l'hôte sandbox en mode test et l'hôte production en mode live (bug trouvé le 2026-09-11 — l'API tapait toujours sur l'hôte prod)", () => {
+    new PaydunyaService(makeConfig({ PAYDUNYA_MODE: 'test' }) as never);
+    const [[testArgs]] = (axios.create as jest.Mock).mock.calls.slice(-1) as [
+      [{ baseURL: string }],
+    ];
+    expect(testArgs.baseURL).toBe('https://app.paydunya.com/sandbox-api/v1');
+
+    new PaydunyaService(
+      makeConfig({
+        PAYDUNYA_MODE: 'live',
+        PAYDUNYA_LIVE_PRIVATE_KEY: 'priv-live',
+        PAYDUNYA_LIVE_TOKEN: 'token-live',
+      }) as never,
+    );
+    const [[liveArgs]] = (axios.create as jest.Mock).mock.calls.slice(-1) as [
+      [{ baseURL: string }],
+    ];
+    expect(liveArgs.baseURL).toBe('https://app.paydunya.com/api/v1');
+  });
+
+  it("n'envoie jamais PAYDUNYA-PUBLIC-KEY — non requis par ces endpoints (doc PayDunya, 2026-09-11)", () => {
+    new PaydunyaService(makeConfig() as never);
+    const [[{ headers }]] = (axios.create as jest.Mock).mock.calls.slice(-1) as [
+      [{ headers: Record<string, unknown> }],
+    ];
+    expect(headers).not.toHaveProperty('PAYDUNYA-PUBLIC-KEY');
+    expect(headers).toMatchObject({
+      'PAYDUNYA-MASTER-KEY': 'master-1',
+      'PAYDUNYA-PRIVATE-KEY': 'priv-test',
+      'PAYDUNYA-TOKEN': 'token-test',
+    });
   });
 
   it('mappe TMONEY/FLOOZ vers les codes opérateur PayDunya du Togo', () => {

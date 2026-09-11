@@ -92,6 +92,9 @@ class EnvironmentVariables {
   @IsOptional()
   PAYDUNYA_MASTER_KEY?: string;
 
+  // Non envoyée par PaydunyaService (Master/Private/Token seuls suffisent
+  // pour créer/confirmer une facture, doc PayDunya 2026-09-11) — conservée
+  // pour référence/usages futurs (ex. Softpay).
   @IsString()
   @IsOptional()
   PAYDUNYA_TEST_PUBLIC_KEY?: string;
