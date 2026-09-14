@@ -109,7 +109,7 @@ describe('PaymentsService', () => {
         token: 'pd-token-1',
         checkoutUrl: 'https://paydunya.com/checkout/invoice/pd-token-1',
       }),
-      confirmInvoiceStatus: jest.fn().mockResolvedValue('pending'),
+      confirmInvoiceStatus: jest.fn().mockResolvedValue({ status: 'pending', amount: null }),
     };
     config = {
       getOrThrow: jest.fn((key: string) =>
@@ -485,15 +485,16 @@ describe('PaymentsService', () => {
 
     it('passe à PAID et émet payment.confirmed quand PayDunya confirme "completed"', async () => {
       prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment());
-      paydunya.confirmInvoiceStatus.mockResolvedValue('completed');
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 55000 });
 
       await service.reconcilePaydunyaPayment('payment-1');
 
       const [updateManyArgs] = tx.payment.updateMany.mock.calls[0] as [
-        { where: { id: string; status: string }; data: { status: string } },
+        { where: { id: string; status: string }; data: { status: string; paidAmount: number } },
       ];
       expect(updateManyArgs.where).toEqual({ id: 'payment-1', status: 'PENDING' });
       expect(updateManyArgs.data.status).toBe('PAID');
+      expect(updateManyArgs.data.paidAmount).toBe(55000);
       // Incrément atomique, jamais un SET sur valeur périmée (/review 2026-09-10)
       expect(tx.paymentScheduleEntry.update).toHaveBeenCalledWith({
         where: { id: 'entry-1' },
@@ -502,9 +503,25 @@ describe('PaymentsService', () => {
       expect(events.emit).toHaveBeenCalledWith(PAYMENT_CONFIRMED, { paymentId: 'payment-1' });
     });
 
+    it('crédite le montant confirmé par PayDunya, pas notre propre montant attendu, en cas de divergence (/architect 2026-09-14)', async () => {
+      prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment({ paidAmount: 55000 }));
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 40000 });
+
+      await service.reconcilePaydunyaPayment('payment-1');
+
+      const [updateManyArgs] = tx.payment.updateMany.mock.calls[0] as [
+        { data: { paidAmount: number } },
+      ];
+      expect(updateManyArgs.data.paidAmount).toBe(40000);
+      expect(tx.paymentScheduleEntry.update).toHaveBeenCalledWith({
+        where: { id: 'entry-1' },
+        data: { paidAmount: { increment: 40000 } },
+      });
+    });
+
     it("n'incrémente rien et n'émet aucun événement si un appel concurrent a déjà traité ce paiement (course webhook/cron)", async () => {
       prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment());
-      paydunya.confirmInvoiceStatus.mockResolvedValue('completed');
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 55000 });
       tx.payment.updateMany.mockResolvedValue({ count: 0 });
 
       await service.reconcilePaydunyaPayment('payment-1');
@@ -515,7 +532,7 @@ describe('PaymentsService', () => {
 
     it('passe à REJECTED quand PayDunya confirme "cancelled"', async () => {
       prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment());
-      paydunya.confirmInvoiceStatus.mockResolvedValue('cancelled');
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'cancelled', amount: null });
 
       await service.reconcilePaydunyaPayment('payment-1');
 
@@ -527,7 +544,7 @@ describe('PaymentsService', () => {
 
     it('ne touche rien si PayDunya répond encore "pending" et le délai d’abandon (24h) n’est pas dépassé', async () => {
       prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment({ createdAt: new Date() }));
-      paydunya.confirmInvoiceStatus.mockResolvedValue('pending');
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'pending', amount: null });
 
       await service.reconcilePaydunyaPayment('payment-1');
 
@@ -539,7 +556,7 @@ describe('PaymentsService', () => {
       prisma.payment.findUnique.mockResolvedValue(
         makePaydunyaPayment({ createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) }),
       );
-      paydunya.confirmInvoiceStatus.mockResolvedValue('pending');
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'pending', amount: null });
 
       await service.reconcilePaydunyaPayment('payment-1');
 

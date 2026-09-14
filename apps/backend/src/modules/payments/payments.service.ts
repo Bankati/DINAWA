@@ -448,18 +448,32 @@ export class PaymentsService {
     }
 
     let paydunyaStatus: PaydunyaInvoiceStatus;
+    let confirmedAmount: number | null;
     try {
-      paydunyaStatus = await this.paydunya.confirmInvoiceStatus(payment.transactionId);
+      ({ status: paydunyaStatus, amount: confirmedAmount } =
+        await this.paydunya.confirmInvoiceStatus(payment.transactionId));
     } catch (error) {
       this.logger.error(`[paydunya/reconcile] échec vérification pour payment=${paymentId}`, error);
       return; // on retentera au prochain webhook ou passage du cron
     }
 
     if (paydunyaStatus === 'completed') {
+      // Le montant crédité et celui de la quittance viennent de PayDunya, pas
+      // de notre propre valeur posée à l'initiation — même principe que pour
+      // le statut (jamais confiance dans notre propre supposition, toujours
+      // revérifié auprès de PayDunya, voir /architect 2026-09-14). Un écart
+      // serait anormal (Checkout Invoice est un montant fixe) et est loggé.
+      const paidAmount = confirmedAmount ?? payment.paidAmount;
+      if (confirmedAmount !== null && confirmedAmount !== payment.paidAmount) {
+        this.logger.warn(
+          `[paydunya/reconcile] montant confirmé (${confirmedAmount}) ≠ montant attendu (${payment.paidAmount}) pour payment=${paymentId} — montant PayDunya retenu`,
+        );
+      }
+
       const claimed = await this.prisma.$transaction(async (tx) => {
         const { count } = await tx.payment.updateMany({
           where: { id: paymentId, status: 'PENDING' },
-          data: { status: 'PAID', paidAt: new Date() },
+          data: { status: 'PAID', paidAt: new Date(), paidAmount },
         });
         if (count === 0) return false; // déjà traité par un appel concurrent
         // Incrément atomique — jamais un SET sur une valeur lue avant l'appel
@@ -469,7 +483,7 @@ export class PaymentsService {
         // sur la valeur fraîche renvoyée par l'incrément.
         const entry = await tx.paymentScheduleEntry.update({
           where: { id: payment.scheduleEntryId },
-          data: { paidAmount: { increment: payment.paidAmount } },
+          data: { paidAmount: { increment: paidAmount } },
         });
         await tx.paymentScheduleEntry.update({
           where: { id: payment.scheduleEntryId },

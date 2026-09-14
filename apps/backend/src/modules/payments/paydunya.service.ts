@@ -174,17 +174,28 @@ export class PaydunyaService {
   // confiance au payload IPN entrant seul (celui-ci ne sert qu'à savoir QUAND
   // revérifier, pas à quoi). Même mécanisme réutilisé par le cron de
   // réconciliation (voir PaymentsService.reconcilePaydunyaPayment()).
-  async confirmInvoiceStatus(token: string): Promise<PaydunyaInvoiceStatus> {
+  // Remonte aussi `invoice.total_amount` — le montant que PayDunya a
+  // réellement encaissé, jamais supposé égal à ce qu'on avait demandé à
+  // l'initiation (utilisé pour créditer l'échéance et générer la quittance,
+  // voir /architect 2026-09-14).
+  async confirmInvoiceStatus(
+    token: string,
+  ): Promise<{ status: PaydunyaInvoiceStatus; amount: number | null }> {
     if (!this.enabled) {
       throw new PaydunyaError('PayDunya non configuré (clés API manquantes)');
     }
 
-    const data = await this.getWithRetry<{ status?: string }>(`/checkout-invoice/confirm/${token}`);
+    const data = await this.getWithRetry<{
+      status?: string;
+      invoice?: { total_amount?: number };
+    }>(`/checkout-invoice/confirm/${token}`);
+    const amount =
+      typeof data.invoice?.total_amount === 'number' ? data.invoice.total_amount : null;
 
-    if (data.status === 'completed') return 'completed';
-    if (data.status === 'cancelled') return 'cancelled';
-    if (data.status === 'failed') return 'failed';
-    return 'pending';
+    if (data.status === 'completed') return { status: 'completed', amount };
+    if (data.status === 'cancelled') return { status: 'cancelled', amount };
+    if (data.status === 'failed') return { status: 'failed', amount };
+    return { status: 'pending', amount };
   }
 
   // Retry réservé aux opérations idempotentes — confirmInvoiceStatus() est

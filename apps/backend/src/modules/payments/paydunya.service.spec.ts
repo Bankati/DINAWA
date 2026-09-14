@@ -185,6 +185,19 @@ describe('PaydunyaService', () => {
     get.mockResolvedValue({ data: { status: raw } });
     const service = new PaydunyaService(makeConfig() as never);
 
-    await expect(service.confirmInvoiceStatus('inv-abc')).resolves.toBe(expected);
+    await expect(service.confirmInvoiceStatus('inv-abc')).resolves.toEqual({
+      status: expected,
+      amount: null,
+    });
+  });
+
+  it('confirmInvoiceStatus remonte invoice.total_amount — jamais confiance dans notre propre montant attendu (/architect 2026-09-14, génération de quittance)', async () => {
+    get.mockResolvedValue({ data: { status: 'completed', invoice: { total_amount: 55000 } } });
+    const service = new PaydunyaService(makeConfig() as never);
+
+    await expect(service.confirmInvoiceStatus('inv-abc')).resolves.toEqual({
+      status: 'completed',
+      amount: 55000,
+    });
   });
 });

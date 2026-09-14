@@ -81,6 +81,16 @@ export interface RejectPaymentDto {
   rejectionReason: string;
 }
 
+export interface InitiatePaymentDto {
+  scheduleEntryId: string;
+  paymentMethod: "TMONEY" | "FLOOZ";
+}
+
+export interface InitiatePaymentResponse {
+  paymentId: string;
+  checkoutUrl: string;
+}
+
 export type PaymentStatus =
   | "PENDING"
   | "PENDING_CONFIRMATION"
@@ -124,6 +134,11 @@ export const PAYMENT_STATUS_DOT_CLASSES: Record<string, string> = {
 };
 
 export const paymentsApi = {
+  // Initier un vrai paiement mobile money (PayDunya) — renvoie l'URL de
+  // paiement hébergée par PayDunya vers laquelle rediriger le locataire.
+  initiate: (dto: InitiatePaymentDto) =>
+    api.post<InitiatePaymentResponse>("/payments/initiate", dto),
+
   // Créer une déclaration de paiement locataire
   createDeclaration: (dto: CreatePaymentDeclarationDto, file?: File) => {
     const formData = new FormData();

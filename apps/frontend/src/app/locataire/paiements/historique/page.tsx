@@ -1,8 +1,10 @@
 'use client';
 
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, CheckCircle2, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { paymentsApi, type Payment } from '@/lib/payments';
 import { toast } from '@/components/ui';
@@ -48,10 +50,35 @@ function formatMontant(n: number) {
   return n.toLocaleString('fr-FR') + ' FCFA';
 }
 
+// Le retour de PayDunya (?paydunya=success|cancelled, voir PaymentsService.initiate(),
+// returnUrl/cancelUrl) ne veut pas dire "confirmé" — la confirmation réelle
+// arrive via webhook ou, au pire, le cron de réconciliation (jusqu'à 15 min,
+// voir /architect 2026-09-14). On rafraîchit donc automatiquement la liste
+// un moment après un retour "success", plutôt que de laisser le locataire
+// se demander si son paiement a fonctionné.
+const POLL_INTERVAL_MS = 5_000;
+const POLL_DURATION_MS = 60_000;
+
 export default function PaymentHistoryPage() {
+  return (
+    <Suspense>
+      <PaymentHistoryContent />
+    </Suspense>
+  );
+}
+
+function PaymentHistoryContent() {
+  const searchParams = useSearchParams();
+  const paydunyaReturn = searchParams.get('paydunya'); // 'success' | 'cancelled' | null
+  const [pollStartedAt] = useState(() => (paydunyaReturn === 'success' ? Date.now() : null));
+
   const { data: res, isLoading: loading } = useQuery({
     queryKey: ['payments'],
     queryFn: () => api.get<{ data: Payment[]; total: number }>('/payments'),
+    refetchInterval: () => {
+      if (!pollStartedAt) return false;
+      return Date.now() - pollStartedAt < POLL_DURATION_MS ? POLL_INTERVAL_MS : false;
+    },
   });
   const payments = res?.data ?? [];
 
@@ -76,8 +103,35 @@ export default function PaymentHistoryPage() {
       <PageHeader
         title="Historique des paiements"
         subtitle="Consultez et téléchargez vos quittances de loyer"
-        actions={<Button asChild><Link href="/locataire/paiements/declaration">Déclarer un paiement</Link></Button>}
+        actions={<Button asChild><Link href="/locataire/paiements/declaration">Payer / déclarer un paiement</Link></Button>}
       />
+
+      {paydunyaReturn === 'success' && (
+        <Card className="mb-4">
+          <div className="p-4 flex items-start gap-3 bg-green-50 border border-green-200 rounded-2xl">
+            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-green-800">
+              <div className="font-semibold">Paiement envoyé à PayDunya</div>
+              <div className="mt-0.5">
+                La confirmation peut prendre quelques instants — cette page se met à jour automatiquement.
+                Le statut passera à « Payé » dès que le paiement sera confirmé.
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {paydunyaReturn === 'cancelled' && (
+        <Card className="mb-4">
+          <div className="p-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl">
+            <XCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <div className="font-semibold">Paiement annulé</div>
+              <div className="mt-0.5">Vous pouvez relancer un paiement à tout moment depuis cette page.</div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card>
         {loading ? (
