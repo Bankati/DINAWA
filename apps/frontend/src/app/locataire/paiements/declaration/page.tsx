@@ -208,11 +208,14 @@ export default function PaymentDeclarationPage() {
           ) : (
             <Card>
               <CardBody>
-                <div className="flex gap-2 mb-5" role="tablist" aria-label="Mode de règlement">
+                {/* Deux boutons de bascule (pas de vrais onglets ARIA — pas de
+                    navigation clavier flèches à implémenter pour ça, voir
+                    /review 2026-09-14) : aria-pressed suffit et reste honnête
+                    sur le comportement réel. */}
+                <div className="flex gap-2 mb-5" aria-label="Mode de règlement">
                   <Button
                     type="button"
-                    role="tab"
-                    aria-selected={mode === 'online'}
+                    aria-pressed={mode === 'online'}
                     variant={mode === 'online' ? 'default' : 'outline'}
                     onClick={() => handleModeChange('online')}
                   >
@@ -220,8 +223,7 @@ export default function PaymentDeclarationPage() {
                   </Button>
                   <Button
                     type="button"
-                    role="tab"
-                    aria-selected={mode === 'manual'}
+                    aria-pressed={mode === 'manual'}
                     variant={mode === 'manual' ? 'default' : 'outline'}
                     onClick={() => handleModeChange('manual')}
                   >

@@ -461,10 +461,18 @@ export class PaymentsService {
       // Le montant crédité et celui de la quittance viennent de PayDunya, pas
       // de notre propre valeur posée à l'initiation — même principe que pour
       // le statut (jamais confiance dans notre propre supposition, toujours
-      // revérifié auprès de PayDunya, voir /architect 2026-09-14). Un écart
-      // serait anormal (Checkout Invoice est un montant fixe) et est loggé.
-      const paidAmount = confirmedAmount ?? payment.paidAmount;
-      if (confirmedAmount !== null && confirmedAmount !== payment.paidAmount) {
+      // revérifié auprès de PayDunya, voir /architect 2026-09-14). `??` ne
+      // suffit pas seul : il ne retombe sur notre montant que si PayDunya
+      // renvoie null/undefined, jamais sur un `0` — un montant confirmé à 0
+      // sur un statut "completed" serait une anomalie PayDunya, pas un
+      // signal à suivre les yeux fermés (trouvé en /review 2026-09-14).
+      const paidAmount =
+        confirmedAmount !== null && confirmedAmount > 0 ? confirmedAmount : payment.paidAmount;
+      if (confirmedAmount !== null && confirmedAmount <= 0) {
+        this.logger.error(
+          `[paydunya/reconcile] montant confirmé invalide (${confirmedAmount}) pour payment=${paymentId} — montant attendu (${payment.paidAmount}) retenu à la place`,
+        );
+      } else if (confirmedAmount !== null && confirmedAmount !== payment.paidAmount) {
         this.logger.warn(
           `[paydunya/reconcile] montant confirmé (${confirmedAmount}) ≠ montant attendu (${payment.paidAmount}) pour payment=${paymentId} — montant PayDunya retenu`,
         );

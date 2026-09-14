@@ -519,6 +519,22 @@ describe('PaymentsService', () => {
       });
     });
 
+    it('ignore un montant confirmé invalide (0) et retombe sur le montant attendu (/review 2026-09-14)', async () => {
+      prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment({ paidAmount: 55000 }));
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 0 });
+
+      await service.reconcilePaydunyaPayment('payment-1');
+
+      const [updateManyArgs] = tx.payment.updateMany.mock.calls[0] as [
+        { data: { paidAmount: number } },
+      ];
+      expect(updateManyArgs.data.paidAmount).toBe(55000);
+      expect(tx.paymentScheduleEntry.update).toHaveBeenCalledWith({
+        where: { id: 'entry-1' },
+        data: { paidAmount: { increment: 55000 } },
+      });
+    });
+
     it("n'incrémente rien et n'émet aucun événement si un appel concurrent a déjà traité ce paiement (course webhook/cron)", async () => {
       prisma.payment.findUnique.mockResolvedValue(makePaydunyaPayment());
       paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 55000 });
