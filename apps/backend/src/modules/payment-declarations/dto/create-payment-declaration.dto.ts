@@ -3,8 +3,8 @@ import { Type } from 'class-transformer';
 import { IsDateString, IsIn, IsInt, IsOptional, IsString, Min, MaxLength } from 'class-validator';
 
 // Même restriction que la saisie manuelle (voir create-manual-payment.dto.ts)
-// — TMONEY/FLOOZ passent par Cashpay (unité 17, non construite), pas par une
-// déclaration a posteriori.
+// — TMONEY/FLOOZ passent par PayDunya (unité 17, voir
+// PaymentsController.initiate()), pas par une déclaration a posteriori.
 const DECLARABLE_PAYMENT_METHODS = ['CASH', 'BANK_TRANSFER'] as const;
 export type DeclarablePaymentMethod = (typeof DECLARABLE_PAYMENT_METHODS)[number];
 

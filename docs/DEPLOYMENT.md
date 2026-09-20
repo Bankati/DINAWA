@@ -32,7 +32,7 @@ Comptes déjà créés :
 Comptes à créer (voir section 2) :
 
 - [x] **Sentry** — monitoring d'erreurs (câblé et actif des deux côtés depuis le 2026-08-10, organisation `athena-ju` — backend via `@sentry/nestjs`, frontend projet `javascript-nextjs`, voir 2a)
-- [ ] **Cashpay / Semoa** — paiements mobile money
+- [x] **PayDunya** — paiements mobile money (compte marchand ouvert, intégration backend construite le 2026-09-07 — voir 2b)
 
 ---
 
@@ -47,25 +47,35 @@ Organisation Sentry : `athena-ju`. Deux projets créés :
 
 Les deux DSN sont à reporter dans Railway/Vercel lors du déploiement (section 4b/5b) — ne jamais les committer en clair ailleurs que dans les fichiers `.env*` locaux (gitignorés). Reste à faire : configurer les alertes recommandées (voir section 9a).
 
-### 2b. Cashpay / Semoa (Mobile Money)
+### 2b. PayDunya (Mobile Money)
 
-Cashpay est le service de paiement mobile money de Semoa pour le Togo (T-Money et Flooz).
+PayDunya est l'agrégateur de paiement mobile money utilisé pour le Togo
+(T-Money et Moov/Flooz) — remplace Cashpay/Semoa, jamais réellement branché
+(décision du client, voir /architect 2026-09-07).
 
-**Démarche d'ouverture d'un compte marchand :**
+**Démarche (déjà faite pour le compte marchand du client) :**
 
-1. Contacter Semoa Togo : [www.semoa.biz](https://www.semoa.biz)
-2. Fournir les documents de l'entreprise (RCCM, pièce d'identité du gérant)
-3. Signer la convention de prestation de services
-4. Recevoir les credentials API :
-   - `CASHPAY_API_URL` — URL de base de l'API fournie par Semoa
-   - `CASHPAY_API_KEY` — Clé d'API pour l'authentification
-   - `CASHPAY_WEBHOOK_SECRET` — Secret HMAC pour valider les notifications de paiement
+1. Compte PayDunya Business activé.
+2. Dashboard → _Intégrez notre API_ → _Configurer une nouvelle application_ →
+   mode Test d'abord, mode Production activé séparément une fois les tests
+   validés (voir leur doc, section "Passage en production").
+3. Récupérer les credentials par mode (Test et Live sont deux jeux de 3 clés
+   distincts, la Master Key est commune aux deux) :
+   - `PAYDUNYA_MASTER_KEY`
+   - `PAYDUNYA_TEST_PUBLIC_KEY` / `PAYDUNYA_TEST_PRIVATE_KEY` / `PAYDUNYA_TEST_TOKEN`
+   - `PAYDUNYA_LIVE_PUBLIC_KEY` / `PAYDUNYA_LIVE_PRIVATE_KEY` / `PAYDUNYA_LIVE_TOKEN`
+4. Déclarer l'URL de callback IPN dans le dashboard PayDunya (AppDunya) :
+   `${API_BASE_URL}/payments/webhooks/paydunya` (ex.
+   `https://warah-api.up.railway.app/api/payments/webhooks/paydunya`).
+5. `PAYDUNYA_MODE=test` tant que les paiements réels ne sont pas validés,
+   puis `live` en production (voir aussi `API_BASE_URL`, section 4b).
 
-**En attendant le compte marchand :**
+**Sans ces variables :**
 
-- Laisser ces variables vides dans Railway
-- Le module Cashpay ne s'initialisera pas et renverra des erreurs 503 sur les endpoints de paiement
+- `POST /api/payments/initiate` renvoie `503 Service Unavailable`
 - Les autres fonctionnalités de la plateforme restent opérationnelles
+- Le cron de réconciliation (`PaydunyaReconciliationTask`) ne trouve
+  simplement aucun paiement `PAYDUNYA_API` à vérifier
 
 ---
 
@@ -139,11 +149,13 @@ SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 JWT_SECRET=...
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=noreply@warah.tg
+RESEND_FROM_EMAIL=noreply@warahcontact.com
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:contact@warah.tg
 ALLOWED_ORIGINS=https://votre-app.vercel.app
+API_BASE_URL=https://votre-service.up.railway.app/api
+PAYDUNYA_MODE=live
 ```
 
 ### 4c. Générer les clés VAPID
@@ -153,11 +165,11 @@ ALLOWED_ORIGINS=https://votre-app.vercel.app
 npx web-push generate-vapid-keys
 ```
 
-### 4d. Générer le secret HMAC Cashpay
+### 4d. Clés PayDunya
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+Rien à générer soi-même (contrairement à VAPID) — les clés viennent
+directement du dashboard PayDunya (voir 2b). Penser à déclarer l'URL de
+callback IPN dans PayDunya une fois `API_BASE_URL` connu.
 
 ### 4e. Vérifier le health check Railway
 
