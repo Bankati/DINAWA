@@ -27,7 +27,7 @@ interface PropertyPhoto { id: string; url: string; position: number; }
 
 interface Property {
   id: string; type: PropertyType; status: PropertyStatus;
-  address: string; neighborhood: string; city: string;
+  address: string; neighborhood: string; city: string; building: string | null;
   surfaceArea: number | null; roomsCount: number | null;
   monthlyRent: number; monthlyCharges: number; description: string | null;
   createdAt: string;
@@ -45,6 +45,7 @@ const propertySchema = z.object({
   address: z.string().min(1, "L'adresse est requise"),
   neighborhood: z.string().min(1, 'Le quartier est requis'),
   city: z.string().min(1, 'La ville est requise'),
+  building: z.string().optional(),
   surfaceArea: z.string().optional(),
   roomsCount: z.string().optional(),
   monthlyRent: z.string().min(1, 'Le loyer mensuel est requis').refine((v) => Number(v) > 0, 'Doit être un nombre positif'),
@@ -54,7 +55,7 @@ const propertySchema = z.object({
 type PropertyFormValues = z.infer<typeof propertySchema>;
 
 const EMPTY_VALUES: PropertyFormValues = {
-  type: 'APARTMENT', address: '', neighborhood: '', city: '',
+  type: 'APARTMENT', address: '', neighborhood: '', city: '', building: '',
   surfaceArea: '', roomsCount: '', monthlyRent: '', monthlyCharges: '0', description: '',
 };
 
@@ -64,6 +65,7 @@ function toPayload(v: PropertyFormValues) {
     address: v.address,
     neighborhood: v.neighborhood,
     city: v.city,
+    building: v.building || undefined,
     ...(v.surfaceArea ? { surfaceArea: parseFloat(v.surfaceArea) } : {}),
     ...(v.roomsCount ? { roomsCount: parseInt(v.roomsCount) } : {}),
     monthlyRent: parseInt(v.monthlyRent),
@@ -73,7 +75,12 @@ function toPayload(v: PropertyFormValues) {
 }
 
 // Champs partagés création/édition — un seul rendu, deux instances RHF.
-function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> }) {
+// `buildings` alimente la <datalist> — l'utilisateur choisit un immeuble déjà
+// utilisé ou tape simplement un nouveau nom (voir /architect 2026-09-20 :
+// champ texte libre, pas de table dédiée, la <datalist> HTML native suffit
+// pour "sélectionner un existant ou en saisir un nouveau" sans nouveau
+// composant DS).
+function PropertyFormFields({ form, buildings }: { form: UseFormReturn<PropertyFormValues>; buildings: string[] }) {
   const { register, watch, setValue, formState: { errors } } = form;
   return (
     <div className="flex flex-col gap-4">
@@ -90,6 +97,19 @@ function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> 
         <Label>Adresse</Label>
         <Input className="mt-1.5" placeholder="Ex: Rue des Cocotiers, lot 42" {...register('address')} />
         {errors.address && <p className="text-xs text-destructive mt-1">{errors.address.message}</p>}
+      </div>
+      <div>
+        <Label>Immeuble <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+        <Input
+          className="mt-1.5"
+          list="buildings-datalist"
+          placeholder="Ex: Résidence Les Palmiers"
+          {...register('building')}
+        />
+        <datalist id="buildings-datalist">
+          {buildings.map((b) => <option key={b} value={b} />)}
+        </datalist>
+        <p className="text-xs text-muted-foreground mt-1">Regroupe plusieurs biens au même endroit — choisissez un immeuble existant ou tapez-en un nouveau.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
@@ -134,13 +154,26 @@ function PropertyFormFields({ form }: { form: UseFormReturn<PropertyFormValues> 
 
 export default function BiensPage() {
   const [filter, setFilter] = useState('');
+  const [buildingFilter, setBuildingFilter] = useState('');
   const queryClient = useQueryClient();
 
   const { data: res, isLoading } = useQuery({
-    queryKey: ['properties', filter],
-    queryFn: () => api.get<{ data: Property[]; total: number }>(filter ? `/properties?status=${filter}&limit=100` : '/properties?limit=100'),
+    queryKey: ['properties', filter, buildingFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: '100' });
+      if (filter) params.set('status', filter);
+      if (buildingFilter) params.set('building', buildingFilter);
+      return api.get<{ data: Property[]; total: number }>(`/properties?${params.toString()}`);
+    },
   });
   const biens = res?.data ?? [];
+
+  // Suggestions d'immeubles — pour la <datalist> du formulaire et le filtre
+  // de la liste (voir /architect 2026-09-20).
+  const { data: buildings = [] } = useQuery({
+    queryKey: ['properties-buildings'],
+    queryFn: () => api.get<string[]>('/properties/buildings'),
+  });
 
   // Requête indépendante du filtre d'onglet actif — sert uniquement aux
   // compteurs de la rangée StatCard, toujours sur l'ensemble du portefeuille.
@@ -169,6 +202,7 @@ export default function BiensPage() {
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['properties'] });
+    queryClient.invalidateQueries({ queryKey: ['properties-buildings'] });
   }
 
   const [showForm, setShowForm] = useState(false);
@@ -251,6 +285,7 @@ export default function BiensPage() {
     setEditing(p);
     editForm.reset({
       type: p.type, address: p.address, neighborhood: p.neighborhood, city: p.city,
+      building: p.building ?? '',
       surfaceArea: p.surfaceArea != null ? String(p.surfaceArea) : '',
       roomsCount: p.roomsCount != null ? String(p.roomsCount) : '',
       monthlyRent: String(p.monthlyRent), monthlyCharges: String(p.monthlyCharges),
@@ -336,6 +371,17 @@ export default function BiensPage() {
             {l}
           </button>
         ))}
+        {buildings.length > 0 && (
+          <Select value={buildingFilter || 'all'} onValueChange={(v) => setBuildingFilter(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-auto min-w-[160px] h-[30px] text-xs rounded-full">
+              <SelectValue placeholder="Immeuble" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les immeubles</SelectItem>
+              {buildings.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <Card>
@@ -369,7 +415,9 @@ export default function BiensPage() {
                   <TableCell className="font-semibold text-foreground">{TYPE_LABELS[b.type] ?? b.type}</TableCell>
                   <TableCell>
                     <div className="font-semibold text-foreground">{b.address}</div>
-                    <div className="text-xs text-muted-foreground">{b.neighborhood}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {b.neighborhood}{b.building ? ` · ${b.building}` : ''}
+                    </div>
                   </TableCell>
                   <TableCell>{b.city}</TableCell>
                   <TableCell>{b.surfaceArea != null ? `${b.surfaceArea} m²` : <span className="text-muted-foreground">—</span>}</TableCell>
@@ -423,7 +471,7 @@ export default function BiensPage() {
         <DialogContent maxWidth={600}>
           <DialogHeader><DialogTitle>Ajouter un bien</DialogTitle></DialogHeader>
           <form onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))} className="flex flex-col gap-4">
-            <PropertyFormFields form={createForm} />
+            <PropertyFormFields form={createForm} buildings={buildings} />
             <div>
               <Label>Photos (10 max, 5 Mo chacune)</Label>
               <p className="text-xs text-muted-foreground mt-1 mb-2.5">Ajoutez vos photos puis retirez celles que vous ne voulez pas garder avant de valider.</p>
@@ -443,7 +491,7 @@ export default function BiensPage() {
         <DialogContent maxWidth={640}>
           <DialogHeader><DialogTitle>Modifier le bien</DialogTitle></DialogHeader>
           <form onSubmit={editForm.handleSubmit((v) => editMutation.mutate(v))} className="flex flex-col gap-4">
-            <PropertyFormFields form={editForm} />
+            <PropertyFormFields form={editForm} buildings={buildings} />
             <DialogFooter>
               <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Annuler</Button>
               <Button type="submit" loading={editMutation.isPending}>Enregistrer les modifications</Button>
