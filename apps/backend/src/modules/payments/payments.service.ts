@@ -26,10 +26,25 @@ import { PAYMENT_CONFIRMED } from './payment.events';
 import { PaydunyaService, PaydunyaInvoiceStatus, PaydunyaError } from './paydunya.service';
 import { PAYDUNYA_ABANDON_AFTER_MS } from '../../common/constants';
 
+// `property.mandates` limité au mandat ACTIVE le plus récent, avec le
+// gestionnaire chargé — sert à afficher le bon nom en signature de quittance
+// (gestionnaire si mandat actif, sinon propriétaire, voir
+// resolveResponsibleUserId() et /architect 2026-09-20). Chargé ici plutôt
+// qu'une requête séparée, la quittance ayant déjà tout le reste sous la main.
 export type PaymentWithAccess = Prisma.PaymentGetPayload<{
   include: {
     scheduleEntry: true;
-    lease: { include: { property: true; owner: true; tenant: true } };
+    lease: {
+      include: {
+        property: {
+          include: {
+            mandates: { where: { status: 'ACTIVE' }; take: 1; include: { manager: true } };
+          };
+        };
+        owner: true;
+        tenant: true;
+      };
+    };
   };
 }>;
 
@@ -554,7 +569,17 @@ export class PaymentsService {
       where: { id: paymentId },
       include: {
         scheduleEntry: true,
-        lease: { include: { property: true, owner: true, tenant: true } },
+        lease: {
+          include: {
+            property: {
+              include: {
+                mandates: { where: { status: 'ACTIVE' }, take: 1, include: { manager: true } },
+              },
+            },
+            owner: true,
+            tenant: true,
+          },
+        },
       },
     });
     if (!payment) {
