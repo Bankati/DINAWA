@@ -30,6 +30,14 @@ export class CreatePropertyDto {
   @MaxLength(200)
   city!: string;
 
+  // Regroupement libre (voir /architect 2026-09-20) — texte saisi par
+  // l'utilisateur, réutilise une valeur existante ou en crée une nouvelle.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  building?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

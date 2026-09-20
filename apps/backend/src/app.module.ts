@@ -145,9 +145,10 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // — la modération admin vit dans AdminModule, qui importe ce module
     ManagerReviewsModule,
 
-    // Forfaits et quotas (voir build-plan.md unité 35) — unité 36
-    // (prélèvement automatique via Cashpay) reportée, agréments T-Money/Flooz
-    // pas encore obtenus
+    // Forfaits et quotas (voir build-plan.md unité 35) — unité 36 (prélèvement
+    // automatique) explicitement abandonnée (décision développeur, /architect
+    // 2026-09-07) : pas de débit à l'initiative du marchand, seuls des
+    // rappels email sont envoyés, c'est au locataire de payer via PayDunya
     SubscriptionsModule,
 
     // Formulaire de contact public — endpoint minimal appelant EmailService,

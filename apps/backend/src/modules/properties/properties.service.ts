@@ -94,6 +94,7 @@ export class PropertiesService {
           address: dto.address,
           neighborhood: dto.neighborhood,
           city: dto.city,
+          building: dto.building,
           surfaceArea: dto.surfaceArea,
           roomsCount: dto.roomsCount,
           monthlyRent: dto.monthlyRent,
@@ -123,6 +124,7 @@ export class PropertiesService {
 
     const where: Prisma.PropertyWhereInput = {
       ...(query.status ? { status: query.status } : {}),
+      ...(query.building ? { building: query.building } : {}),
       // Dérivé de canActOnProperty().canRead — voir propertyVisibilityWhere()
       // pour ne jamais dupliquer cette règle (voir /review unité 12).
       ...propertyVisibilityWhere(user),
@@ -210,6 +212,7 @@ export class PropertiesService {
         address: dto.address,
         neighborhood: dto.neighborhood,
         city: dto.city,
+        building: dto.building,
         surfaceArea: dto.surfaceArea,
         roomsCount: dto.roomsCount,
         monthlyRent: dto.monthlyRent,
@@ -217,6 +220,22 @@ export class PropertiesService {
         description: dto.description,
       },
     });
+  }
+
+  // Suggestions pour la saisie « immeuble » (voir /architect 2026-09-20) —
+  // valeurs déjà utilisées parmi les biens visibles par l'utilisateur
+  // courant (mêmes règles que la liste, voir propertyVisibilityWhere), pour
+  // choisir un immeuble existant plutôt que d'en resaisir un légèrement
+  // différent par erreur.
+  async listBuildings(user: AuthenticatedUser): Promise<string[]> {
+    const rows = await this.prisma.property.findMany({
+      where: { ...propertyVisibilityWhere(user), building: { not: null } },
+      select: { building: true },
+      distinct: ['building'],
+      orderBy: { building: 'asc' },
+      take: 200,
+    });
+    return rows.map((r) => r.building).filter((b): b is string => !!b);
   }
 
   // Archivage logique uniquement — jamais de suppression physique (voir

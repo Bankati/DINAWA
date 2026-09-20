@@ -59,6 +59,13 @@ export class ReceiptPdfService {
     const property = lease.property;
     const propAddress =
       [property?.address, property?.neighborhood, property?.city].filter(Boolean).join(', ') || '—';
+    // Gestionnaire du mandat actif s'il y en a un, sinon propriétaire — même
+    // priorité que resolveResponsibleUserId() (voir /architect 2026-09-20).
+    const activeManager = property?.mandates?.[0]?.manager;
+    const responsibleName = activeManager
+      ? `${activeManager.firstName} ${activeManager.lastName}`
+      : ownerName;
+    const responsibleRole = activeManager ? 'gestionnaire' : 'bailleur';
 
     // ─────────────────────────────────────────────────────────
     // HEADER BAND
@@ -94,6 +101,11 @@ export class ReceiptPdfService {
         width: W - M,
         lineBreak: false,
       });
+    // PDFKit garde l'opacité active pour tout remplissage suivant tant
+    // qu'elle n'est pas explicitement remise à 1 — sans ce reset, tout le
+    // reste du document se dessinait à 55 % d'opacité sur fond blanc (le
+    // « voile blanc » signalé, trouvé et corrigé en /architect 2026-09-20).
+    doc.fillOpacity(1);
 
     // ─────────────────────────────────────────────────────────
     // MONTANT MIS EN AVANT
@@ -287,6 +299,7 @@ export class ReceiptPdfService {
       .fontSize(5.5)
       .font('Helvetica')
       .text(`warah.tg/verif/${refNum}`, QX, QY + 56, { width: 80, align: 'center' });
+    doc.fillOpacity(1); // voir le reset équivalent plus haut — même bug PDFKit
 
     // Center: date + authenticité
     doc
@@ -297,6 +310,7 @@ export class ReceiptPdfService {
         align: 'center',
         width: W,
       });
+    doc.fillOpacity(1);
     doc
       .fillColor(GOLD)
       .fontSize(7)
@@ -307,7 +321,8 @@ export class ReceiptPdfService {
         characterSpacing: 0.5,
       });
 
-    // Signature — right
+    // Signature — right, avec le nom du responsable (bailleur ou
+    // gestionnaire si mandat actif — voir responsibleName plus haut)
     const SX = W - M - 140;
     doc
       .strokeColor('#FFFFFF', 0.35)
@@ -315,11 +330,19 @@ export class ReceiptPdfService {
       .moveTo(SX, FY + 54)
       .lineTo(SX + 140, FY + 54)
       .stroke();
+    doc.strokeOpacity(1);
+    doc
+      .fillColor('#FFFFFF', 0.85)
+      .fontSize(7.5)
+      .font('Helvetica-Bold')
+      .text(responsibleName, SX, FY + 58, { width: 140, align: 'center', lineBreak: false });
+    doc.fillOpacity(1);
     doc
       .fillColor('#FFFFFF', 0.5)
-      .fontSize(7)
+      .fontSize(6.5)
       .font('Helvetica')
-      .text('Signature du bailleur', SX, FY + 58, { width: 140, align: 'center' });
+      .text(`Signature du ${responsibleRole}`, SX, FY + 70, { width: 140, align: 'center' });
+    doc.fillOpacity(1);
   }
 
   private sectionTitle(

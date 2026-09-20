@@ -40,6 +40,12 @@ export class UpdatePropertyDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  building?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Number)
   @Min(0.01)
   surfaceArea?: number;

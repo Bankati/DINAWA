@@ -1,0 +1,83 @@
+.guide-page { display: flex; flex-direction: column; gap: 28px; }
+
+/* ── Bandeau d'en-tête — dégradé bleu marine de référence (voir CLAUDE.md) ── */
+.guide-hero {
+  border-radius: 18px;
+  padding: 40px 32px;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%);
+  position: relative;
+  overflow: hidden;
+}
+.guide-hero::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at 85% 15%, rgba(201,152,46,0.28), transparent 55%);
+  pointer-events: none;
+}
+.guide-hero-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  background: var(--color-secondary); color: var(--color-primary-900);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 16px; position: relative; z-index: 1;
+}
+.guide-hero h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; position: relative; z-index: 1; }
+.guide-hero p { font-size: 14px; color: rgba(255,255,255,0.78); margin: 0; max-width: 580px; line-height: 1.5; position: relative; z-index: 1; }
+
+/* ── Sommaire — ancres vers chaque carte ── */
+.guide-toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.guide-toc-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--color-primary-50); color: var(--color-primary-dark);
+  text-decoration: none; border: 1px solid transparent; transition: border-color .15s, background .15s;
+}
+.guide-toc-item:hover { border-color: var(--color-primary); }
+
+/* ── Grille de cartes dépliables ── */
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+
+.guide-card {
+  border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+  overflow: hidden; scroll-margin-top: 90px;
+  transition: box-shadow .15s, border-color .15s;
+}
+.guide-card[open] { border-color: var(--color-primary); box-shadow: 0 6px 20px rgba(15,76,129,0.12); }
+
+.guide-card-summary {
+  list-style: none; cursor: pointer; display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 18px; user-select: none;
+}
+.guide-card-summary::-webkit-details-marker { display: none; }
+.guide-card-summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.guide-card-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-primary-50); color: var(--color-primary);
+  transition: background .15s, color .15s;
+}
+.guide-card[open] .guide-card-icon { background: var(--color-primary); color: #fff; }
+
+.guide-card-heading { flex: 1; min-width: 0; }
+.guide-card-title { display: block; font-size: 14px; font-weight: 700; color: var(--foreground); }
+.guide-card-desc { display: block; font-size: 12.5px; color: var(--muted-foreground); margin-top: 2px; line-height: 1.4; }
+
+.guide-card-chevron { flex-shrink: 0; margin-top: 4px; color: var(--muted-foreground); transition: transform .2s ease; }
+.guide-card[open] .guide-card-chevron { transform: rotate(180deg); color: var(--color-primary); }
+
+.guide-card-body { padding: 0 18px 18px 66px; }
+.guide-card-body ol { list-style: decimal; margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.guide-card-body li { font-size: 13px; color: var(--foreground); line-height: 1.55; padding-left: 2px; }
+.guide-card-body li::marker { color: var(--color-primary); font-weight: 700; }
+
+.guide-tip {
+  margin-top: 14px; display: flex; gap: 8px; align-items: flex-start;
+  background: var(--color-secondary-50); color: var(--color-secondary-700);
+  border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .guide-hero { padding: 28px 20px; }
+  .guide-card-body { padding-left: 18px; }
+}

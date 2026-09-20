@@ -26,7 +26,19 @@ export class PaymentConfirmedListener {
         where: { id: event.paymentId },
         include: {
           scheduleEntry: true,
-          lease: { include: { property: true, owner: true, tenant: true } },
+          lease: {
+            include: {
+              // Mandat actif + gestionnaire — pour la signature nominative
+              // de la quittance (voir ReceiptPdfService, /architect 2026-09-20).
+              property: {
+                include: {
+                  mandates: { where: { status: 'ACTIVE' }, take: 1, include: { manager: true } },
+                },
+              },
+              owner: true,
+              tenant: true,
+            },
+          },
         },
       });
       if (!payment) {

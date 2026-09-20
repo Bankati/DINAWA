@@ -73,6 +73,17 @@ export class PropertiesController {
     return this.propertiesService.findAll(user, query);
   }
 
+  // Route statique déclarée avant `:id` — sinon Nest la fait matcher par la
+  // route dynamique (`buildings` interprété comme un id de bien).
+  @Get('buildings')
+  @Cacheable(CACHE_TTL_LIST)
+  @ApiOperation({
+    summary: "Suggestions d'immeubles déjà utilisés par l'utilisateur courant",
+  })
+  listBuildings(@CurrentUser() user: AuthenticatedUser): Promise<string[]> {
+    return this.propertiesService.listBuildings(user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: "Détail d'un bien, avec ses photos (URLs signées)" })
   findOne(
