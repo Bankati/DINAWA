@@ -333,6 +333,11 @@ model Property {
   address        String
   neighborhood   String
   city           String
+  // Regroupement libre de plusieurs biens au même endroit physique (ex. un
+  // immeuble de 6 appartements) — texte libre volontairement, pas de table
+  // dédiée : aucune fonctionnalité de cette passe n'exige de fiche immeuble
+  // à part entière, juste grouper/filtrer (voir /architect 2026-09-20).
+  building       String?
   surfaceArea    Float?
   roomsCount     Int?
   monthlyRent    Int
@@ -352,6 +357,7 @@ model Property {
   @@index([ownerId])
   @@index([status])
   @@index([type])
+  @@index([building])
   @@index([city, neighborhood])
   @@map("properties")
 }
