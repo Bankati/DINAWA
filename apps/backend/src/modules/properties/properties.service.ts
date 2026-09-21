@@ -233,7 +233,7 @@ export class PropertiesService {
       select: { building: true },
       distinct: ['building'],
       orderBy: { building: 'asc' },
-      take: 200,
+      take: 100,
     });
     return rows.map((r) => r.building).filter((b): b is string => !!b);
   }

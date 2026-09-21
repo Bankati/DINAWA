@@ -63,7 +63,9 @@ function toPayload(v: PropertyFormValues) {
     address: v.address,
     neighborhood: v.neighborhood,
     city: v.city,
-    building: v.building || undefined,
+    // `null` explicite (pas `undefined`, éliminé par JSON.stringify) pour que
+    // vider le champ efface bien la valeur côté PATCH (voir /recover 2026-09-21).
+    building: v.building || null,
     ...(v.surfaceArea ? { surfaceArea: parseFloat(v.surfaceArea) } : {}),
     ...(v.roomsCount ? { roomsCount: parseInt(v.roomsCount) } : {}),
     monthlyRent: parseInt(v.monthlyRent),
