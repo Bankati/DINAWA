@@ -9,6 +9,7 @@ import helmet from 'helmet';
 import * as bodyParser from 'body-parser';
 import { AppModule } from './app.module';
 import { buildSwaggerConfig } from './swagger.config';
+import { parseAllowedOrigins } from './common/utils/parse-allowed-origins';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -53,7 +54,7 @@ async function bootstrap(): Promise<void> {
   // + Content-Type déclenchent tous deux un préflight) paie un aller-retour
   // réseau OPTIONS en plus de la vraie requête, à chaque fois. Trouvé en
   // diagnostiquant la lenteur ressentie en production (2026-08-13).
-  const allowedOrigins = process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:4300'];
+  const allowedOrigins = parseAllowedOrigins(process.env['ALLOWED_ORIGINS']);
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,

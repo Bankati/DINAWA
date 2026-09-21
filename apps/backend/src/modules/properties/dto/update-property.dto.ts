@@ -38,11 +38,15 @@ export class UpdatePropertyDto {
   @MaxLength(200)
   city?: string;
 
+  // `null` explicite vide le champ (voir /recover 2026-09-21 : `undefined`
+  // fait ignorer le champ par Prisma update(), donc impossible à vider) ;
+  // `@IsOptional()` de class-validator traite déjà `null` comme "absent" et
+  // saute @IsString()/@MaxLength() pour cette valeur.
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  building?: string;
+  building?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

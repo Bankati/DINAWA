@@ -32,11 +32,13 @@ export class CreatePropertyDto {
 
   // Regroupement libre (voir /architect 2026-09-20) — texte saisi par
   // l'utilisateur, réutilise une valeur existante ou en crée une nouvelle.
+  // Type `| null` uniquement pour matcher UpdatePropertyDto (toPayload() est
+  // partagé création/édition côté frontend) — sans effet à la création.
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  building?: string;
+  building?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
