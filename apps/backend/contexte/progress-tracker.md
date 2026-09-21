@@ -180,6 +180,14 @@ Vérifié : `tsc`/`eslint` propres des deux côtés (warnings pré-existants non
 
 Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (`properties`, `receipts`, `payments`) tous passants (pas de run complet de la suite entière cette passe). `tsc`/`next build` frontend propres (nouvelles routes `/guide` générées en statique sur les 4 interfaces).
 
+**Mise en production du lot et incidents (2026-09-21)** — Railway relancé après la pause facturation, premier déploiement du lot :
+
+1. **Déploiement en échec au healthcheck (« service unavailable » 60 s)** — cause réelle : `DIRECT_URL` absente des variables Railway. Prisma la lit (`directUrl` dans `schema.prisma`) et le conteneur lance `npx prisma migrate deploy` avant `node dist/main` : sans elle, le processus s'arrête avant d'écouter. Elle avait été omise de la liste de variables reportée sur Railway (et n'était pas documentée dans `docs/ENV.md`). Hypothèse initiale fausse écartée : Supabase endormi. Build OK, seul le démarrage échouait — l'onglet **Deploy Logs** du déploiement en échec donne la cause, pas Build Logs.
+2. **`www.warahcontact.com` : « Impossible de charger les annonces »** — cause : CORS. Le backend en marche n'acceptait que le domaine Vercel ; la nouvelle valeur de `ALLOWED_ORIGINS` n'était pas prise en compte tant qu'aucun déploiement n'aboutissait. **Diagnostic Cloudflare/cache initialement avancé : faux** (le bundle servi pointait déjà vers la bonne API). Confirmé en interrogeant l'API avec `Origin:` pour chaque domaine candidat. Correctif de robustesse : `parseAllowedOrigins()` (`src/common/utils/`, 5 tests) retire espaces et `/` final ; `main.ts` l'utilise. `https://warahcontact.com` (sans `www`) reste à autoriser si le domaine nu ne redirige pas vers `www`.
+3. **Quittance vérifiée sur un vrai rendu PDF** (pdf.js/Chromium) : plus de voile, signature correcte avec et sans gestionnaire sous mandat. Défaut préexistant trouvé et corrigé au passage : libellés « BAILLEUR »/« LOCATAIRE » en blanc sur fond gris clair (barre de 6 pt), illisibles — passés en `NAVY`.
+4. **Non traité, à décider** : le « QR » en pied de quittance est un motif décoratif qui n'encode rien, accompagné d'une URL `warah.tg/verif/<réf>` inexistante, sur un document annoncé « Document officiel » ; le type de bien s'affiche en enum brut (`Type : APARTMENT`).
+5. **`docs/ENV.md` / `docs/DEPLOYMENT.md`** complétés : `DIRECT_URL`, `FRONTEND_URL`, `INVITATION_TOKEN_SECRET`, `CONTACT_RECIPIENT_EMAIL` (tous obligatoires, aucun n'était documenté).
+
 ---
 
 ## Progress
