@@ -31,9 +31,10 @@ obligatoire manque ou a une valeur invalide.
 
 ### Base de données — Supabase PostgreSQL
 
-| Variable       | Obligatoire | Description                                                                                                                                       |
-| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL` | ✅          | URL PostgreSQL avec transaction pooler (port 6543). Format : `postgresql://postgres.[ref]:[mdp]@aws-0-[region].pooler.supabase.com:6543/postgres` |
+| Variable       | Obligatoire | Description                                                                                                                                                                                                                                                                                                             |
+| -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL` | ✅          | URL PostgreSQL avec transaction pooler (port 6543). Format : `postgresql://postgres.[ref]:[mdp]@aws-0-[region].pooler.supabase.com:6543/postgres`                                                                                                                                                                       |
+| `DIRECT_URL`   | ✅          | Connexion directe (port **5432**), même hôte/identifiants que `DATABASE_URL`. Lue par Prisma (`directUrl` dans `schema.prisma`) pour `prisma migrate deploy`, exécuté **avant** le démarrage du serveur. Si elle manque, le conteneur s'arrête net et Railway affiche « service unavailable » (incident du 2026-09-21). |
 
 ### Supabase
 
@@ -55,11 +56,19 @@ NestJS.
 
 ### Resend (emails)
 
-| Variable            | Obligatoire | Description                                              |
-| ------------------- | ----------- | -------------------------------------------------------- |
-| `RESEND_API_KEY`    | ✅          | Clé API Resend (préfixe `re_`)                           |
-| `RESEND_FROM_EMAIL` | ✅          | Adresse expéditrice (domaine vérifié dans Resend requis) |
-| `RESEND_FROM_NAME`  | ➖          | Nom affiché. Défaut : `WARAH`                            |
+| Variable                  | Obligatoire | Description                                              |
+| ------------------------- | ----------- | -------------------------------------------------------- |
+| `RESEND_API_KEY`          | ✅          | Clé API Resend (préfixe `re_`)                           |
+| `RESEND_FROM_EMAIL`       | ✅          | Adresse expéditrice (domaine vérifié dans Resend requis) |
+| `RESEND_FROM_NAME`        | ➖          | Nom affiché. Défaut : `WARAH`                            |
+| `CONTACT_RECIPIENT_EMAIL` | ✅          | Adresse qui reçoit les messages du formulaire `/contact` |
+
+### Frontend et invitations
+
+| Variable                  | Obligatoire | Description                                                                                                                                                              |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `FRONTEND_URL`            | ✅          | URL publique du frontend, sans `/` final (ex. `https://www.warahcontact.com`). Sert aux liens d'activation par email **et** à l'URL de retour après un paiement PayDunya |
+| `INVITATION_TOKEN_SECRET` | ✅          | Secret HMAC signant les tokens d'invitation locataire. Générer avec la même commande que `JWT_SECRET` (section 4)                                                        |
 
 ### Web Push — VAPID
 
@@ -96,9 +105,9 @@ bac à sable PayDunya, aucun vrai argent ; `live` = production réelle).
 
 ### CORS
 
-| Variable          | Obligatoire | Description                                                                     |
-| ----------------- | ----------- | ------------------------------------------------------------------------------- |
-| `ALLOWED_ORIGINS` | ➖          | Origines autorisées séparées par des virgules. Défaut : `http://localhost:4300` |
+| Variable          | Obligatoire | Description                                                                                                                                                                                                                                                                             |
+| ----------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALLOWED_ORIGINS` | ➖          | Origines autorisées séparées par des virgules, ex. `https://www.warahcontact.com,https://warahcontact.com`. Espaces et `/` final ignorés. **Doit contenir chaque domaine depuis lequel le site est servi**, sinon le navigateur bloque les appels API. Défaut : `http://localhost:4300` |
 
 ---
 

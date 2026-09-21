@@ -378,9 +378,10 @@ export class ReceiptPdfService {
     doc.rect(x, y, w, H).fill('#F9FAFB');
     // Top color bar
     doc.rect(x, y, w, 6).fill(NAVY);
-    // Role label on the bar
+    // La barre ne fait que 6 pt : le libellé tombe sur le fond gris de la
+    // carte, il doit donc être foncé (blanc = illisible, constaté sur un vrai rendu).
     doc
-      .fillColor('#FFFFFF')
+      .fillColor(NAVY)
       .fontSize(7)
       .font('Helvetica-Bold')
       .text(role, x + 10, y + 10, { lineBreak: false, characterSpacing: 0.8 });
