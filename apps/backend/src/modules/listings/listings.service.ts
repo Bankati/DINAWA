@@ -20,7 +20,7 @@ export type PublicListingSummary = {
 };
 
 export type PublicListingDetail = Omit<PublicListingSummary, 'photo'> & {
-  address: string;
+  address: string | null;
   description: string | null;
   photos: string[];
   contactName: string;

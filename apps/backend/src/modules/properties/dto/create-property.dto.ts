@@ -12,11 +12,13 @@ export class CreatePropertyDto {
   @IsEnum(PropertyType)
   type!: PropertyType;
 
-  @ApiProperty()
+  // Optionnelle depuis 2026-09-22 — Quartier + Ville suffisent (voir
+  // /recover, décision développeur : plus jugée importante).
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(200)
-  address!: string;
+  address?: string | null;
 
   @ApiProperty()
   @IsString()

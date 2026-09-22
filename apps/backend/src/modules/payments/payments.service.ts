@@ -25,6 +25,7 @@ import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PAYMENT_CONFIRMED } from './payment.events';
 import { PaydunyaService, PaydunyaInvoiceStatus, PaydunyaError } from './paydunya.service';
 import { PAYDUNYA_ABANDON_AFTER_MS } from '../../common/constants';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 
 // `property.mandates` limité au mandat ACTIVE le plus récent, avec le
 // gestionnaire chargé — sert à afficher le bon nom en signature de quittance
@@ -217,7 +218,7 @@ export class PaymentsService {
     try {
       invoice = await this.paydunya.createInvoice({
         amount: remaining,
-        description: `WARAH — ${scheduleEntry.lease.property.address}`,
+        description: `WARAH — ${formatPropertyLocation(scheduleEntry.lease.property)}`,
         paymentId: payment.id,
         callbackUrl: `${apiBaseUrl}/payments/webhooks/paydunya?paymentId=${payment.id}`,
         returnUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=success`,
@@ -381,7 +382,7 @@ export class PaymentsService {
         userId: payment.lease.tenantUserId,
         event: 'payment-rejected',
         variables: {
-          propertyAddress: payment.lease.property.address,
+          propertyAddress: formatPropertyLocation(payment.lease.property),
           amount: payment.paidAmount,
           rejectionReason: dto.rejectionReason,
         },

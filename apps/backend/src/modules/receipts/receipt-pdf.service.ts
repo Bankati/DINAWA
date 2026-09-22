@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { PaymentWithAccess } from '../payments/payments.service';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 
 const NAVY = '#0F4C81';
 const NAVY_D = '#0A2650';
@@ -57,8 +58,7 @@ export class ReceiptPdfService {
     const method = METHOD_LABELS[data.paymentMethod ?? ''] ?? data.paymentMethod ?? '—';
     const total = data.paidAmount;
     const property = lease.property;
-    const propAddress =
-      [property?.address, property?.neighborhood, property?.city].filter(Boolean).join(', ') || '—';
+    const propAddress = property ? formatPropertyLocation(property) || '—' : '—';
     // Gestionnaire du mandat actif s'il y en a un, sinon propriétaire — même
     // priorité que resolveResponsibleUserId() (voir /architect 2026-09-20).
     const activeManager = property?.mandates?.[0]?.manager;

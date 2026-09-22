@@ -15,6 +15,7 @@ import { NotifyService } from '../notify/notify.service';
 import { CreateMandateDto } from './dto/create-mandate.dto';
 import { RevokeMandateDto } from './dto/revoke-mandate.dto';
 import { SearchManagerQueryDto } from './dto/search-manager-query.dto';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 
 export interface ManagerSummary {
   id: string;
@@ -274,8 +275,9 @@ export class MandatesService {
 
   private buildPropertySummary(properties: Property[]): string {
     const [first, ...rest] = properties;
-    if (rest.length === 0) return first.address;
-    return `${first.address} et ${rest.length} autre${rest.length > 1 ? 's' : ''} bien${rest.length > 1 ? 's' : ''}`;
+    const label = formatPropertyLocation(first);
+    if (rest.length === 0) return label;
+    return `${label} et ${rest.length} autre${rest.length > 1 ? 's' : ''} bien${rest.length > 1 ? 's' : ''}`;
   }
 
   private buildFeeLabel(feeType: MandateFeeType, feeValue: number): string {

@@ -11,10 +11,10 @@ describe('MonthlyReportPdfService', () => {
       periodLabel: '2026-08',
       periodStart: new Date('2026-08-01'),
       periodEnd: new Date('2026-08-31'),
-      properties: [{ id: 'prop-1', address: '12 rue de Lomé' }],
+      properties: [{ id: 'prop-1', address: '12 rue de Lomé', neighborhood: 'Bè', city: 'Lomé' }],
       paymentsByProperty: [
         {
-          property: { id: 'prop-1', address: '12 rue de Lomé' },
+          property: { id: 'prop-1', address: '12 rue de Lomé', neighborhood: 'Bè', city: 'Lomé' },
           payments: [
             {
               id: 'pay-1',
@@ -56,7 +56,7 @@ describe('MonthlyReportPdfService', () => {
       dueDate: new Date('2026-08-01'),
       expectedAmount: 50000,
       paidAmount: 0,
-      property: { id: `prop-${i}`, address: `Bien ${i}` },
+      property: { id: `prop-${i}`, address: `Bien ${i}`, neighborhood: 'Bè', city: 'Lomé' },
       tenant: { id: `tenant-${i}`, firstName: 'T', lastName: `${i}` },
     }));
 
@@ -70,7 +70,11 @@ describe('MonthlyReportPdfService', () => {
     const buffer = await service.generate(
       makeData({
         paymentsByProperty: [
-          { property: { id: 'prop-1', address: 'x' }, payments: [], totalReceived: 0 },
+          {
+            property: { id: 'prop-1', address: 'x', neighborhood: 'Bè', city: 'Lomé' },
+            payments: [],
+            totalReceived: 0,
+          },
         ],
       }),
     );
