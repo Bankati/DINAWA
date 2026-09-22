@@ -27,7 +27,7 @@ interface PropertyPhoto { id: string; url: string; position: number; }
 
 interface Property {
   id: string; type: PropertyType; status: PropertyStatus;
-  address: string; neighborhood: string; city: string; building: string | null;
+  address: string | null; neighborhood: string; city: string; building: string | null;
   surfaceArea: number | null; roomsCount: number | null;
   monthlyRent: number; monthlyCharges: number; description: string | null;
   createdAt: string;
@@ -42,7 +42,6 @@ const FILTERS: [string, string][] = [['', 'Tous'], ['OCCUPIED', 'Occupés'], ['V
 // convertis en nombre juste avant l'envoi à l'API, validés ici par Zod.
 const propertySchema = z.object({
   type: z.enum(['VILLA', 'APARTMENT', 'STUDIO', 'COMMERCIAL']),
-  address: z.string().min(1, "L'adresse est requise"),
   neighborhood: z.string().min(1, 'Le quartier est requis'),
   city: z.string().min(1, 'La ville est requise'),
   building: z.string().optional(),
@@ -55,14 +54,13 @@ const propertySchema = z.object({
 type PropertyFormValues = z.infer<typeof propertySchema>;
 
 const EMPTY_VALUES: PropertyFormValues = {
-  type: 'APARTMENT', address: '', neighborhood: '', city: '', building: '',
+  type: 'APARTMENT', neighborhood: '', city: '', building: '',
   surfaceArea: '', roomsCount: '', monthlyRent: '', monthlyCharges: '0', description: '',
 };
 
 function toPayload(v: PropertyFormValues) {
   return {
     type: v.type,
-    address: v.address,
     neighborhood: v.neighborhood,
     city: v.city,
     // `null` explicite (pas `undefined`, éliminé par JSON.stringify) pour que
@@ -94,11 +92,6 @@ function PropertyFormFields({ form, buildings }: { form: UseFormReturn<PropertyF
             {Object.entries(TYPE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
           </SelectContent>
         </Select>
-      </div>
-      <div>
-        <Label>Adresse</Label>
-        <Input className="mt-1.5" placeholder="Ex: Rue des Cocotiers, lot 42" {...register('address')} />
-        {errors.address && <p className="text-xs text-destructive mt-1">{errors.address.message}</p>}
       </div>
       <div>
         <Label>Immeuble <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
@@ -286,7 +279,7 @@ export default function BiensPage() {
   async function openEdit(p: Property) {
     setEditing(p);
     editForm.reset({
-      type: p.type, address: p.address, neighborhood: p.neighborhood, city: p.city,
+      type: p.type, neighborhood: p.neighborhood, city: p.city,
       building: p.building ?? '',
       surfaceArea: p.surfaceArea != null ? String(p.surfaceArea) : '',
       roomsCount: p.roomsCount != null ? String(p.roomsCount) : '',
@@ -416,9 +409,9 @@ export default function BiensPage() {
                 <TableRow key={b.id}>
                   <TableCell className="font-semibold text-foreground">{TYPE_LABELS[b.type] ?? b.type}</TableCell>
                   <TableCell>
-                    <div className="font-semibold text-foreground">{b.address}</div>
+                    <div className="font-semibold text-foreground">{b.address || b.neighborhood}</div>
                     <div className="text-xs text-muted-foreground">
-                      {b.neighborhood}{b.building ? ` · ${b.building}` : ''}
+                      {[b.address ? b.neighborhood : null, b.building].filter(Boolean).join(' · ')}
                     </div>
                   </TableCell>
                   <TableCell>{b.city}</TableCell>
@@ -446,7 +439,7 @@ export default function BiensPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Archiver ce bien ?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                {b.address} ne sera plus visible dans votre portefeuille actif. Cette action peut être annulée plus tard.
+                                {b.address || b.neighborhood} ne sera plus visible dans votre portefeuille actif. Cette action peut être annulée plus tard.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

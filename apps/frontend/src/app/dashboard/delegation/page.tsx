@@ -17,7 +17,7 @@ import {
 
 interface ManagerSummary { id: string; firstName: string; lastName: string; }
 interface Property {
-  id: string; address: string; neighborhood: string; city: string; status: string;
+  id: string; address: string | null; neighborhood: string; city: string; status: string;
 }
 type Mandate = MandateWithParties;
 
@@ -68,7 +68,7 @@ export default function DelegationPage() {
     const q = propSearch.trim().toLowerCase();
     if (!q) return availableProps;
     return availableProps.filter(
-      (p) => p.address.toLowerCase().includes(q) || p.neighborhood.toLowerCase().includes(q) || p.city.toLowerCase().includes(q),
+      (p) => (p.address ?? '').toLowerCase().includes(q) || p.neighborhood.toLowerCase().includes(q) || p.city.toLowerCase().includes(q),
     );
   })();
   const allFilteredSelected = filteredProps.length > 0 && filteredProps.every((p) => selected.includes(p.id));
@@ -188,7 +188,7 @@ export default function DelegationPage() {
                   <div key={m.id} className={`px-5 py-3.5 flex items-center gap-3.5 ${i > 0 ? 'border-t border-ds-border' : ''}`}>
                     <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-foreground">{m.property.address}</div>
+                      <div className="font-semibold text-sm text-foreground">{m.property.address || m.property.neighborhood}</div>
                       <div className="text-xs text-muted-foreground">
                         {m.property.neighborhood}, {m.property.city}
                         {' · '}Commission : {m.feeType === 'PERCENTAGE' ? `${m.feeValue}%` : formatFcfa(m.feeValue)}
@@ -256,7 +256,7 @@ export default function DelegationPage() {
                         <label key={p.id} className={`flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md border ${selected.includes(p.id) ? 'bg-primary-50 dark:bg-ds-secondary border-primary/20' : 'border-transparent'}`}>
                           <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} className="w-4 h-4 shrink-0 accent-primary" />
                           <div>
-                            <div className="font-semibold text-sm text-foreground">{p.address}</div>
+                            <div className="font-semibold text-sm text-foreground">{p.address || p.neighborhood}</div>
                             <div className="text-xs text-muted-foreground">{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
                           </div>
                         </label>

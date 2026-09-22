@@ -79,7 +79,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Nombre de notifications non lues (dernières 24h) */
+    /** Nombre de notifications non lues */
     get: operations["NotifyController_getUnreadCount"];
     put?: never;
     post?: never;
@@ -87,6 +87,40 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  "/notifications/{id}/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Marque une notification comme lue */
+    patch: operations["NotifyController_markAsRead"];
+    trace?: never;
+  };
+  "/notifications/read-all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Marque toutes les notifications comme lues */
+    patch: operations["NotifyController_markAllAsRead"];
     trace?: never;
   };
   "/health/live": {
@@ -134,7 +168,7 @@ export interface paths {
     put?: never;
     /**
      * Inscription propriétaire
-     * @description Crée le compte Supabase Auth et le profil propriétaire, envoie l'email de confirmation WARAH.
+     * @description Crée le compte et le profil propriétaire, envoie l'email de confirmation WARAH.
      */
     post: operations["AuthController_signupOwner"];
     delete?: never;
@@ -154,7 +188,7 @@ export interface paths {
     put?: never;
     /**
      * Inscription gestionnaire
-     * @description Crée le compte Supabase Auth et le profil gestionnaire, envoie l'email de confirmation WARAH.
+     * @description Crée le compte et le profil gestionnaire, envoie l'email de confirmation WARAH.
      */
     post: operations["AuthController_signupManager"];
     delete?: never;
@@ -174,7 +208,7 @@ export interface paths {
     put?: never;
     /**
      * Invite un locataire sur un bien
-     * @description Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire (email confirmé d'office) et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.
+     * @description Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.
      */
     post: operations["AuthController_inviteTenant"];
     delete?: never;
@@ -214,7 +248,7 @@ export interface paths {
     put?: never;
     /**
      * Connexion par email et mot de passe
-     * @description Route la connexion via NestJS (plutôt que directement Supabase côté client) pour appliquer le blocage de 15 minutes après 5 tentatives échouées. Renvoie une session Supabase valide en cas de succès.
+     * @description Vérifie le mot de passe (bcrypt) et applique le blocage de 15 minutes après 5 tentatives échouées. Renvoie un access token (JWT, 15 min) et un refresh token en cas de succès.
      */
     post: operations["AuthController_login"];
     delete?: never;
@@ -382,6 +416,26 @@ export interface paths {
     patch: operations["ProfileController_updateNotificationConsent"];
     trace?: never;
   };
+  "/profile/password": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Change le mot de passe du compte connecté
+     * @description Nécessite le mot de passe actuel. Révoque toutes les sessions existantes — reconnexion requise sur les autres appareils.
+     */
+    patch: operations["ProfileController_changePassword"];
+    trace?: never;
+  };
   "/account/status": {
     parameters: {
       query?: never;
@@ -419,6 +473,117 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/payments/manual": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Enregistre un paiement reçu hors plateforme (espèces, virement)
+     * @description Réservé à celui qui peut agir sur le bien (propriétaire sans mandat actif, ou gestionnaire mandaté). Crée directement un paiement PAID — pas d'étape de confirmation.
+     */
+    post: operations["PaymentsController_createManual"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/payments/initiate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Initie un paiement PayDunya (mobile money) sur sa propre échéance
+     * @description Le locataire est redirigé vers checkoutUrl pour compléter le paiement — le montant est toujours le solde restant de l’échéance, jamais saisi par le client.
+     */
+    post: operations["PaymentsController_initiate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/payments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Historique paginé des paiements, filtrable */
+    get: operations["PaymentsController_findAll"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/payments/{id}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Confirme une déclaration de paiement locataire — passe à PAID */
+    post: operations["PaymentsController_confirm"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/payments/{id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Rejette une déclaration de paiement locataire — motif obligatoire */
+    post: operations["PaymentsController_reject"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/payments/{id}/receipt.pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Quittance PDF générée à la volée — jamais persistée
+     * @description Disponible uniquement pour un paiement PAID.
+     */
+    get: operations["PaymentsController_downloadReceipt"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/properties": {
     parameters: {
       query?: never;
@@ -431,6 +596,23 @@ export interface paths {
     put?: never;
     /** Enregistrer un nouveau bien — toujours VACANT, toujours l'appelant comme propriétaire */
     post: operations["PropertiesController_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/properties/buildings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Suggestions d'immeubles déjà utilisés par l'utilisateur courant */
+    get: operations["PropertiesController_listBuildings"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -695,97 +877,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/payments/manual": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Enregistre un paiement reçu hors plateforme (espèces, virement)
-     * @description Réservé à celui qui peut agir sur le bien (propriétaire sans mandat actif, ou gestionnaire mandaté). Crée directement un paiement PAID — pas d'étape de confirmation.
-     */
-    post: operations["PaymentsController_createManual"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/payments": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Historique paginé des paiements, filtrable */
-    get: operations["PaymentsController_findAll"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/payments/{id}/confirm": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Confirme une déclaration de paiement locataire — passe à PAID */
-    post: operations["PaymentsController_confirm"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/payments/{id}/reject": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Rejette une déclaration de paiement locataire — motif obligatoire */
-    post: operations["PaymentsController_reject"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/payments/{id}/receipt.pdf": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Quittance PDF générée à la volée — jamais persistée
-     * @description Disponible uniquement pour un paiement PAID.
-     */
-    get: operations["PaymentsController_downloadReceipt"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/payment-declarations": {
     parameters: {
       query?: never;
@@ -861,6 +952,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/top-owners": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Top propriétaires par volume de loyers encaissés (super admin) */
+    get: operations["AdminController_topOwners"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/top-managers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Top gestionnaires par nombre de mandats actifs (super admin) */
+    get: operations["AdminController_topManagers"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/transactions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Supervision de tous les paiements de la plateforme (super admin) */
+    get: operations["AdminController_listTransactions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/audit-logs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Journal d’audit de toute action mutante sur la plateforme (super admin) */
+    get: operations["AdminController_listAuditLogs"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/admin/users": {
     parameters: {
       query?: never;
@@ -891,6 +1050,40 @@ export interface paths {
     post?: never;
     /** Supprimer (anonymiser) un compte (super admin) */
     delete: operations["AdminController_deleteUser"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/users/{id}/suspend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Suspend manuellement un compte non-admin, avec motif (super admin) */
+    post: operations["AdminController_suspendUser"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/users/{id}/reactivate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Lève une suspension et repasse le compte à ACTIVE (super admin) */
+    post: operations["AdminController_reactivateUser"];
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -930,6 +1123,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/managers/{id}/reviews/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Récupère l'avis de l'utilisateur connecté pour ce gestionnaire, s'il existe (null sinon) */
+    get: operations["ManagerReviewsController_findMine"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/managers/{id}/reviews/{reviewId}": {
     parameters: {
       query?: never;
@@ -955,8 +1165,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Annuaire public des gestionnaires, filtrable par ville d’intervention et note minimale
-     * @description Aucune authentification requise.
+     * Annuaire des gestionnaires, filtrable par ville d’intervention et note minimale
+     * @description Réservé aux Propriétaires et Gestionnaires connectés.
      */
     get: operations["PublicManagersController_findAll"];
     put?: never;
@@ -974,7 +1184,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Profil détaillé public d’un gestionnaire — portfolio et avis vérifiés */
+    /** Profil détaillé d’un gestionnaire — portfolio, avis vérifiés et email de contact */
     get: operations["PublicManagersController_findOne"];
     put?: never;
     post?: never;
@@ -1155,6 +1365,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/dashboard/manager/property-types": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Répartition des loyers par type de bien (composition du portefeuille) */
+    get: operations["DashboardManagerController_getPropertyTypeBreakdown"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/manager/monthly-revenue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Encaissements mensuels janvier-décembre pour une année donnée */
+    get: operations["DashboardManagerController_getMonthlyRevenue"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/dashboard/manager/properties/{id}/performance": {
     parameters: {
       query?: never;
@@ -1288,6 +1532,10 @@ export interface components {
     UpdateProfileDto: {
       firstName?: string;
       lastName?: string;
+      /** @example 90330557 */
+      phone?: string;
+      /** @example Lomé */
+      city?: string;
       /** @description Jours avant échéance pour le rappel de loyer */
       reminderDaysBefore?: number;
       /** @description Jours de grâce avant l'alerte d'impayé */
@@ -1297,12 +1545,38 @@ export interface components {
       /** @enum {string} */
       consent: "ACCEPTED" | "DECLINED";
     };
+    ChangePasswordDto: {
+      currentPassword: string;
+      newPassword: string;
+    };
+    CreateManualPaymentDto: {
+      scheduleEntryId: string;
+      paidAmount: number;
+      /** @description Date effective du paiement (ISO 8601) */
+      paidAt: string;
+      /** @enum {string} */
+      paymentMethod: "CASH" | "BANK_TRANSFER";
+      note?: string;
+    };
+    InitiatePaymentDto: {
+      scheduleEntryId: string;
+      /**
+       * @description Préférence indicative — ne restreint pas le choix réel sur la page PayDunya
+       * @enum {string}
+       */
+      paymentMethod: "TMONEY" | "FLOOZ";
+    };
+    RejectPaymentDto: {
+      /** @description Motif obligatoire — communiqué au locataire */
+      rejectionReason: string;
+    };
     CreatePropertyDto: {
       /** @enum {string} */
       type: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
-      address: string;
+      address?: Record<string, never>;
       neighborhood: string;
       city: string;
+      building?: Record<string, never>;
       surfaceArea?: number;
       roomsCount?: number;
       monthlyRent: number;
@@ -1314,9 +1588,10 @@ export interface components {
       type?: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
       /** @enum {string} */
       status?: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
-      address?: string;
+      address?: Record<string, never>;
       neighborhood?: string;
       city?: string;
+      building?: Record<string, never>;
       surfaceArea?: number;
       roomsCount?: number;
       monthlyRent?: number;
@@ -1341,19 +1616,6 @@ export interface components {
     TerminateLeaseDto: {
       terminationReason?: string;
     };
-    CreateManualPaymentDto: {
-      scheduleEntryId: string;
-      paidAmount: number;
-      /** @description Date effective du paiement (ISO 8601) */
-      paidAt: string;
-      /** @enum {string} */
-      paymentMethod: "CASH" | "BANK_TRANSFER";
-      note?: string;
-    };
-    RejectPaymentDto: {
-      /** @description Motif obligatoire — communiqué au locataire */
-      rejectionReason: string;
-    };
     CreatePaymentDeclarationDto: {
       scheduleEntryId: string;
       declaredAmount: number;
@@ -1370,6 +1632,10 @@ export interface components {
       /** @enum {string} */
       declaredMethod?: "CASH" | "BANK_TRANSFER";
       note?: string;
+    };
+    SuspendUserDto: {
+      /** @description Motif de la suspension, communiqué à l'utilisateur par email */
+      reason: string;
     };
     ModerateReviewDto: {
       /** @description true = masque l’avis de l’annuaire public, false = le réaffiche */
@@ -1403,7 +1669,7 @@ export interface components {
       type: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
       /** @enum {string} */
       status: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
-      address: string;
+      address?: string | null;
       neighborhood: string;
       city: string;
       surfaceArea?: number | null;
@@ -1552,6 +1818,42 @@ export interface operations {
     };
   };
   NotifyController_getUnreadCount: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NotifyController_markAsRead: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  NotifyController_markAllAsRead: {
     parameters: {
       query?: never;
       header?: never;
@@ -2005,6 +2307,27 @@ export interface operations {
       };
     };
   };
+  ProfileController_changePassword: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChangePasswordDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   AccountController_getStatus: {
     parameters: {
       query?: never;
@@ -2041,12 +2364,153 @@ export interface operations {
       };
     };
   };
+  PaymentsController_createManual: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["CreateManualPaymentDto"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PaymentsController_initiate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InitiatePaymentDto"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PaymentsController_findAll: {
+    parameters: {
+      query?: {
+        page?: number;
+        limit?: number;
+        propertyId?: string;
+        tenantUserId?: string;
+        /** @description Recherche textuelle sur le prénom/nom/email du locataire (contains, insensible à la casse) */
+        search?: string;
+        status?:
+          | "PENDING"
+          | "PENDING_CONFIRMATION"
+          | "PAID"
+          | "PARTIAL"
+          | "LATE"
+          | "OVERDUE"
+          | "REJECTED";
+        source?: "PAYDUNYA_API" | "MANUAL_OWNER" | "TENANT_DECLARATION";
+        /** @description Filtre paidAt >= from (ISO 8601) */
+        from?: string;
+        /** @description Filtre paidAt <= to (ISO 8601) */
+        to?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PaymentsController_confirm: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PaymentsController_reject: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RejectPaymentDto"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PaymentsController_downloadReceipt: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PropertiesController_findAll: {
     parameters: {
       query?: {
         page?: number;
         limit?: number;
         status?: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
+        building?: string;
       };
       header?: never;
       path?: never;
@@ -2076,6 +2540,23 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PropertiesController_listBuildings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -2446,123 +2927,6 @@ export interface operations {
       };
     };
   };
-  PaymentsController_createManual: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "multipart/form-data": components["schemas"]["CreateManualPaymentDto"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PaymentsController_findAll: {
-    parameters: {
-      query?: {
-        page?: number;
-        limit?: number;
-        propertyId?: string;
-        tenantUserId?: string;
-        status?:
-          | "PENDING"
-          | "PENDING_CONFIRMATION"
-          | "PAID"
-          | "PARTIAL"
-          | "LATE"
-          | "OVERDUE"
-          | "REJECTED";
-        source?: "CASHPAY_API" | "MANUAL_OWNER" | "TENANT_DECLARATION";
-        /** @description Filtre paidAt >= from (ISO 8601) */
-        from?: string;
-        /** @description Filtre paidAt <= to (ISO 8601) */
-        to?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PaymentsController_confirm: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PaymentsController_reject: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["RejectPaymentDto"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PaymentsController_downloadReceipt: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
   PaymentDeclarationsController_create: {
     parameters: {
       query?: never;
@@ -2647,7 +3011,112 @@ export interface operations {
   };
   AdminController_getStats: {
     parameters: {
-      query?: never;
+      query: {
+        annee: number;
+        mois: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_topOwners: {
+    parameters: {
+      query: {
+        limit: number;
+        from: string;
+        to: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_topManagers: {
+    parameters: {
+      query: {
+        limit: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_listTransactions: {
+    parameters: {
+      query?: {
+        source?: "PAYDUNYA_API" | "MANUAL_OWNER" | "TENANT_DECLARATION";
+        status?:
+          | "PENDING"
+          | "PENDING_CONFIRMATION"
+          | "PAID"
+          | "PARTIAL"
+          | "LATE"
+          | "OVERDUE"
+          | "REJECTED";
+        paymentMethod?: "TMONEY" | "FLOOZ" | "CASH" | "BANK_TRANSFER";
+        /** @description Filtre paidAt >= from (ISO 8601) */
+        from?: string;
+        /** @description Filtre paidAt <= to (ISO 8601) */
+        to?: string;
+        page?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_listAuditLogs: {
+    parameters: {
+      query?: {
+        actorUserId?: string;
+        /** @description Recherche contains sur action (ex: "POST /properties") */
+        action?: string;
+        entityType?: string;
+        /** @description Filtre createdAt >= from (ISO 8601) */
+        from?: string;
+        /** @description Filtre createdAt <= to (ISO 8601) */
+        to?: string;
+        page?: number;
+        limit?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -2664,11 +3133,17 @@ export interface operations {
   };
   AdminController_listUsers: {
     parameters: {
-      query: {
-        role: string;
-        search: string;
-        page: number;
-        limit: number;
+      query?: {
+        role?: "OWNER" | "TENANT" | "MANAGER" | "ADMIN";
+        status?:
+          | "ACTIVE"
+          | "SUSPENDED_INACTIVITY"
+          | "SUSPENDED_ADMIN"
+          | "SUSPENDED_PAYMENT";
+        /** @description Recherche nom/email (contains, insensible à la casse) */
+        search?: string;
+        page?: number;
+        limit?: number;
       };
       header?: never;
       path?: never;
@@ -2722,6 +3197,48 @@ export interface operations {
       };
     };
   };
+  AdminController_suspendUser: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SuspendUserDto"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_reactivateUser: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   AdminController_moderateReview: {
     parameters: {
       query?: never;
@@ -2768,6 +3285,25 @@ export interface operations {
       };
     };
   };
+  ManagerReviewsController_findMine: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   ManagerReviewsController_update: {
     parameters: {
       query?: never;
@@ -2799,6 +3335,8 @@ export interface operations {
         limit?: number;
         /** @description Ville d’intervention exacte (ManagerProfile.zonesOfIntervention) */
         zone?: string;
+        /** @description Recherche textuelle sur le prénom/nom du gestionnaire (contains, insensible à la casse) */
+        search?: string;
         minRating?: number;
       };
       header?: never;
@@ -3051,6 +3589,45 @@ export interface operations {
       };
     };
   };
+  DashboardManagerController_getPropertyTypeBreakdown: {
+    parameters: {
+      query?: {
+        scope?: "MANAGED" | "OWNED" | "ALL";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  DashboardManagerController_getMonthlyRevenue: {
+    parameters: {
+      query?: {
+        scope?: "MANAGED" | "OWNED" | "ALL";
+        year?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   DashboardManagerController_getPropertyPerformance: {
     parameters: {
       query?: never;
@@ -3073,6 +3650,8 @@ export interface operations {
   DashboardController_getSummary: {
     parameters: {
       query?: {
+        /** @description 1 à 12 */
+        mois?: number;
         annee?: number;
       };
       header?: never;
