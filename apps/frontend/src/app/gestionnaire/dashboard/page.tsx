@@ -252,7 +252,7 @@ export default function GestionnaireDashboard() {
                       {TYPE_P[m.property.type]?.[0] ?? '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-bold text-sm text-foreground mb-0.5">{m.property.address}</div>
+                      <div className="font-bold text-sm text-foreground mb-0.5">{m.property.address || m.property.neighborhood}</div>
                       <div className="text-xs text-muted-foreground">
                         {m.property.neighborhood}, {m.property.city}
                         <span className="mx-1.5">·</span>
@@ -281,7 +281,7 @@ export default function GestionnaireDashboard() {
             {pending.map((m, i) => (
               <div key={m.id} className={`px-5 py-4 flex items-center gap-3.5 ${i < pending.length - 1 ? 'border-b border-ds-border' : ''}`}>
                 <div className="flex-1">
-                  <div className="font-semibold text-sm text-foreground">{m.property.address}</div>
+                  <div className="font-semibold text-sm text-foreground">{m.property.address || m.property.neighborhood}</div>
                   <div className="text-xs text-muted-foreground">{m.property.neighborhood}, {m.property.city}</div>
                 </div>
                 <Badge tone="warning">En attente</Badge>

@@ -21,7 +21,7 @@ import { LeaseHistoryQueryDto } from './dto/lease-history-query.dto';
 export type LeaseHistoryEntry = {
   id: string;
   propertyId: string;
-  property: { id: string; address: string; neighborhood: string; city: string };
+  property: { id: string; address: string | null; neighborhood: string; city: string };
   tenantUserId: string;
   tenant: {
     id: string;
@@ -67,7 +67,7 @@ export type TenantSummary = {
     id: string;
     monthlyRent: number;
     startDate: Date;
-    property: { id: string; address: string; neighborhood: string; city: string };
+    property: { id: string; address: string | null; neighborhood: string; city: string };
   } | null;
 };
 

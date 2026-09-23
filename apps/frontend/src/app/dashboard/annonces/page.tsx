@@ -13,7 +13,7 @@ interface Property {
   id: string;
   type: PropertyType;
   status: PropertyStatus;
-  address: string;
+  address: string | null;
   neighborhood: string;
   city: string;
   monthlyRent: number;
@@ -66,7 +66,7 @@ export default function AnnoncesPage() {
                   <Badge tone="info" dot>Annonce active</Badge>
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-foreground mb-0.5">{p.address}</div>
+                  <div className="font-bold text-sm text-foreground mb-0.5">{p.address || p.neighborhood}</div>
                   <div className="text-xs text-muted-foreground">{p.neighborhood}, {p.city}</div>
                 </div>
                 <span className="text-base font-extrabold text-primary-dark tabular-nums">{formatFcfa(p.monthlyRent)}</span>

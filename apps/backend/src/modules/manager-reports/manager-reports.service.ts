@@ -55,7 +55,7 @@ export class ManagerReportsService {
         select: {
           propertyId: true,
           acceptedAt: true,
-          property: { select: { id: true, address: true } },
+          property: { select: { id: true, address: true, neighborhood: true, city: true } },
         },
       }),
       this.prisma.user.findUnique({
@@ -111,7 +111,7 @@ export class ManagerReportsService {
           paidAmount: true,
           lease: {
             select: {
-              property: { select: { id: true, address: true } },
+              property: { select: { id: true, address: true, neighborhood: true, city: true } },
               tenant: { select: { id: true, firstName: true, lastName: true } },
             },
           },
@@ -137,7 +137,7 @@ export class ManagerReportsService {
           lease: {
             select: {
               propertyId: true,
-              property: { select: { id: true, address: true } },
+              property: { select: { id: true, address: true, neighborhood: true, city: true } },
               tenant: { select: { id: true, firstName: true, lastName: true } },
             },
           },

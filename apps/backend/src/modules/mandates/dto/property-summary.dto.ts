@@ -16,8 +16,8 @@ export class PropertySummaryDto {
   @ApiProperty({ enum: PropertyStatus })
   status!: PropertyStatus;
 
-  @ApiProperty()
-  address!: string;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  address!: string | null;
 
   @ApiProperty()
   neighborhood!: string;

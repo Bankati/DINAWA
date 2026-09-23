@@ -19,7 +19,7 @@ interface ScheduleEntry {
 
 interface ActiveLease {
   id: string;
-  property: { address: string; neighborhood: string; city: string };
+  property: { address: string | null; neighborhood: string; city: string };
   status: string;
   monthlyRent: number;
   monthlyCharges: number;
@@ -132,7 +132,7 @@ export default function LocataireDashboardPage() {
               <h2 className="text-sm font-bold text-primary-dark m-0">Mon bien</h2>
             </CardHeader>
             <CardBody>
-              <div className="font-semibold text-foreground">{lease?.property.address}</div>
+              <div className="font-semibold text-foreground">{lease?.property.address || lease?.property.neighborhood}</div>
               <div className="text-xs text-muted-foreground mt-0.5">{lease?.property.neighborhood}, {lease?.property.city}</div>
             </CardBody>
           </Card>

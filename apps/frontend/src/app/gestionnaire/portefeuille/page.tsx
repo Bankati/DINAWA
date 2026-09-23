@@ -128,7 +128,7 @@ export default function GestionnairePortefeuillePage() {
               {active.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>
-                    <div className="font-semibold text-foreground">{m.property.address}</div>
+                    <div className="font-semibold text-foreground">{m.property.address || m.property.neighborhood}</div>
                     <div className="text-xs text-muted-foreground">{m.property.neighborhood}, {m.property.city}</div>
                   </TableCell>
                   <TableCell>{m.owner.firstName} {m.owner.lastName}</TableCell>

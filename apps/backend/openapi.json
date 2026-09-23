@@ -116,7 +116,52 @@
             "bearer": []
           }
         ],
-        "summary": "Nombre de notifications non lues (dernières 24h)",
+        "summary": "Nombre de notifications non lues",
+        "tags": ["Notifications"]
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotifyController_markAsRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marque une notification comme lue",
+        "tags": ["Notifications"]
+      }
+    },
+    "/notifications/read-all": {
+      "patch": {
+        "operationId": "NotifyController_markAllAsRead",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marque toutes les notifications comme lues",
         "tags": ["Notifications"]
       }
     },
@@ -290,7 +335,7 @@
     },
     "/auth/signup/owner": {
       "post": {
-        "description": "Crée le compte Supabase Auth et le profil propriétaire, envoie l'email de confirmation WARAH.",
+        "description": "Crée le compte et le profil propriétaire, envoie l'email de confirmation WARAH.",
         "operationId": "AuthController_signupOwner",
         "parameters": [],
         "requestBody": {
@@ -314,7 +359,7 @@
     },
     "/auth/signup/manager": {
       "post": {
-        "description": "Crée le compte Supabase Auth et le profil gestionnaire, envoie l'email de confirmation WARAH.",
+        "description": "Crée le compte et le profil gestionnaire, envoie l'email de confirmation WARAH.",
         "operationId": "AuthController_signupManager",
         "parameters": [],
         "requestBody": {
@@ -338,7 +383,7 @@
     },
     "/auth/invite/tenant": {
       "post": {
-        "description": "Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire (email confirmé d'office) et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.",
+        "description": "Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.",
         "operationId": "AuthController_inviteTenant",
         "parameters": [],
         "requestBody": {
@@ -391,7 +436,7 @@
     },
     "/auth/login": {
       "post": {
-        "description": "Route la connexion via NestJS (plutôt que directement Supabase côté client) pour appliquer le blocage de 15 minutes après 5 tentatives échouées. Renvoie une session Supabase valide en cas de succès.",
+        "description": "Vérifie le mot de passe (bcrypt) et applique le blocage de 15 minutes après 5 tentatives échouées. Renvoie un access token (JWT, 15 min) et un refresh token en cas de succès.",
         "operationId": "AuthController_login",
         "parameters": [],
         "requestBody": {
@@ -688,6 +733,35 @@
         "tags": ["Profile"]
       }
     },
+    "/profile/password": {
+      "patch": {
+        "description": "Nécessite le mot de passe actuel. Révoque toutes les sessions existantes — reconnexion requise sur les autres appareils.",
+        "operationId": "ProfileController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change le mot de passe du compte connecté",
+        "tags": ["Profile"]
+      }
+    },
     "/account/status": {
       "get": {
         "operationId": "AccountController_getStatus",
@@ -732,6 +806,262 @@
         ],
         "summary": "Prévisualisation du rapport mensuel courant pour un propriétaire mandant",
         "tags": ["Manager Reports"]
+      }
+    },
+    "/payments/manual": {
+      "post": {
+        "description": "Réservé à celui qui peut agir sur le bien (propriétaire sans mandat actif, ou gestionnaire mandaté). Crée directement un paiement PAID — pas d'étape de confirmation.",
+        "operationId": "PaymentsController_createManual",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManualPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enregistre un paiement reçu hors plateforme (espèces, virement)",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/initiate": {
+      "post": {
+        "description": "Le locataire est redirigé vers checkoutUrl pour compléter le paiement — le montant est toujours le solde restant de l’échéance, jamais saisi par le client.",
+        "operationId": "PaymentsController_initiate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiatePaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Initie un paiement PayDunya (mobile money) sur sa propre échéance",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments": {
+      "get": {
+        "operationId": "PaymentsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "propertyId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantUserId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Recherche textuelle sur le prénom/nom/email du locataire (contains, insensible à la casse)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "PENDING",
+                "PENDING_CONFIRMATION",
+                "PAID",
+                "PARTIAL",
+                "LATE",
+                "OVERDUE",
+                "REJECTED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["PAYDUNYA_API", "MANUAL_OWNER", "TENANT_DECLARATION"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Filtre paidAt >= from (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Filtre paidAt <= to (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historique paginé des paiements, filtrable",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/{id}/confirm": {
+      "post": {
+        "operationId": "PaymentsController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirme une déclaration de paiement locataire — passe à PAID",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/{id}/reject": {
+      "post": {
+        "operationId": "PaymentsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rejette une déclaration de paiement locataire — motif obligatoire",
+        "tags": ["Payments"]
+      }
+    },
+    "/payments/{id}/receipt.pdf": {
+      "get": {
+        "description": "Disponible uniquement pour un paiement PAID.",
+        "operationId": "PaymentsController_downloadReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Quittance PDF générée à la volée — jamais persistée",
+        "tags": ["Payments"]
       }
     },
     "/properties": {
@@ -790,6 +1120,14 @@
               "enum": ["OCCUPIED", "VACANT", "RENOVATION", "ARCHIVED"],
               "type": "string"
             }
+          },
+          {
+            "name": "building",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -803,6 +1141,24 @@
           }
         ],
         "summary": "Liste paginée des biens visibles par l'utilisateur courant",
+        "tags": ["Properties"]
+      }
+    },
+    "/properties/buildings": {
+      "get": {
+        "operationId": "PropertiesController_listBuildings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Suggestions d'immeubles déjà utilisés par l'utilisateur courant",
         "tags": ["Properties"]
       }
     },
@@ -1360,224 +1716,6 @@
         "tags": ["Leases"]
       }
     },
-    "/payments/manual": {
-      "post": {
-        "description": "Réservé à celui qui peut agir sur le bien (propriétaire sans mandat actif, ou gestionnaire mandaté). Crée directement un paiement PAID — pas d'étape de confirmation.",
-        "operationId": "PaymentsController_createManual",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateManualPaymentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Enregistre un paiement reçu hors plateforme (espèces, virement)",
-        "tags": ["Payments"]
-      }
-    },
-    "/payments": {
-      "get": {
-        "operationId": "PaymentsController_findAll",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "propertyId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "tenantUserId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "enum": [
-                "PENDING",
-                "PENDING_CONFIRMATION",
-                "PAID",
-                "PARTIAL",
-                "LATE",
-                "OVERDUE",
-                "REJECTED"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "enum": ["CASHPAY_API", "MANUAL_OWNER", "TENANT_DECLARATION"],
-              "type": "string"
-            }
-          },
-          {
-            "name": "from",
-            "required": false,
-            "in": "query",
-            "description": "Filtre paidAt >= from (ISO 8601)",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "to",
-            "required": false,
-            "in": "query",
-            "description": "Filtre paidAt <= to (ISO 8601)",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Historique paginé des paiements, filtrable",
-        "tags": ["Payments"]
-      }
-    },
-    "/payments/{id}/confirm": {
-      "post": {
-        "operationId": "PaymentsController_confirm",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Confirme une déclaration de paiement locataire — passe à PAID",
-        "tags": ["Payments"]
-      }
-    },
-    "/payments/{id}/reject": {
-      "post": {
-        "operationId": "PaymentsController_reject",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectPaymentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Rejette une déclaration de paiement locataire — motif obligatoire",
-        "tags": ["Payments"]
-      }
-    },
-    "/payments/{id}/receipt.pdf": {
-      "get": {
-        "description": "Disponible uniquement pour un paiement PAID.",
-        "operationId": "PaymentsController_downloadReceipt",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Quittance PDF générée à la volée — jamais persistée",
-        "tags": ["Payments"]
-      }
-    },
     "/payment-declarations": {
       "post": {
         "description": "Réservé au locataire connecté, sur son propre bail. Justificatif (`proof`) optionnel.",
@@ -1700,7 +1838,24 @@
     "/admin/stats": {
       "get": {
         "operationId": "AdminController_getStats",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "annee",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "mois",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -1715,28 +1870,12 @@
         "tags": ["Admin"]
       }
     },
-    "/admin/users": {
+    "/admin/top-owners": {
       "get": {
-        "operationId": "AdminController_listUsers",
+        "operationId": "AdminController_topOwners",
         "parameters": [
           {
-            "name": "role",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
+            "name": "limit",
             "required": true,
             "in": "query",
             "schema": {
@@ -1744,10 +1883,279 @@
             }
           },
           {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top propriétaires par volume de loyers encaissés (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/top-managers": {
+      "get": {
+        "operationId": "AdminController_topManagers",
+        "parameters": [
+          {
             "name": "limit",
             "required": true,
             "in": "query",
             "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top gestionnaires par nombre de mandats actifs (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/transactions": {
+      "get": {
+        "operationId": "AdminController_listTransactions",
+        "parameters": [
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["PAYDUNYA_API", "MANUAL_OWNER", "TENANT_DECLARATION"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "PENDING",
+                "PENDING_CONFIRMATION",
+                "PAID",
+                "PARTIAL",
+                "LATE",
+                "OVERDUE",
+                "REJECTED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "paymentMethod",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["TMONEY", "FLOOZ", "CASH", "BANK_TRANSFER"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Filtre paidAt >= from (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Filtre paidAt <= to (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supervision de tous les paiements de la plateforme (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "operationId": "AdminController_listAuditLogs",
+        "parameters": [
+          {
+            "name": "actorUserId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Recherche contains sur action (ex: \"POST /properties\")",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Filtre createdAt >= from (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Filtre createdAt <= to (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Journal d’audit de toute action mutante sur la plateforme (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminController_listUsers",
+        "parameters": [
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["OWNER", "TENANT", "MANAGER", "ADMIN"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["ACTIVE", "SUSPENDED_INACTIVITY", "SUSPENDED_ADMIN", "SUSPENDED_PAYMENT"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Recherche nom/email (contains, insensible à la casse)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
               "type": "number"
             }
           }
@@ -1815,6 +2223,70 @@
           }
         ],
         "summary": "Supprimer (anonymiser) un compte (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/users/{id}/suspend": {
+      "post": {
+        "operationId": "AdminController_suspendUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Suspend manuellement un compte non-admin, avec motif (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/users/{id}/reactivate": {
+      "post": {
+        "operationId": "AdminController_reactivateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lève une suspension et repasse le compte à ACTIVE (super admin)",
         "tags": ["Admin"]
       }
     },
@@ -1892,6 +2364,33 @@
         "tags": ["Manager Reviews"]
       }
     },
+    "/managers/{id}/reviews/me": {
+      "get": {
+        "operationId": "ManagerReviewsController_findMine",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Récupère l'avis de l'utilisateur connecté pour ce gestionnaire, s'il existe (null sinon)",
+        "tags": ["Manager Reviews"]
+      }
+    },
     "/managers/{id}/reviews/{reviewId}": {
       "patch": {
         "operationId": "ManagerReviewsController_update",
@@ -1939,7 +2438,7 @@
     },
     "/public/managers": {
       "get": {
-        "description": "Aucune authentification requise.",
+        "description": "Réservé aux Propriétaires et Gestionnaires connectés.",
         "operationId": "PublicManagersController_findAll",
         "parameters": [
           {
@@ -1970,6 +2469,15 @@
             }
           },
           {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Recherche textuelle sur le prénom/nom du gestionnaire (contains, insensible à la casse)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "minRating",
             "required": false,
             "in": "query",
@@ -1985,7 +2493,12 @@
             "description": ""
           }
         },
-        "summary": "Annuaire public des gestionnaires, filtrable par ville d’intervention et note minimale",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annuaire des gestionnaires, filtrable par ville d’intervention et note minimale",
         "tags": ["Public Managers"]
       }
     },
@@ -2007,7 +2520,12 @@
             "description": ""
           }
         },
-        "summary": "Profil détaillé public d’un gestionnaire — portfolio et avis vérifiés",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Profil détaillé d’un gestionnaire — portfolio, avis vérifiés et email de contact",
         "tags": ["Public Managers"]
       }
     },
@@ -2341,6 +2859,72 @@
         "tags": ["Dashboard"]
       }
     },
+    "/dashboard/manager/property-types": {
+      "get": {
+        "operationId": "DashboardManagerController_getPropertyTypeBreakdown",
+        "parameters": [
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "ALL",
+              "enum": ["MANAGED", "OWNED", "ALL"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Répartition des loyers par type de bien (composition du portefeuille)",
+        "tags": ["Dashboard"]
+      }
+    },
+    "/dashboard/manager/monthly-revenue": {
+      "get": {
+        "operationId": "DashboardManagerController_getMonthlyRevenue",
+        "parameters": [
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "ALL",
+              "enum": ["MANAGED", "OWNED", "ALL"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "year",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Encaissements mensuels janvier-décembre pour une année donnée",
+        "tags": ["Dashboard"]
+      }
+    },
     "/dashboard/manager/properties/{id}/performance": {
       "get": {
         "operationId": "DashboardManagerController_getPropertyPerformance",
@@ -2372,6 +2956,15 @@
       "get": {
         "operationId": "DashboardController_getSummary",
         "parameters": [
+          {
+            "name": "mois",
+            "required": false,
+            "in": "query",
+            "description": "1 à 12",
+            "schema": {
+              "type": "number"
+            }
+          },
           {
             "name": "annee",
             "required": false,
@@ -2688,6 +3281,14 @@
           "lastName": {
             "type": "string"
           },
+          "phone": {
+            "type": "string",
+            "example": "90330557"
+          },
+          "city": {
+            "type": "string",
+            "example": "Lomé"
+          },
           "reminderDaysBefore": {
             "type": "number",
             "description": "Jours avant échéance pour le rappel de loyer"
@@ -2708,6 +3309,65 @@
         },
         "required": ["consent"]
       },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "required": ["currentPassword", "newPassword"]
+      },
+      "CreateManualPaymentDto": {
+        "type": "object",
+        "properties": {
+          "scheduleEntryId": {
+            "type": "string"
+          },
+          "paidAmount": {
+            "type": "number"
+          },
+          "paidAt": {
+            "type": "string",
+            "description": "Date effective du paiement (ISO 8601)"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": ["CASH", "BANK_TRANSFER"]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": ["scheduleEntryId", "paidAmount", "paidAt", "paymentMethod"]
+      },
+      "InitiatePaymentDto": {
+        "type": "object",
+        "properties": {
+          "scheduleEntryId": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"],
+            "description": "Préférence indicative — ne restreint pas le choix réel sur la page PayDunya"
+          }
+        },
+        "required": ["scheduleEntryId", "paymentMethod"]
+      },
+      "RejectPaymentDto": {
+        "type": "object",
+        "properties": {
+          "rejectionReason": {
+            "type": "string",
+            "description": "Motif obligatoire — communiqué au locataire"
+          }
+        },
+        "required": ["rejectionReason"]
+      },
       "CreatePropertyDto": {
         "type": "object",
         "properties": {
@@ -2716,13 +3376,16 @@
             "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
           },
           "address": {
-            "type": "string"
+            "type": "object"
           },
           "neighborhood": {
             "type": "string"
           },
           "city": {
             "type": "string"
+          },
+          "building": {
+            "type": "object"
           },
           "surfaceArea": {
             "type": "number"
@@ -2740,7 +3403,7 @@
             "type": "string"
           }
         },
-        "required": ["type", "address", "neighborhood", "city", "monthlyRent"]
+        "required": ["type", "neighborhood", "city", "monthlyRent"]
       },
       "UpdatePropertyDto": {
         "type": "object",
@@ -2754,13 +3417,16 @@
             "enum": ["OCCUPIED", "VACANT", "RENOVATION", "ARCHIVED"]
           },
           "address": {
-            "type": "string"
+            "type": "object"
           },
           "neighborhood": {
             "type": "string"
           },
           "city": {
             "type": "string"
+          },
+          "building": {
+            "type": "object"
           },
           "surfaceArea": {
             "type": "number"
@@ -2818,39 +3484,6 @@
           }
         }
       },
-      "CreateManualPaymentDto": {
-        "type": "object",
-        "properties": {
-          "scheduleEntryId": {
-            "type": "string"
-          },
-          "paidAmount": {
-            "type": "number"
-          },
-          "paidAt": {
-            "type": "string",
-            "description": "Date effective du paiement (ISO 8601)"
-          },
-          "paymentMethod": {
-            "type": "string",
-            "enum": ["CASH", "BANK_TRANSFER"]
-          },
-          "note": {
-            "type": "string"
-          }
-        },
-        "required": ["scheduleEntryId", "paidAmount", "paidAt", "paymentMethod"]
-      },
-      "RejectPaymentDto": {
-        "type": "object",
-        "properties": {
-          "rejectionReason": {
-            "type": "string",
-            "description": "Motif obligatoire — communiqué au locataire"
-          }
-        },
-        "required": ["rejectionReason"]
-      },
       "CreatePaymentDeclarationDto": {
         "type": "object",
         "properties": {
@@ -2892,6 +3525,16 @@
             "type": "string"
           }
         }
+      },
+      "SuspendUserDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Motif de la suspension, communiqué à l'utilisateur par email"
+          }
+        },
+        "required": ["reason"]
       },
       "ModerateReviewDto": {
         "type": "object",
@@ -2980,7 +3623,8 @@
             "enum": ["OCCUPIED", "VACANT", "RENOVATION", "ARCHIVED"]
           },
           "address": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "neighborhood": {
             "type": "string"
@@ -3025,7 +3669,6 @@
           "ownerId",
           "type",
           "status",
-          "address",
           "neighborhood",
           "city",
           "monthlyRent",

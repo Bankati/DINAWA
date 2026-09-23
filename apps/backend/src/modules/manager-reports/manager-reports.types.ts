@@ -11,7 +11,9 @@ interface PersonSummary {
 
 interface PropertySummary {
   id: string;
-  address: string;
+  address: string | null;
+  neighborhood: string;
+  city: string;
 }
 
 export interface ReportPayment {

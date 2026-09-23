@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 import { CRON_PAYMENT_DECLARATION_REMINDERS } from '../../common/constants';
 
 const ADVISORY_LOCK_KEY = 'payment-declaration-reminders-task';
@@ -82,7 +83,7 @@ export class PaymentDeclarationRemindersTask {
           event: 'payment-declaration-pending',
           variables: {
             tenantName: `${declaration.payment.lease.tenant.firstName} ${declaration.payment.lease.tenant.lastName}`,
-            propertyAddress: declaration.payment.lease.property.address,
+            propertyAddress: formatPropertyLocation(declaration.payment.lease.property),
             amount: declaration.declaredAmount,
           },
         });
