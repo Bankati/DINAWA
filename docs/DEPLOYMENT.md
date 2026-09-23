@@ -135,6 +135,8 @@ Décision explicite du développeur (2026-08-13, `/architect` Phase 11) : les sa
 2. Sélectionner le dépôt WARAH
 3. Railway détectera automatiquement le `railway.json` à la racine
 
+> **Région** : fixée dans `railway.json` (`deploy.multiRegionConfig`) sur `europe-west4-drams3a` (Amsterdam), la plus proche à la fois de la base Supabase (Londres, `eu-west-2`) et des utilisateurs (Togo) — Railway n'a pas de région africaine. Sans cette clé, Railway retombe sur la région par défaut du compte (US West), ce qui ajoutait ~140 ms par requête SQL (mesuré le 2026-09-23 : ~1,9 s pour un endpoint public lisant la base). `numReplicas` seul (ancienne configuration) ne précisait aucune région ; le nombre de réplicas se règle désormais dans `multiRegionConfig`. Identifiants valides : `us-west2`, `us-east4-eqdc4a`, `europe-west4-drams3a`, `asia-southeast1-eqsg3a`.
+
 ### 4b. Configurer les variables d'environnement Railway
 
 Dans Railway → Service → Variables, ajouter toutes les variables listées dans [`ENV.md`](ENV.md) section "Backend".
