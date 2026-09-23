@@ -45,7 +45,7 @@ export interface AdminTransaction {
   lease: {
     tenant: { firstName: string; lastName: string };
     owner: { firstName: string; lastName: string };
-    property: { address: string; city: string };
+    property: { address: string | null; city: string };
   };
 }
 

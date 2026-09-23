@@ -330,7 +330,10 @@ model Property {
   owner          User           @relation("PropertyOwner", fields: [ownerId], references: [id])
   type           PropertyType
   status         PropertyStatus @default(VACANT)
-  address        String
+  // Optionnel depuis 2026-09-22 (demande développeur) — Quartier + Ville
+  // suffisent à identifier un bien, l'adresse précise n'est plus jugée
+  // utile. Champ conservé (pas supprimé) pour les biens déjà saisis.
+  address        String?
   neighborhood   String
   city           String
   // Regroupement libre de plusieurs biens au même endroit physique (ex. un

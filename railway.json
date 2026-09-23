@@ -5,7 +5,9 @@
     "dockerfilePath": "apps/backend/Dockerfile"
   },
   "deploy": {
-    "numReplicas": 1,
+    "multiRegionConfig": {
+      "europe-west4-drams3a": { "numReplicas": 1 }
+    },
     "healthcheckPath": "/health/ready",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",

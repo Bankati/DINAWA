@@ -22,7 +22,7 @@ export interface PublicListingDetail {
   type: PropertyType;
   neighborhood: string;
   city: string;
-  address: string;
+  address: string | null;
   surfaceArea: number;
   roomsCount: number | null;
   monthlyRent: number;

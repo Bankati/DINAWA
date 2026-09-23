@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 import { CRON_PAYMENT_REMINDERS } from '../../common/constants';
 
 const ADVISORY_LOCK_KEY = 'payment-reminders-task';
@@ -51,7 +52,7 @@ export class RemindersTask {
           include: {
             owner: { select: { reminderDaysBefore: true } },
             tenant: { select: { id: true } },
-            property: { select: { address: true } },
+            property: { select: { address: true, neighborhood: true, city: true } },
           },
         },
       },
@@ -70,7 +71,7 @@ export class RemindersTask {
           variables: {
             period: this.formatPeriod(entry.periodStart, entry.periodEnd),
             dueDate: entry.dueDate.toISOString().slice(0, 10),
-            propertyAddress: entry.lease.property.address,
+            propertyAddress: formatPropertyLocation(entry.lease.property),
             amount: entry.expectedAmount - entry.paidAmount,
           },
         });

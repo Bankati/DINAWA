@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 import { CRON_OVERDUE_ALERTS } from '../../common/constants';
 
 const ADVISORY_LOCK_KEY = 'overdue-alerts-task';
@@ -86,7 +87,7 @@ export class OverdueAlertsTask {
           event: 'overdue-alert',
           variables: {
             tenantName: `${entry.lease.tenant.firstName} ${entry.lease.tenant.lastName}`,
-            propertyAddress: entry.lease.property.address,
+            propertyAddress: formatPropertyLocation(entry.lease.property),
             period: this.formatPeriod(entry.periodStart, entry.periodEnd),
             amount: entry.expectedAmount - entry.paidAmount,
           },

@@ -39,7 +39,7 @@ export interface Payment {
     };
     property?: {
       id: string;
-      address: string;
+      address: string | null;
       city: string;
     };
   };
@@ -64,7 +64,7 @@ export interface PaymentDeclaration {
       email: string;
     };
     property?: {
-      address: string;
+      address: string | null;
     };
   };
 }

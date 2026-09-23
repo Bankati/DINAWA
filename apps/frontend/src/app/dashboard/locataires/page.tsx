@@ -25,14 +25,14 @@ interface TenantSummary {
     id: string;
     monthlyRent: number;
     startDate: string;
-    property: { id: string; address: string; neighborhood: string; city: string };
+    property: { id: string; address: string | null; neighborhood: string; city: string };
   } | null;
 }
 
 interface PropertyOption {
   id: string;
   status: 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
-  address: string;
+  address: string | null;
   neighborhood: string;
   city: string;
   monthlyRent: number;
@@ -152,7 +152,7 @@ export default function LocatairesPage() {
       invalidateTenants();
       setManaging((current) => (current && current !== 'new' ? { ...current, activeLease: null } : current));
       setTerminationReason('');
-      setJustTerminated({ propertyId: property.id, label: `${property.address}, ${property.neighborhood}` });
+      setJustTerminated({ propertyId: property.id, label: `${property.address || property.neighborhood}, ${property.city}` });
       await loadAvailableProperties();
     } catch (err: unknown) {
       setLinkErr(err instanceof Error ? err.message : 'Erreur lors de la résiliation');
@@ -274,7 +274,7 @@ export default function LocatairesPage() {
                   <TableCell>
                     {t.activeLease ? (
                       <div>
-                        <div className="font-medium text-foreground">{t.activeLease.property.address}</div>
+                        <div className="font-medium text-foreground">{t.activeLease.property.address || t.activeLease.property.neighborhood}</div>
                         <div className="text-xs text-muted-foreground">{t.activeLease.property.neighborhood}, {t.activeLease.property.city}</div>
                       </div>
                     ) : <span className="text-muted-foreground">—</span>}
@@ -309,7 +309,7 @@ export default function LocatairesPage() {
           {managing !== 'new' && managing?.activeLease ? (
             <div className="flex flex-col gap-4">
               <div className="bg-ds-secondary border border-ds-border rounded-lg px-4 py-3.5">
-                <div className="font-bold text-sm text-foreground">{managing.activeLease.property.address}</div>
+                <div className="font-bold text-sm text-foreground">{managing.activeLease.property.address || managing.activeLease.property.neighborhood}</div>
                 <div className="text-xs text-muted-foreground mb-1.5">{managing.activeLease.property.neighborhood}, {managing.activeLease.property.city}</div>
                 <div className="text-sm text-foreground">{formatFcfa(managing.activeLease.monthlyRent)}/mois — depuis le {formatDate(managing.activeLease.startDate)}</div>
               </div>
@@ -372,7 +372,9 @@ export default function LocatairesPage() {
                     <SelectTrigger className="mt-1.5"><SelectValue placeholder={propertiesLoading ? 'Chargement…' : 'Sélectionner un bien'} /></SelectTrigger>
                     <SelectContent>
                       {properties.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.address} — {p.neighborhood}, {p.city} ({formatFcfa(p.monthlyRent)})</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.address ? `${p.address} — ` : ''}{p.neighborhood}, {p.city} ({formatFcfa(p.monthlyRent)})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

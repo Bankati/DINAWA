@@ -41,20 +41,20 @@ export interface ManagerDashboardAlerts {
     dueDate: Date;
     expectedAmount: number;
     paidAmount: number;
-    property: { id: string; address: string };
+    property: { id: string; address: string | null };
     tenant: { id: string; firstName: string; lastName: string };
   }>;
   expiringLeases: Array<{
     id: string;
     endDate: Date | null;
-    property: { id: string; address: string };
+    property: { id: string; address: string | null };
     tenant: { id: string; firstName: string; lastName: string };
   }>;
   pendingDeclarations: Array<{
     id: string;
     paidAmount: number;
     createdAt: Date;
-    property: { id: string; address: string };
+    property: { id: string; address: string | null };
     tenant: { id: string; firstName: string; lastName: string };
   }>;
 }
@@ -73,7 +73,7 @@ export interface ManagerDashboardUpcomingPayment {
   dueDate: Date;
   expectedAmount: number;
   paidAmount: number;
-  property: { id: string; address: string };
+  property: { id: string; address: string | null };
   tenant: { id: string; firstName: string; lastName: string };
 }
 

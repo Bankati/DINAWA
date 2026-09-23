@@ -17,12 +17,13 @@ export class UpdatePropertyDto {
   @IsEnum(PropertyStatus)
   status?: PropertyStatus;
 
+  // Optionnelle depuis 2026-09-22, `null` efface (même convention que
+  // `building`, voir /recover 2026-09-21).
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(200)
-  address?: string;
+  address?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

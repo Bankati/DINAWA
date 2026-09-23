@@ -29,6 +29,7 @@ import { SetTenantPasswordDto } from './dto/set-tenant-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 
 // Blocage temporaire après échecs de connexion (voir build-plan.md unité 10).
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -472,7 +473,7 @@ export class AuthService {
         userId: user.id,
         event: 'lease-created',
         variables: {
-          propertyAddress: property.address,
+          propertyAddress: formatPropertyLocation(property),
           ownerName: `${inviter.firstName} ${inviter.lastName}`,
           startDate: format(startDate, 'dd/MM/yyyy'),
           monthlyAmount: effectiveMonthlyRent + effectiveMonthlyCharges,

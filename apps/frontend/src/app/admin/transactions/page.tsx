@@ -96,7 +96,7 @@ export default function AdminTransactionsPage() {
                 <TableRow key={t.id}>
                   <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDate(t.createdAt)}</TableCell>
                   <TableCell className="font-medium text-foreground">{t.lease.tenant.firstName} {t.lease.tenant.lastName}</TableCell>
-                  <TableCell>{t.lease.property.address}</TableCell>
+                  <TableCell>{t.lease.property.address || t.lease.property.city}</TableCell>
                   <TableCell className="text-muted-foreground">{t.lease.owner.firstName} {t.lease.owner.lastName}</TableCell>
                   <TableCell className="font-bold text-primary-dark tabular-nums whitespace-nowrap">{formatFcfa(t.paidAmount)}</TableCell>
                   <TableCell className="text-muted-foreground">{SOURCE_LABELS[t.source] ?? t.source}</TableCell>

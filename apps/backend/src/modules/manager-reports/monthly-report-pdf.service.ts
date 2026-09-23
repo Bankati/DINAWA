@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { format } from 'date-fns';
 import { ConsolidatedReportData } from './manager-reports.types';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 
 const BRAND_NAVY = '#13284A';
 const MUTED = '#6B7280';
@@ -98,7 +99,7 @@ export class MonthlyReportPdfService {
           .fillColor(BRAND_NAVY)
           .fontSize(10)
           .font('Helvetica-Bold')
-          .text(propertyGroup.property.address, 50, y);
+          .text(formatPropertyLocation(propertyGroup.property), 50, y);
         y += 14;
         for (const payment of propertyGroup.payments) {
           y = this.ensureSpace(doc, y, 13);
@@ -157,7 +158,7 @@ export class MonthlyReportPdfService {
           .fontSize(9)
           .font('Helvetica')
           .text(
-            `${entry.property.address} — ${tenantName} — échéance du ${format(entry.dueDate, 'dd/MM/yyyy')} — ${fcfa(entry.expectedAmount - entry.paidAmount)} restant`,
+            `${formatPropertyLocation(entry.property)} — ${tenantName} — échéance du ${format(entry.dueDate, 'dd/MM/yyyy')} — ${fcfa(entry.expectedAmount - entry.paidAmount)} restant`,
             50,
             y,
             { width: 495 },
@@ -196,7 +197,7 @@ export class MonthlyReportPdfService {
           .fontSize(9)
           .font('Helvetica')
           .text(
-            `${declaration.property.address} — ${tenantName} — ${fcfa(declaration.paidAmount)} — ${statusLabel} le ${format(declaration.processedAt, 'dd/MM/yyyy')}`,
+            `${formatPropertyLocation(declaration.property)} — ${tenantName} — ${fcfa(declaration.paidAmount)} — ${statusLabel} le ${format(declaration.processedAt, 'dd/MM/yyyy')}`,
             50,
             y,
             { width: 495 },

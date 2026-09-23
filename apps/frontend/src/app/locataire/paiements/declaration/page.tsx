@@ -27,7 +27,7 @@ interface ScheduleEntry {
 interface LeaseEntry {
   id: string;
   propertyId: string;
-  property: { id: string; address: string; neighborhood: string; city: string };
+  property: { id: string; address: string | null; neighborhood: string; city: string };
   status: string;
   monthlyRent: number;
 }
@@ -192,7 +192,9 @@ export default function PaymentDeclarationPage() {
               </div>
               <div>
                 <div className="font-bold text-[15px] text-white">{activeLease.property.neighborhood}, {activeLease.property.city}</div>
-                <div className="text-xs text-white/70 mt-0.5">{activeLease.property.address} · Loyer {formatFcfa(activeLease.monthlyRent)}/mois</div>
+                <div className="text-xs text-white/70 mt-0.5">
+                  {activeLease.property.address ? `${activeLease.property.address} · ` : ''}Loyer {formatFcfa(activeLease.monthlyRent)}/mois
+                </div>
               </div>
             </div>
           </Card>

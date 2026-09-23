@@ -15,6 +15,7 @@ import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../notify/notify.service';
 import { CreatePaymentDeclarationDto } from './dto/create-payment-declaration.dto';
 import { UpdatePaymentDeclarationDto } from './dto/update-payment-declaration.dto';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 
 type DeclarationWithAccess = Prisma.PaymentGetPayload<{
   include: { declaration: true; lease: { include: { property: true } } };
@@ -101,7 +102,7 @@ export class PaymentDeclarationsService {
         event: 'payment-declaration-pending',
         variables: {
           tenantName: `${user.firstName} ${user.lastName}`,
-          propertyAddress: scheduleEntry.lease.property.address,
+          propertyAddress: formatPropertyLocation(scheduleEntry.lease.property),
           amount: dto.declaredAmount,
         },
       });
