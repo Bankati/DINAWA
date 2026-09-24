@@ -1,4 +1,7 @@
-* { box-sizing: border-box; }
+/* Dans @layer base — voir le commentaire de app/page.css (fuite du reset global). */
+@layer base {
+  * { box-sizing: border-box; }
+}
 .page { font-family: 'Inter', system-ui, sans-serif; background: #fff; }
 
 .contact-section { padding: 72px 24px 96px; background: #F7F8FA; }

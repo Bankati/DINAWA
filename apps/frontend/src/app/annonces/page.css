@@ -1,4 +1,7 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* Dans @layer base — voir le commentaire de app/page.css (fuite du reset global). */
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+}
 .pub-page { min-height: 100vh; background: #f4f7fb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
 
 /* ── HERO ── */
