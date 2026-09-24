@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui';
 import { CommandPalette, ThemeToggle, type CommandPaletteItem } from '@/components/ds';
+import { NotificationPermissionPrompt } from '@/components/notification-permission-prompt';
 import './app-shell.css';
 
 type NavIcon =
@@ -177,11 +178,12 @@ function AccountBanner({ isManager, isTenant }: { isManager: boolean; isTenant: 
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, logout, profileVersion } = useAuth();
+  const { user, logout, profileVersion, refreshProfile } = useAuth();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [notificationConsent, setNotificationConsent] = useState<'NOT_ASKED' | 'ACCEPTED' | 'DECLINED'>();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const isManager = user?.role === 'MANAGER';
@@ -218,8 +220,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // URLs signées Supabase expirent après 15 min, une valeur persistée irait
   // vite casser l'avatar entre deux sessions.
   useEffect(() => {
-    if (!user?.id) { setPhotoUrl(null); return; }
-    api.get<{ profilePhotoUrl: string | null }>('/profile').then((d) => setPhotoUrl(d.profilePhotoUrl)).catch(() => {});
+    if (!user?.id) { setPhotoUrl(null); setNotificationConsent(undefined); return; }
+    api
+      .get<{ profilePhotoUrl: string | null; notificationConsent: 'NOT_ASKED' | 'ACCEPTED' | 'DECLINED' }>('/profile')
+      .then((d) => { setPhotoUrl(d.profilePhotoUrl); setNotificationConsent(d.notificationConsent); })
+      .catch(() => {});
   }, [user?.id, profileVersion]);
 
   const dateCourante = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -313,6 +318,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+
+      <NotificationPermissionPrompt consent={notificationConsent} onResolved={refreshProfile} />
     </div>
   );
 }

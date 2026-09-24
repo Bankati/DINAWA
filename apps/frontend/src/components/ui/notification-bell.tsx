@@ -99,8 +99,13 @@ export function NotificationBell({ seeAllRoute }: NotificationBellProps) {
         {unreadCount > 0 && <span className="topbar-bell-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
       </button>
 
+      {/* `right-0` est relatif à la cloche elle-même, pas au bord de l'écran
+          — sur mobile l'avatar est encore à sa droite, donc un simple
+          plafond de largeur ne suffit pas (vérifié : ça débordait toujours
+          à gauche jusqu'à 390px de large). Sous sm (640px), on bascule en
+          position fixe ancrée aux bords de l'écran plutôt qu'à la cloche. */}
       {open && (
-        <div className="absolute right-0 top-[calc(100%+10px)] w-[360px] bg-white rounded-2xl border border-gray-200 shadow-xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-[calc(100%+10px)] w-[360px] bg-white rounded-2xl border border-gray-200 shadow-xl z-50 overflow-hidden max-sm:fixed max-sm:top-20 max-sm:left-4 max-sm:right-4 max-sm:w-auto">
           <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-100">
             <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
               <button
