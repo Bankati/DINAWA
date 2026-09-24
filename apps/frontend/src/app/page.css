@@ -1,7 +1,12 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
-ul { list-style: none; }
-a { text-decoration: none; }
-img { max-width: 100%; }
+/* Dans @layer base : hors couche, ce `*` restait chargé après une navigation
+   client (accueil → connexion → tableau de bord) et écrasait margin/padding de
+   toutes les classes Tailwind de l'app — d'où le layout cassé jusqu'au F5. */
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  ul { list-style: none; }
+  a { text-decoration: none; }
+  img { max-width: 100%; }
+}
 .lp { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #1a2744; background: #fff; overflow-x: hidden; }
 
 /* ── HERO — photo plein fond + mockup ── */

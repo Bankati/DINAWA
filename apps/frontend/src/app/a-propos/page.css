@@ -1,4 +1,7 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Dans @layer base — voir le commentaire de app/page.css (fuite du reset global). */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+}
 .page { font-family: 'Inter', system-ui, sans-serif; color: #1a2940; overflow-x: hidden; }
 
 /* ── HERO ── */
