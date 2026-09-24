@@ -158,8 +158,16 @@
   .main-col { height: auto; }
   .main-content { overflow-y: visible; padding: 16px; }
 
+  /* `bottom: 0` plutôt que `height: 100vh` : sur mobile (Safari iOS, Chrome
+     Android), 100vh vaut la hauteur du viewport SANS la barre d'adresse —
+     un élément fixed avec cette hauteur explicite déborde donc sous l'écran
+     réellement visible quand la barre d'adresse est affichée, rendant le
+     bouton Déconnexion (en bas du panneau) inaccessible sans que la page ne
+     puisse défiler pour l'atteindre (position: fixed). `top`+`bottom` à 0
+     s'ajuste dynamiquement à la zone visible réelle, sans dépendre du
+     support de `100dvh`. */
   .sidebar {
-    position: fixed; left: 0; top: 0; height: 100vh; width: 280px; z-index: 100;
+    position: fixed; left: 0; top: 0; bottom: 0; width: 280px; z-index: 100;
     transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
     box-shadow: 4px 0 24px rgba(0,0,0,0.18);
   }
