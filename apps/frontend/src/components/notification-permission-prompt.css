@@ -1,0 +1,63 @@
+@keyframes notif-prompt-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.notif-prompt {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 150;
+  width: 340px;
+  max-width: calc(100vw - 2rem);
+  background: #fff;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(10, 38, 80, 0.18);
+  padding: 16px 16px 14px;
+  animation: notif-prompt-in 0.25s ease-out;
+}
+
+.notif-prompt-close {
+  position: absolute; top: 10px; right: 10px;
+  width: 24px; height: 24px; border-radius: 8px; border: none;
+  background: transparent; color: #9CA3AF;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.notif-prompt-close:hover { background: #F3F4F6; color: #374151; }
+
+.notif-prompt-row { display: flex; align-items: flex-start; gap: 12px; padding-right: 20px; }
+
+.notif-prompt-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-primary-50, #EAF1F8); color: var(--color-primary, #0F4C81);
+}
+
+.notif-prompt-title { font-size: 14px; font-weight: 700; color: #111827; }
+.notif-prompt-text { font-size: 12.5px; color: #6B7280; line-height: 1.5; margin: 4px 0 0; }
+
+.notif-prompt-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+.notif-prompt-decline {
+  border: none; background: transparent; color: #6B7280;
+  font-size: 12.5px; font-weight: 600; padding: 8px 10px; border-radius: 9px;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.notif-prompt-decline:hover { background: #F3F4F6; color: #374151; }
+.notif-prompt-decline:disabled { opacity: .6; cursor: default; }
+
+.notif-prompt-enable {
+  border: none; background: var(--color-primary, #0F4C81); color: #fff;
+  font-size: 12.5px; font-weight: 700; padding: 8px 14px; border-radius: 9px;
+  cursor: pointer; transition: background .15s;
+}
+.notif-prompt-enable:hover { background: var(--color-primary-dark, #0A2650); }
+.notif-prompt-enable:disabled { opacity: .7; cursor: default; }
+
+@media (max-width: 480px) {
+  .notif-prompt {
+    left: 16px; right: 16px; bottom: 16px; width: auto; max-width: none;
+  }
+}
