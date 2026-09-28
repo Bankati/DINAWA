@@ -19,7 +19,7 @@ import { Cacheable } from '../../common/decorators/cacheable.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CACHE_TTL_LIST, MAX_DOCUMENT_BYTES } from '../../common/constants';
-import { PaymentsService, PaginatedPayments } from './payments.service';
+import { PaymentsService, PaginatedPayments, PaymentQuote } from './payments.service';
 import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
 import { RejectPaymentDto } from './dto/reject-payment.dto';
@@ -66,6 +66,21 @@ export class PaymentsController {
     @Body() dto: InitiatePaymentDto,
   ): Promise<{ paymentId: string; checkoutUrl: string }> {
     return this.paymentsService.initiate(user, dto);
+  }
+
+  @Get('quote/:scheduleEntryId')
+  @Roles(UserRole.TENANT)
+  @ApiOperation({
+    summary: 'Devis avant paiement PayDunya : loyer, frais de service, total, disponibilité',
+    description:
+      'Sans effet de bord. payoutReady=false signifie que le propriétaire/gestionnaire n’a pas ' +
+      'encore renseigné son numéro de réception — le paiement en ligne serait refusé.',
+  })
+  getQuote(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('scheduleEntryId') scheduleEntryId: string,
+  ): Promise<PaymentQuote> {
+    return this.paymentsService.getQuote(user, scheduleEntryId);
   }
 
   @Get()

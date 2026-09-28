@@ -5,6 +5,7 @@ import {
   IsIn,
   IsUrl,
   IsInt,
+  IsNumber,
   IsEmail,
   Min,
   Max,
@@ -118,6 +119,24 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   PAYDUNYA_LIVE_TOKEN?: string;
+
+  // Frais de service payés par le locataire en plus du loyer (voir
+  // src/common/utils/payment-fees.ts) : pourcentage du loyer + montant fixe.
+  // À régler d'après la grille tarifaire PayDunya ; 0 par défaut = WARAH
+  // absorbe tous les frais tant que ce n'est pas configuré.
+  @Transform(({ value }: { value: unknown }) => (value === undefined ? 0 : Number(value)))
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  @IsOptional()
+  TENANT_FEE_PERCENT?: number = 0;
+
+  @Transform(({ value }: { value: unknown }) => (value === undefined ? 0 : Number(value)))
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  @IsOptional()
+  TENANT_FEE_FIXED_FCFA?: number = 0;
 
   // URL publique de ce backend (avec suffixe /api, même convention que
   // NEXT_PUBLIC_API_URL côté frontend) — nécessaire pour construire le

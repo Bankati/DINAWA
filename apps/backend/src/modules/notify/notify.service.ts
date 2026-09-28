@@ -10,6 +10,11 @@ export type NotifyUserParams = {
   event: NotificationEvent;
   variables: TemplateVariables;
   emailAttachments?: EmailAttachment[];
+  // Force le canal email même si l'utilisateur a des notifications push
+  // actives — pour les alertes de sécurité (ex. changement du numéro de
+  // réception des loyers), qui doivent laisser une trace hors de l'appareil
+  // éventuellement compromis.
+  forceEmail?: boolean;
 };
 
 // Clés jamais persistées dans l'historique (Notification.payload) même si
@@ -58,7 +63,7 @@ export class NotifyService {
 
     const canPush = user.notificationConsent === 'ACCEPTED' && user._count.pushSubscriptions > 0;
 
-    if (canPush && !params.emailAttachments) {
+    if (canPush && !params.emailAttachments && !params.forceEmail) {
       await this.push.sendToUser(user.id, renderPushContent(params.event, params.variables));
       await this.recordDispatch(params, 'PUSH', 'SENT');
       return;

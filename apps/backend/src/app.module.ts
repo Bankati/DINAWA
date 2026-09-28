@@ -33,6 +33,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ManagerReportsModule } from './modules/manager-reports/manager-reports.module';
 import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { PayoutAccountsModule } from './modules/payout-accounts/payout-accounts.module';
+import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -150,6 +152,8 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // 2026-09-07) : pas de débit à l'initiative du marchand, seuls des
     // rappels email sont envoyés, c'est au locataire de payer via PayDunya
     SubscriptionsModule,
+    PayoutAccountsModule,
+    PayoutsModule,
 
     // Formulaire de contact public — endpoint minimal appelant EmailService,
     // aucune persistance en base

@@ -81,3 +81,22 @@ export const CACHE_TTL_LIST = 15_000;
 export const CRON_PAYDUNYA_RECONCILIATION = '*/15 * * * *';
 export const PAYDUNYA_RECONCILE_AFTER_MS = 15 * 60 * 1000;
 export const PAYDUNYA_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
+
+// Reversement des loyers (voir /architect reversement, 2026-09-25) — l'envoi
+// vers le bénéficiaire est rattrapé toutes les 5 min pour les échecs
+// temporaires, les envois restés SENDING et les paiements confirmés dont
+// l'événement payment.confirmed n'a pas abouti.
+export const CRON_PAYOUTS = '*/5 * * * *';
+export const PAYOUT_MAX_ATTEMPTS = 5;
+// Délais avant la nouvelle tentative, indexés par le nombre de tentatives
+// déjà faites (1 → 2 min, 2 → 10 min, 3 → 30 min, 4 → 2 h).
+export const PAYOUT_RETRY_DELAYS_MS = [2, 10, 30, 120].map((minutes) => minutes * 60 * 1000);
+// Un envoi SENDING plus vieux que ça est considéré comme interrompu (crash,
+// redéploiement) : le cron vérifie son statut chez PayDunya au lieu d'attendre.
+export const PAYOUT_STALE_SENDING_MS = 5 * 60 * 1000;
+// Minimum accepté par PayDunya pour une facture Checkout (erreur 4003 en deçà).
+export const PAYDUNYA_MIN_INVOICE_FCFA = 200;
+
+// Modification du numéro de réception : protégée par mot de passe, donc
+// limitée pour éviter de s'en servir comme oracle de mot de passe.
+export const THROTTLE_PAYOUT_ACCOUNT = { default: { limit: 5, ttl: 3_600_000 } };

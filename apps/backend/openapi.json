@@ -866,6 +866,34 @@
         "tags": ["Payments"]
       }
     },
+    "/payments/quote/{scheduleEntryId}": {
+      "get": {
+        "description": "Sans effet de bord. payoutReady=false signifie que le propriétaire/gestionnaire n’a pas encore renseigné son numéro de réception — le paiement en ligne serait refusé.",
+        "operationId": "PaymentsController_getQuote",
+        "parameters": [
+          {
+            "name": "scheduleEntryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Devis avant paiement PayDunya : loyer, frais de service, total, disponibilité",
+        "tags": ["Payments"]
+      }
+    },
     "/payments": {
       "get": {
         "operationId": "PaymentsController_findAll",
@@ -1062,6 +1090,79 @@
         ],
         "summary": "Quittance PDF générée à la volée — jamais persistée",
         "tags": ["Payments"]
+      }
+    },
+    "/admin/payouts": {
+      "get": {
+        "operationId": "PayoutsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["PENDING", "SENDING", "SUCCESS", "FAILED"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste des reversements de loyers (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/payouts/{id}/retry": {
+      "post": {
+        "operationId": "PayoutsController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Relance un reversement en échec (super admin)",
+        "tags": ["Admin"]
       }
     },
     "/properties": {
@@ -2988,6 +3089,51 @@
         "tags": ["Dashboard"]
       }
     },
+    "/payout-account": {
+      "get": {
+        "operationId": "PayoutAccountsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Numéro mobile money de réception des loyers (null tant que non renseigné)",
+        "tags": ["Payout account"]
+      },
+      "put": {
+        "description": "Exige le mot de passe du compte. Envoie un email d'alerte et conserve un historique des changements. Sans ce numéro, les locataires ne peuvent pas payer en ligne.",
+        "operationId": "PayoutAccountsController_upsert",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertPayoutAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enregistre ou modifie le numéro de réception des loyers",
+        "tags": ["Payout account"]
+      }
+    },
     "/contact": {
       "post": {
         "operationId": "ContactController_submit",
@@ -3790,6 +3936,23 @@
             "type": "string"
           }
         }
+      },
+      "UpsertPayoutAccountDto": {
+        "type": "object",
+        "properties": {
+          "operator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"]
+          },
+          "phone": {
+            "type": "string",
+            "example": "90330557"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": ["operator", "phone", "password"]
       },
       "CreateContactMessageDto": {
         "type": "object",
