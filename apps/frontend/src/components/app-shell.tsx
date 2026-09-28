@@ -10,7 +10,7 @@ import { initiales } from '@/lib/format';
 import {
   Search, LayoutDashboard, Home, Users, CreditCard, Megaphone, User, UserCircle2,
   IdCard, Bell, Download, Handshake, Briefcase, BarChart3, Scale, LogOut, X, Menu,
-  AlertTriangle, UserSearch, History, BookOpen, type LucideIcon,
+  AlertTriangle, UserSearch, History, BookOpen, Send, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui';
 import { CommandPalette, ThemeToggle, type CommandPaletteItem } from '@/components/ds';
@@ -20,7 +20,7 @@ import './app-shell.css';
 type NavIcon =
   | 'dashboard' | 'biens' | 'locataires' | 'paiements' | 'annonces'
   | 'profil' | 'notifications' | 'export' | 'identite' | 'delegation'
-  | 'portefeuille' | 'rapports' | 'profil-public' | 'litiges' | 'gestionnaires' | 'audit-logs' | 'guide';
+  | 'portefeuille' | 'rapports' | 'profil-public' | 'litiges' | 'gestionnaires' | 'audit-logs' | 'guide' | 'reversements';
 
 interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; }
 interface NavSection { label?: string; items: NavItem[]; }
@@ -63,6 +63,7 @@ const MANAGER_NAV: NavSection[] = [
   {
     label: 'Compte',
     items: [
+      { icon: 'profil', label: 'Mon profil', route: '/gestionnaire/profil' },
       { icon: 'profil-public', label: 'Profil public', route: '/gestionnaire/profil-public' },
       { icon: 'notifications', label: 'Notifications', route: '/gestionnaire/notifications', notif: true },
       { icon: 'gestionnaires', label: 'Annuaire gestionnaires', route: '/gestionnaires' },
@@ -78,6 +79,7 @@ const ADMIN_NAV: NavSection[] = [
     items: [
       { icon: 'locataires', label: 'Comptes', route: '/admin/comptes' },
       { icon: 'paiements', label: 'Transactions', route: '/admin/transactions' },
+      { icon: 'reversements', label: 'Reversements', route: '/admin/reversements' },
       { icon: 'litiges', label: 'Litiges', route: '/admin/litiges' },
       { icon: 'audit-logs', label: "Journal d'audit", route: '/admin/audit-logs' },
       { icon: 'guide', label: "Guide d'utilisation", route: '/admin/guide' },
@@ -132,6 +134,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   gestionnaires: UserSearch,
   'audit-logs': History,
   guide: BookOpen,
+  reversements: Send,
 };
 
 interface AccountStatusResponse {
@@ -177,6 +180,34 @@ function AccountBanner({ isManager, isTenant }: { isManager: boolean; isTenant: 
   );
 }
 
+// Rappel tant que le numéro de réception des loyers n'est pas complet — sans
+// lui les locataires ne peuvent pas payer en ligne (voir /architect
+// reversement, révisé le 2026-09-28 : c'est le téléphone + opérateur du
+// profil, plus de numéro séparé). `ready` vaut `null` tant que /profile n'a
+// pas répondu — jamais affiché avant de savoir, pour ne pas alarmer à tort.
+function PayoutBanner({ ready, profileRoute }: { ready: boolean | null; profileRoute: string }) {
+  if (ready !== false) return null;
+
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-5 text-sm text-amber-900"
+    >
+      <Wallet className="w-5 h-5 shrink-0 text-amber-600" aria-hidden="true" />
+      <p className="flex-1 min-w-[220px]">
+        <strong>Complétez votre numéro de réception.</strong>{' '}
+        Vos locataires ne peuvent pas payer en ligne tant que votre téléphone et votre opérateur mobile money ne sont pas renseignés.
+      </p>
+      <Link
+        href={profileRoute}
+        className="inline-flex items-center justify-center min-h-11 rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700"
+      >
+        Compléter mon profil
+      </Link>
+    </div>
+  );
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout, profileVersion, refreshProfile } = useAuth();
   const pathname = usePathname();
@@ -184,6 +215,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [notificationConsent, setNotificationConsent] = useState<'NOT_ASKED' | 'ACCEPTED' | 'DECLINED'>();
+  // null = pas encore connu (masque le bandeau), sinon true/false.
+  const [payoutReady, setPayoutReady] = useState<boolean | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const isManager = user?.role === 'MANAGER';
@@ -220,10 +253,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // URLs signées Supabase expirent après 15 min, une valeur persistée irait
   // vite casser l'avatar entre deux sessions.
   useEffect(() => {
-    if (!user?.id) { setPhotoUrl(null); setNotificationConsent(undefined); return; }
+    if (!user?.id) { setPhotoUrl(null); setNotificationConsent(undefined); setPayoutReady(null); return; }
     api
-      .get<{ profilePhotoUrl: string | null; notificationConsent: 'NOT_ASKED' | 'ACCEPTED' | 'DECLINED' }>('/profile')
-      .then((d) => { setPhotoUrl(d.profilePhotoUrl); setNotificationConsent(d.notificationConsent); })
+      .get<{
+        profilePhotoUrl: string | null;
+        notificationConsent: 'NOT_ASKED' | 'ACCEPTED' | 'DECLINED';
+        phone: string | null;
+        payoutOperator: string | null;
+      }>('/profile')
+      .then((d) => {
+        setPhotoUrl(d.profilePhotoUrl);
+        setNotificationConsent(d.notificationConsent);
+        setPayoutReady(Boolean(d.phone && d.payoutOperator));
+      })
       .catch(() => {});
   }, [user?.id, profileVersion]);
 
@@ -314,6 +356,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <main className="main-content">
             <AccountBanner isManager={isManager} isTenant={isTenant} />
+            {user && (isManager || isOwner) && (
+              <PayoutBanner ready={payoutReady} profileRoute={isManager ? '/gestionnaire/profil' : '/dashboard/profil'} />
+            )}
             {children}
           </main>
         </div>

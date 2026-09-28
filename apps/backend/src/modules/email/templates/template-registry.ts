@@ -13,6 +13,11 @@ import * as accountReactivated from './account-reactivated.template';
 import * as leaseCreated from './lease-created.template';
 import * as mandateCreated from './mandate-created.template';
 import * as contactMessage from './contact-message.template';
+import * as payoutAccountRequired from './payout-account-required.template';
+import * as payoutAccountChanged from './payout-account-changed.template';
+import * as payoutSent from './payout-sent.template';
+import * as payoutFailed from './payout-failed.template';
+import * as payoutFailedAdmin from './payout-failed-admin.template';
 import { TemplateModule, TemplateVariables } from './types';
 
 export type EmailTemplate =
@@ -30,7 +35,12 @@ export type EmailTemplate =
   | 'account-reactivated'
   | 'lease-created'
   | 'mandate-created'
-  | 'contact-message';
+  | 'contact-message'
+  | 'payout-account-required'
+  | 'payout-account-changed'
+  | 'payout-sent'
+  | 'payout-failed'
+  | 'payout-failed-admin';
 
 const registry: Record<EmailTemplate, TemplateModule> = {
   'signup-confirmation': signupConfirmation,
@@ -48,6 +58,11 @@ const registry: Record<EmailTemplate, TemplateModule> = {
   'lease-created': leaseCreated,
   'mandate-created': mandateCreated,
   'contact-message': contactMessage,
+  'payout-account-required': payoutAccountRequired,
+  'payout-account-changed': payoutAccountChanged,
+  'payout-sent': payoutSent,
+  'payout-failed': payoutFailed,
+  'payout-failed-admin': payoutFailedAdmin,
 };
 
 export function subjectFor(template: EmailTemplate, variables: TemplateVariables): string {

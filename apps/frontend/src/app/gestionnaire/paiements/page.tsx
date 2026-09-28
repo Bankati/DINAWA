@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { CheckCircle2, Clock, AlertTriangle, Wallet, Search } from 'lucide-react';
-import { paymentsApi, type Payment, type PaymentDeclaration } from '@/lib/payments';
+import {
+  paymentsApi, PAYOUT_STATUS_LABELS, PAYOUT_STATUS_TONE,
+  type Payment, type PaymentDeclaration,
+} from '@/lib/payments';
 import { api } from '@/lib/api';
 import { formatFcfa } from '@/lib/format';
 import { toast } from '@/components/ui';
@@ -214,6 +217,7 @@ export default function GestionnairePaiementsPage() {
                     <TableHead>Montant</TableHead>
                     <TableHead>Mode</TableHead>
                     <TableHead>Statut</TableHead>
+                    <TableHead>Reversement</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -230,6 +234,14 @@ export default function GestionnairePaiementsPage() {
                       <TableCell className="font-bold text-primary-dark tabular-nums whitespace-nowrap">{formatFcfa(p.paidAmount)}</TableCell>
                       <TableCell className="text-muted-foreground">{p.paymentMethod ? (METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod) : '—'}</TableCell>
                       <TableCell><Badge tone={STATUS_TONE[p.status] ?? 'neutral'}>{STATUS_LABELS[p.status] ?? p.status}</Badge></TableCell>
+                      <TableCell>
+                        {/* Seuls les paiements PayDunya sont reversés (espèces/virement ne transitent pas par WARAH). */}
+                        {p.payout ? (
+                          <Badge tone={PAYOUT_STATUS_TONE[p.payout.status]}>{PAYOUT_STATUS_LABELS[p.payout.status]}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {p.status === 'PAID' ? (
                           <Button variant="outline" size="sm" onClick={() => downloadReceipt(p.id)} loading={downloading === p.id}>Quittance</Button>

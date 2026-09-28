@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Users, Check, UserCheck, UserX, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatFcfa, initiales } from '@/lib/format';
+import type { MandateWithParties } from '@/lib/api-types';
 import {
   PageHeader, Button, Card, EmptyState, Skeleton, StatCard,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -69,6 +70,17 @@ export default function LocatairesPage() {
     queryFn: () => api.get<TenantSummary[]>('/tenants'),
   });
   const list = tenants ?? [];
+
+  // Biens sous mandat actif : seul le gestionnaire peut résilier leur bail
+  // (canActOnProperty() : canMutate = false pour le propriétaire) — on ne lui
+  // propose donc pas l'action, il consulte en lecture seule.
+  const { data: mandatesRaw } = useQuery({
+    queryKey: ['mandates'],
+    queryFn: () => api.get<MandateWithParties[]>('/mandates'),
+  });
+  const delegatedPropertyIds = new Set(
+    (mandatesRaw ?? []).filter((m) => m.status === 'ACTIVE').map((m) => m.property.id),
+  );
   const invalidateTenants = () => queryClient.invalidateQueries({ queryKey: ['tenants'] });
 
   const avecBail = list.filter((t) => t.activeLease).length;
@@ -313,16 +325,27 @@ export default function LocatairesPage() {
                 <div className="text-xs text-muted-foreground mb-1.5">{managing.activeLease.property.neighborhood}, {managing.activeLease.property.city}</div>
                 <div className="text-sm text-foreground">{formatFcfa(managing.activeLease.monthlyRent)}/mois — depuis le {formatDate(managing.activeLease.startDate)}</div>
               </div>
-              <div>
-                <Label>Motif de résiliation (optionnel)</Label>
-                <Textarea className="mt-1.5" rows={2} placeholder="Ex: fin de bail à l'amiable" value={terminationReason} onChange={(e) => setTerminationReason(e.target.value)} />
-              </div>
-              <p className="text-xs text-muted-foreground m-0">Résilier ce bail libère le bien (redevient vacant, republié automatiquement) et permet d&apos;associer ce locataire à un autre bien.</p>
-              {linkErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{linkErr}</div>}
-              <div className="flex justify-end gap-2.5">
-                <Button type="button" variant="secondary" onClick={() => setManaging(null)}>Fermer</Button>
-                <Button variant="destructive" onClick={submitTerminate} loading={terminating}>Résilier ce bail</Button>
-              </div>
+              {delegatedPropertyIds.has(managing.activeLease.property.id) ? (
+                <>
+                  <p className="text-xs text-muted-foreground m-0">Ce bien est géré par un gestionnaire (mandat actif) : vous consultez ce bail en lecture seule, seul le gestionnaire peut le résilier.</p>
+                  <div className="flex justify-end gap-2.5">
+                    <Button type="button" variant="secondary" onClick={() => setManaging(null)}>Fermer</Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label>Motif de résiliation (optionnel)</Label>
+                    <Textarea className="mt-1.5" rows={2} placeholder="Ex: fin de bail à l'amiable" value={terminationReason} onChange={(e) => setTerminationReason(e.target.value)} />
+                  </div>
+                  <p className="text-xs text-muted-foreground m-0">Résilier ce bail libère le bien (redevient vacant, republié automatiquement) et permet d&apos;associer ce locataire à un autre bien.</p>
+                  {linkErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{linkErr}</div>}
+                  <div className="flex justify-end gap-2.5">
+                    <Button type="button" variant="secondary" onClick={() => setManaging(null)}>Fermer</Button>
+                    <Button variant="destructive" onClick={submitTerminate} loading={terminating}>Résilier ce bail</Button>
+                  </div>
+                </>
+              )}
             </div>
           ) : managing ? (
             <div className="flex flex-col gap-4">

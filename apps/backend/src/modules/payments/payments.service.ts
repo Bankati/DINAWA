@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -14,6 +15,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   canActOnProperty,
   propertyVisibilityWhere,
+  resolveResponsibleUserId,
 } from '../../common/permissions/property-access';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { StorageService } from '../storage/storage.service';
@@ -24,8 +26,22 @@ import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PAYMENT_CONFIRMED } from './payment.events';
 import { PaydunyaService, PaydunyaInvoiceStatus, PaydunyaError } from './paydunya.service';
-import { PAYDUNYA_ABANDON_AFTER_MS } from '../../common/constants';
+import { PAYDUNYA_ABANDON_AFTER_MS, PAYDUNYA_MIN_INVOICE_FCFA } from '../../common/constants';
 import { formatPropertyLocation } from '../../common/utils/format-property-location';
+import { computeTenantFee } from '../../common/utils/payment-fees';
+
+// Un locataire qui insiste ne doit pas spammer le bénéficiaire : au plus une
+// relance "numéro de réception requis" par jour.
+const MISSING_PAYOUT_ACCOUNT_NOTIFY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export type PaymentQuote = {
+  rentAmount: number;
+  feeAmount: number;
+  totalAmount: number;
+  // false = le propriétaire/gestionnaire n'a pas de numéro de réception : le
+  // paiement en ligne serait refusé par initiate().
+  payoutReady: boolean;
+};
 
 // `property.mandates` limité au mandat ACTIVE le plus récent, avec le
 // gestionnaire chargé — sert à afficher le bon nom en signature de quittance
@@ -157,6 +173,29 @@ export class PaymentsService {
       throw new ConflictException('Cette échéance est déjà réglée');
     }
 
+    // Le loyer part vers le gestionnaire du mandat actif, sinon le
+    // propriétaire (voir /architect reversement, 2026-09-25) : sans numéro de
+    // réception enregistré, on refuse AVANT toute facture PayDunya plutôt que
+    // d'encaisser un loyer qu'on ne saurait pas reverser.
+    const beneficiaryUserId = await resolveResponsibleUserId(
+      this.prisma,
+      scheduleEntry.lease.property,
+    );
+    const hasPayoutAccount = await this.hasPayoutAccount(beneficiaryUserId);
+    if (!hasPayoutAccount) {
+      await this.notifyMissingPayoutAccount(beneficiaryUserId, scheduleEntry.lease.property);
+      throw new ConflictException(
+        "Le paiement en ligne n'est pas encore disponible pour ce bien : le propriétaire ou gestionnaire n'a pas complété son numéro et son opérateur mobile money dans son profil. Il vient d'en être informé.",
+      );
+    }
+
+    const feeAmount = this.computeFee(remaining);
+    if (remaining + feeAmount < PAYDUNYA_MIN_INVOICE_FCFA) {
+      throw new BadRequestException(
+        `Le paiement en ligne n'est possible qu'à partir de ${PAYDUNYA_MIN_INVOICE_FCFA} FCFA`,
+      );
+    }
+
     // Un seul Payment PAYDUNYA_API PENDING à la fois par échéance (garanti par
     // l'index unique partiel `payments_schedule_entry_paydunya_pending_unique`,
     // migration 20260910...). Trois cas (durci en /review 2026-09-10) :
@@ -184,7 +223,12 @@ export class PaymentsService {
       //    locataire 24h sur l'index unique.
       payment = await this.prisma.payment.update({
         where: { id: existing.id },
-        data: { paidAmount: remaining, paymentMethod: dto.paymentMethod },
+        data: {
+          paidAmount: remaining,
+          paymentMethod: dto.paymentMethod,
+          feeAmount,
+          beneficiaryUserId,
+        },
       });
     } else {
       // 3. Aucun PENDING — création. Deux `initiate()` réellement concurrents :
@@ -199,6 +243,8 @@ export class PaymentsService {
             status: 'PENDING',
             paymentMethod: dto.paymentMethod,
             paidAmount: remaining,
+            feeAmount,
+            beneficiaryUserId,
           },
         });
       } catch (error) {
@@ -217,7 +263,9 @@ export class PaymentsService {
     let invoice: { token: string; checkoutUrl: string };
     try {
       invoice = await this.paydunya.createInvoice({
-        amount: remaining,
+        // Loyer + frais de service : seul le loyer est crédité à l'échéance
+        // et reversé (voir reconcilePaydunyaPayment()).
+        amount: remaining + feeAmount,
         description: `WARAH — ${formatPropertyLocation(scheduleEntry.lease.property)}`,
         paymentId: payment.id,
         callbackUrl: `${apiBaseUrl}/payments/webhooks/paydunya?paymentId=${payment.id}`,
@@ -257,6 +305,87 @@ export class PaymentsService {
     }
 
     return { paymentId: payment.id, checkoutUrl: invoice.checkoutUrl };
+  }
+
+  // Devis affiché au locataire AVANT de payer (loyer + frais de service) et
+  // indicateur de disponibilité — sans effet de bord, contrairement à
+  // initiate() qui notifie le bénéficiaire en cas de numéro manquant.
+  async getQuote(user: AuthenticatedUser, scheduleEntryId: string): Promise<PaymentQuote> {
+    const scheduleEntry = await this.prisma.paymentScheduleEntry.findUnique({
+      where: { id: scheduleEntryId },
+      include: { lease: { include: { property: true } } },
+    });
+    if (!scheduleEntry) {
+      throw new NotFoundException('Échéance introuvable');
+    }
+    if (user.role !== 'TENANT' || user.id !== scheduleEntry.lease.tenantUserId) {
+      throw new ForbiddenException('Vous ne pouvez consulter que votre propre bail');
+    }
+
+    const rentAmount = Math.max(0, scheduleEntry.expectedAmount - scheduleEntry.paidAmount);
+    const feeAmount = rentAmount > 0 ? this.computeFee(rentAmount) : 0;
+    const beneficiaryUserId = await resolveResponsibleUserId(
+      this.prisma,
+      scheduleEntry.lease.property,
+    );
+
+    return {
+      rentAmount,
+      feeAmount,
+      totalAmount: rentAmount + feeAmount,
+      payoutReady: await this.hasPayoutAccount(beneficiaryUserId),
+    };
+  }
+
+  private computeFee(rentAmount: number): number {
+    return computeTenantFee(rentAmount, {
+      percent: Number(this.config.get('TENANT_FEE_PERCENT') ?? 0),
+      fixedFcfa: Number(this.config.get('TENANT_FEE_FIXED_FCFA') ?? 0),
+    });
+  }
+
+  // Le numéro de réception est désormais le téléphone du compte lui-même
+  // (voir /architect reversement, révisé le 2026-09-28 : plus de numéro
+  // séparé) — il faut aussi l'opérateur (T-Money/Flooz), demandé à
+  // l'inscription (signup-owner.dto.ts/signup-manager.dto.ts) ou complété
+  // depuis le profil, PayDunya ne pouvant pas le déduire du seul numéro.
+  private async hasPayoutAccount(userId: string): Promise<boolean> {
+    const beneficiary = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, payoutOperator: true },
+    });
+    return Boolean(beneficiary?.phone && beneficiary?.payoutOperator);
+  }
+
+  // Prévient le bénéficiaire qu'un locataire a été bloqué faute de numéro de
+  // réception — au plus une fois par jour. Un échec de notification ne doit
+  // jamais masquer au locataire la vraie raison du refus.
+  private async notifyMissingPayoutAccount(
+    beneficiaryUserId: string,
+    property: Parameters<typeof formatPropertyLocation>[0],
+  ): Promise<void> {
+    try {
+      const recent = await this.prisma.notification.findFirst({
+        where: {
+          userId: beneficiaryUserId,
+          event: 'payout-account-required',
+          createdAt: { gte: new Date(Date.now() - MISSING_PAYOUT_ACCOUNT_NOTIFY_INTERVAL_MS) },
+        },
+        select: { id: true },
+      });
+      if (recent) return;
+
+      await this.notify.notifyUser({
+        userId: beneficiaryUserId,
+        event: 'payout-account-required',
+        variables: { propertyAddress: formatPropertyLocation(property) },
+      });
+    } catch (error) {
+      this.logger.error(
+        `[payments] notification "numéro de réception requis" échouée user=${beneficiaryUserId}`,
+        error,
+      );
+    }
   }
 
   private async persistPaydunyaReference(
@@ -321,7 +450,35 @@ export class PaymentsService {
     const [data, total] = await Promise.all([
       this.prisma.payment.findMany({
         where,
-        include: { lease: { include: { property: true, tenant: true } } },
+        include: {
+          lease: {
+            include: {
+              // Le mandat actif permet à l'interface d'afficher le paiement en
+              // lecture seule au propriétaire dont le bien est délégué (voir
+              // canActOnProperty() : canMutate = false) — jamais exposé au locataire.
+              property:
+                user.role !== 'TENANT'
+                  ? {
+                      include: {
+                        mandates: {
+                          where: { status: 'ACTIVE' },
+                          take: 1,
+                          select: {
+                            managerId: true,
+                            manager: { select: { firstName: true, lastName: true } },
+                          },
+                        },
+                      },
+                    }
+                  : true,
+              tenant: true,
+            },
+          },
+          // Statut du reversement du loyer — jamais exposé au locataire.
+          ...(user.role !== 'TENANT'
+            ? { payout: { select: { status: true, completedAt: true, amount: true } } }
+            : {}),
+        },
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -482,16 +639,22 @@ export class PaymentsService {
       // renvoie null/undefined, jamais sur un `0` — un montant confirmé à 0
       // sur un statut "completed" serait une anomalie PayDunya, pas un
       // signal à suivre les yeux fermés (trouvé en /review 2026-09-14).
-      const paidAmount =
-        confirmedAmount !== null && confirmedAmount > 0 ? confirmedAmount : payment.paidAmount;
-      if (confirmedAmount !== null && confirmedAmount <= 0) {
+      // PayDunya confirme le TOTAL encaissé (loyer + frais de service) : le
+      // loyer crédité, reversé et porté sur la quittance en est déduit des
+      // frais posés à l'initiation.
+      const expectedTotal = payment.paidAmount + payment.feeAmount;
+      let paidAmount = payment.paidAmount;
+      if (confirmedAmount !== null && confirmedAmount <= payment.feeAmount) {
         this.logger.error(
           `[paydunya/reconcile] montant confirmé invalide (${confirmedAmount}) pour payment=${paymentId} — montant attendu (${payment.paidAmount}) retenu à la place`,
         );
-      } else if (confirmedAmount !== null && confirmedAmount !== payment.paidAmount) {
-        this.logger.warn(
-          `[paydunya/reconcile] montant confirmé (${confirmedAmount}) ≠ montant attendu (${payment.paidAmount}) pour payment=${paymentId} — montant PayDunya retenu`,
-        );
+      } else if (confirmedAmount !== null) {
+        paidAmount = confirmedAmount - payment.feeAmount;
+        if (confirmedAmount !== expectedTotal) {
+          this.logger.warn(
+            `[paydunya/reconcile] montant confirmé (${confirmedAmount}) ≠ montant attendu (${expectedTotal}) pour payment=${paymentId} — montant PayDunya retenu`,
+          );
+        }
       }
 
       const claimed = await this.prisma.$transaction(async (tx) => {

@@ -85,17 +85,37 @@ Sans elles, `POST /api/payments/initiate` retourne `503 Service Unavailable`.
 Master key commune aux deux modes ; jeu de 3 clés distinct par mode (`test` =
 bac à sable PayDunya, aucun vrai argent ; `live` = production réelle).
 
-| Variable                    | Obligatoire | Description                                                                                                                                                      |
-| --------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PAYDUNYA_MODE`             | ➖          | `test` ou `live`. Défaut : `test`                                                                                                                                |
-| `PAYDUNYA_MASTER_KEY`       | ➖          | Master key du compte marchand — identique en test et en production                                                                                               |
-| `PAYDUNYA_TEST_PUBLIC_KEY`  | ➖          | Clé publique du mode Test                                                                                                                                        |
-| `PAYDUNYA_TEST_PRIVATE_KEY` | ➖          | Clé privée du mode Test                                                                                                                                          |
-| `PAYDUNYA_TEST_TOKEN`       | ➖          | Token d'API du mode Test                                                                                                                                         |
-| `PAYDUNYA_LIVE_PUBLIC_KEY`  | ➖          | Clé publique du mode Live                                                                                                                                        |
-| `PAYDUNYA_LIVE_PRIVATE_KEY` | ➖          | Clé privée du mode Live                                                                                                                                          |
-| `PAYDUNYA_LIVE_TOKEN`       | ➖          | Token d'API du mode Live                                                                                                                                         |
-| `API_BASE_URL`              | ➖          | URL publique de ce backend avec /api (ex. https://warah-api.up.railway.app/api) — sert à construire le callback_url PayDunya. Défaut : http://localhost:3001/api |
+| Variable                    | Obligatoire | Description                                                                                                                                                                                 |
+| --------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAYDUNYA_MODE`             | ➖          | `test` ou `live`. Défaut : `test`                                                                                                                                                           |
+| `PAYDUNYA_MASTER_KEY`       | ➖          | Master key du compte marchand — identique en test et en production                                                                                                                          |
+| `PAYDUNYA_TEST_PUBLIC_KEY`  | ➖          | Clé publique du mode Test                                                                                                                                                                   |
+| `PAYDUNYA_TEST_PRIVATE_KEY` | ➖          | Clé privée du mode Test                                                                                                                                                                     |
+| `PAYDUNYA_TEST_TOKEN`       | ➖          | Token d'API du mode Test                                                                                                                                                                    |
+| `PAYDUNYA_LIVE_PUBLIC_KEY`  | ➖          | Clé publique du mode Live                                                                                                                                                                   |
+| `PAYDUNYA_LIVE_PRIVATE_KEY` | ➖          | Clé privée du mode Live                                                                                                                                                                     |
+| `PAYDUNYA_LIVE_TOKEN`       | ➖          | Token d'API du mode Live                                                                                                                                                                    |
+| `API_BASE_URL`              | ➖          | URL publique de ce backend avec /api (ex. https://warah-api.up.railway.app/api) — sert à construire les callback_url PayDunya (paiement et reversement). Défaut : http://localhost:3001/api |
+
+### Reversement des loyers et frais de service
+
+Le loyer payé en ligne est reversé automatiquement (API PUSH PayDunya) au
+gestionnaire du mandat actif, sinon au propriétaire. **Prérequis PayDunya :**
+activer le décaissement (« API PUSH ») dans le tableau de bord du compte
+marchand, et garder un solde suffisant — un solde insuffisant (erreur `4002`)
+laisse le reversement en attente et alerte les admins. Le décaissement n'a pas
+d'hôte sandbox : il ne s'exécute qu'avec `PAYDUNYA_MODE=live`.
+
+Les frais PayDunya sont payés par le locataire EN PLUS du loyer :
+`frais = arrondi_supérieur(loyer × TENANT_FEE_PERCENT / 100) + TENANT_FEE_FIXED_FCFA`.
+À régler **au coût réel** d'après la grille tarifaire PayDunya (encaissement +
+envoi), sans marge — voir architecture.md, invariant #14. Le coût réel du
+dernier envoi est enregistré dans `Payout.providerFee` pour vérifier le réglage.
+
+| Variable                | Obligatoire | Description                                                                                      |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| `TENANT_FEE_PERCENT`    | ➖          | Pourcentage du loyer facturé au locataire (ex. `1.5`), 0 à 20. Défaut : `0` (WARAH absorbe tout) |
+| `TENANT_FEE_FIXED_FCFA` | ➖          | Montant fixe en FCFA ajouté au pourcentage, 0 à 10000. Défaut : `0`                              |
 
 ### Sentry (monitoring)
 

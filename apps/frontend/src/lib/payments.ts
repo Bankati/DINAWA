@@ -18,12 +18,40 @@ async function fetchBlob(path: string): Promise<Blob> {
   return res.blob();
 }
 
+// Statut du reversement du loyer vers le propriétaire/gestionnaire — fourni
+// seulement à eux (jamais au locataire), voir PaymentsService.findAll().
+export type PayoutStatus = "PENDING" | "SENDING" | "SUCCESS" | "FAILED";
+
+export const PAYOUT_STATUS_LABELS: Record<PayoutStatus, string> = {
+  PENDING: "Reversement en attente",
+  SENDING: "Reversement en cours",
+  SUCCESS: "Reversé",
+  FAILED: "Reversement en échec",
+};
+
+export const PAYOUT_STATUS_TONE: Record<
+  PayoutStatus,
+  "success" | "warning" | "error" | "info"
+> = {
+  PENDING: "warning",
+  SENDING: "info",
+  SUCCESS: "success",
+  FAILED: "error",
+};
+
 export interface Payment {
   id: string;
   leaseId: string;
   scheduleEntryId: string | null;
   status: string;
+  // Loyer seul — les frais de service payés en plus sont dans feeAmount.
   paidAmount: number;
+  feeAmount?: number;
+  payout?: {
+    status: PayoutStatus;
+    completedAt: string | null;
+    amount: number;
+  } | null;
   paymentMethod: string;
   note: string | null;
   proofStoragePath: string | null;
@@ -41,6 +69,12 @@ export interface Payment {
       id: string;
       address: string | null;
       city: string;
+      // Mandat actif : le propriétaire voit alors le paiement en lecture
+      // seule, seul le gestionnaire peut agir (canActOnProperty()).
+      mandates?: {
+        managerId: string;
+        manager: { firstName: string; lastName: string };
+      }[];
     };
   };
 }
@@ -65,6 +99,11 @@ export interface PaymentDeclaration {
     };
     property?: {
       address: string | null;
+      // Mandat actif — voir Payment.lease.property.mandates.
+      mandates?: {
+        managerId: string;
+        manager: { firstName: string; lastName: string };
+      }[];
     };
   };
 }
@@ -84,6 +123,16 @@ export interface RejectPaymentDto {
 export interface InitiatePaymentDto {
   scheduleEntryId: string;
   paymentMethod: "TMONEY" | "FLOOZ";
+}
+
+// Devis avant paiement en ligne : loyer + frais de service. payoutReady=false
+// = le propriétaire/gestionnaire n'a pas de numéro de réception, le paiement
+// serait refusé (voir GET /payments/quote/:scheduleEntryId).
+export interface PaymentQuote {
+  rentAmount: number;
+  feeAmount: number;
+  totalAmount: number;
+  payoutReady: boolean;
 }
 
 export interface InitiatePaymentResponse {
@@ -138,6 +187,9 @@ export const paymentsApi = {
   // paiement hébergée par PayDunya vers laquelle rediriger le locataire.
   initiate: (dto: InitiatePaymentDto) =>
     api.post<InitiatePaymentResponse>("/payments/initiate", dto),
+
+  getQuote: (scheduleEntryId: string) =>
+    api.get<PaymentQuote>(`/payments/quote/${scheduleEntryId}`),
 
   // Créer une déclaration de paiement locataire
   createDeclaration: (dto: CreatePaymentDeclarationDto, file?: File) => {

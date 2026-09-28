@@ -36,8 +36,29 @@ export type PaydunyaInvoice = {
 export type PaydunyaInvoiceStatus = 'pending' | 'completed' | 'cancelled' | 'failed';
 
 // Erreur métier PayDunya (facture refusée, compte marchand mal configuré,
-// etc.) — distincte d'une erreur réseau/timeout.
-export class PaydunyaError extends Error {}
+// etc.) — distincte d'une erreur réseau/timeout. `code` = response_code
+// PayDunya quand il existe (ex. '4002' fonds insuffisants sur un décaissement).
+export class PaydunyaError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+// API PUSH (décaissement) — hôte et préfixe distincts de Checkout Invoice
+// (v2 au lieu de v1). Aucun équivalent sandbox n'est documenté : le
+// décaissement n'est donc utilisable qu'en mode live (voir isDisburseEnabled()).
+const PAYDUNYA_DISBURSE_BASE_URL = 'https://app.paydunya.com/api/v2/disburse';
+
+// Nos opérateurs de réception → `withdraw_mode` de l'API PUSH.
+const DISBURSE_MODE: Record<'TMONEY' | 'FLOOZ', string> = {
+  TMONEY: 't-money-togo',
+  FLOOZ: 'moov-togo',
+};
+
+export type PaydunyaDisburseStatus = 'created' | 'pending' | 'success' | 'failed';
 
 // Repli UNIQUEMENT si PayDunya ne renvoie pas d'URL exploitable dans sa
 // réponse de création (ne devrait jamais arriver). Best-effort, hôte de
@@ -60,7 +81,9 @@ export function fallbackCheckoutUrl(token: string): string {
 export class PaydunyaService {
   private readonly logger = new Logger(PaydunyaService.name);
   private readonly http: AxiosInstance;
+  private readonly disburseHttp: AxiosInstance;
   private readonly enabled: boolean;
+  private readonly live: boolean;
 
   constructor(config: ConfigService) {
     const mode = config.get<string>('PAYDUNYA_MODE') ?? 'test';
@@ -77,15 +100,19 @@ export class PaydunyaService {
     // aucun de ces deux appels, jamais envoyée en en-tête ici.
     this.enabled = Boolean(masterKey && privateKey && token);
 
+    this.live = mode === 'live';
+    const headers = {
+      'Content-Type': 'application/json',
+      'PAYDUNYA-MASTER-KEY': masterKey,
+      'PAYDUNYA-PRIVATE-KEY': privateKey,
+      'PAYDUNYA-TOKEN': token,
+    };
+
     this.http = axios.create({
-      baseURL: PAYDUNYA_BASE_URL[mode === 'live' ? 'live' : 'test'],
-      headers: {
-        'Content-Type': 'application/json',
-        'PAYDUNYA-MASTER-KEY': masterKey,
-        'PAYDUNYA-PRIVATE-KEY': privateKey,
-        'PAYDUNYA-TOKEN': token,
-      },
+      baseURL: PAYDUNYA_BASE_URL[this.live ? 'live' : 'test'],
+      headers,
     });
+    this.disburseHttp = axios.create({ baseURL: PAYDUNYA_DISBURSE_BASE_URL, headers });
 
     if (!this.enabled) {
       this.logger.warn(
@@ -96,6 +123,13 @@ export class PaydunyaService {
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  // Le décaissement n'a pas d'hôte sandbox documenté : en mode test, les
+  // reversements restent PENDING (voir PayoutsService) plutôt que d'envoyer
+  // de l'argent réel avec des clés de test — ou d'échouer à chaque passage.
+  isDisburseEnabled(): boolean {
+    return this.enabled && this.live;
   }
 
   // `paymentMethod` (TMONEY/FLOOZ) est une préférence indicative côté WARAH
@@ -196,6 +230,152 @@ export class PaydunyaService {
     if (data.status === 'cancelled') return { status: 'cancelled', amount };
     if (data.status === 'failed') return { status: 'failed', amount };
     return { status: 'pending', amount };
+  }
+
+  // ── API PUSH (décaissement) — reversement du loyer au bénéficiaire ──
+  // Trois appels (doc PayDunya API PUSH, lue le 2026-09-25) : get-invoice
+  // crée un jeton, submit-invoice l'exécute (mouvement d'argent réel),
+  // check-status donne l'état. Règle de sécurité de tout le flux : submit-invoice
+  // n'est JAMAIS rejoué sans avoir vérifié par check-status que le jeton est
+  // encore au statut `created` — la doc ne garantit pas que `disburse_id`
+  // dédoublonne, et un rejeu après un timeout dont la réponse s'est perdue
+  // paierait deux fois (voir PayoutsService.attempt()).
+
+  // Crée le jeton de décaissement. Aucun argent ne bouge à cette étape.
+  async createDisbursement(params: {
+    amount: number;
+    operator: 'TMONEY' | 'FLOOZ';
+    phone: string;
+    callbackUrl: string;
+  }): Promise<{ token: string }> {
+    this.assertDisburseEnabled();
+
+    const response = await withTimeout(
+      this.disburseHttp.post<{
+        response_code?: string;
+        disburse_token?: string;
+        response_text?: string;
+      }>('/get-invoice', {
+        account_alias: params.phone,
+        amount: params.amount,
+        withdraw_mode: DISBURSE_MODE[params.operator],
+        callback_url: params.callbackUrl,
+      }),
+      CALL_TIMEOUT_MS,
+    );
+    const data = response.data;
+
+    if (data.response_code !== '00' || !data.disburse_token) {
+      // Jamais la réponse brute : elle peut contenir le numéro du bénéficiaire.
+      this.logger.error(
+        `[paydunya/disburse-create] échec code=${data.response_code} — ${data.response_text}`,
+      );
+      throw new PaydunyaError(
+        data.response_text ?? 'Échec de création du décaissement PayDunya',
+        data.response_code,
+      );
+    }
+    return { token: data.disburse_token };
+  }
+
+  // Exécute le décaissement (argent réel). UN SEUL essai, jamais de retry
+  // automatique. Une PaydunyaError signifie "refusé, rien n'a été envoyé" ;
+  // toute autre erreur (timeout, réseau) est AMBIGUË — l'appelant doit alors
+  // passer par checkDisbursementStatus() avant toute nouvelle tentative.
+  // `disburseId` = notre identifiant de reversement, renvoyé par PayDunya dans
+  // le callback et check-status pour recoller les deux côtés.
+  async submitDisbursement(
+    token: string,
+    disburseId: string,
+  ): Promise<{ status: PaydunyaDisburseStatus | null; transactionId: string | null }> {
+    this.assertDisburseEnabled();
+
+    const response = await withTimeout(
+      this.disburseHttp.post<{
+        response_code?: string;
+        status?: string;
+        response_text?: string;
+        transaction_id?: string;
+      }>('/submit-invoice', { disburse_invoice: token, disburse_id: disburseId }),
+      CALL_TIMEOUT_MS,
+    );
+    const data = response.data;
+
+    if (data.response_code !== '00') {
+      this.logger.error(
+        `[paydunya/disburse-submit] refusé code=${data.response_code} — ${data.response_text}`,
+      );
+      throw new PaydunyaError(
+        data.response_text ?? 'Décaissement refusé par PayDunya',
+        data.response_code,
+      );
+    }
+    return {
+      status: PaydunyaService.parseDisburseStatus(data.status),
+      transactionId: typeof data.transaction_id === 'string' ? data.transaction_id : null,
+    };
+  }
+
+  // Source de vérité de l'état d'un décaissement (jamais le payload du
+  // callback, qui ne sert qu'à savoir QUAND revérifier — même principe que
+  // confirmInvoiceStatus()). POST sans effet de bord → rejouable en cas
+  // d'erreur réseau. `fees` = frais réellement facturés par PayDunya.
+  async checkDisbursementStatus(token: string): Promise<{
+    status: PaydunyaDisburseStatus;
+    fees: number | null;
+    transactionId: string | null;
+  }> {
+    this.assertDisburseEnabled();
+
+    const { default: pRetry } = await import('p-retry');
+    const data = await pRetry(
+      async () => {
+        const response = await withTimeout(
+          this.disburseHttp.post<{
+            response_code?: string;
+            status?: string;
+            fees?: string | number;
+            transaction_id?: string;
+            response_text?: string;
+          }>('/check-status', { disburse_invoice: token }),
+          CALL_TIMEOUT_MS,
+        );
+        return response.data;
+      },
+      { retries: 2, minTimeout: 1000, maxTimeout: 8000 },
+    );
+
+    if (data.response_code !== '00') {
+      throw new PaydunyaError(
+        data.response_text ?? 'Vérification du décaissement impossible',
+        data.response_code,
+      );
+    }
+
+    const fees = data.fees !== undefined ? Math.round(Number(data.fees)) : NaN;
+    return {
+      // Un statut absent ou inconnu est traité comme `pending` : jamais
+      // supposer un succès ni un échec qu'on ne peut pas prouver.
+      status: PaydunyaService.parseDisburseStatus(data.status) ?? 'pending',
+      fees: Number.isFinite(fees) ? fees : null,
+      transactionId: typeof data.transaction_id === 'string' ? data.transaction_id : null,
+    };
+  }
+
+  private assertDisburseEnabled(): void {
+    if (!this.enabled) {
+      throw new PaydunyaError('PayDunya non configuré (clés API manquantes)');
+    }
+    if (!this.live) {
+      throw new PaydunyaError('Le décaissement PayDunya n’est disponible qu’en mode live');
+    }
+  }
+
+  private static parseDisburseStatus(raw: unknown): PaydunyaDisburseStatus | null {
+    const value = typeof raw === 'string' ? raw.toLowerCase() : '';
+    return value === 'created' || value === 'pending' || value === 'success' || value === 'failed'
+      ? value
+      : null;
   }
 
   // Retry réservé aux opérations idempotentes — confirmInvoiceStatus() est
