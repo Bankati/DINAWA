@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
@@ -12,19 +13,24 @@ import { compressPhoto } from '../storage/image-processor';
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { AuthService, AuthMeResponse } from '../auth/auth.service';
 import { TokenService } from '../auth/token.service';
+import { NotifyService } from '../notify/notify.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { PAYOUT_OPERATOR_LABEL } from '../../common/utils/payout-operator-label';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationConsentDto } from './dto/update-notification-consent.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class ProfileService {
+  private readonly logger = new Logger(ProfileService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly authService: AuthService,
     private readonly tokens: TokenService,
+    private readonly notify: NotifyService,
   ) {}
 
   async getProfile(
@@ -46,9 +52,37 @@ export class ProfileService {
     if (dto.firstName !== undefined) data.firstName = dto.firstName;
     if (dto.lastName !== undefined) data.lastName = dto.lastName;
     if (dto.phone !== undefined) data.phone = dto.phone;
+    if (dto.payoutOperator !== undefined) data.payoutOperator = dto.payoutOperator;
     if (dto.city !== undefined) data.city = dto.city;
     if (dto.reminderDaysBefore !== undefined) data.reminderDaysBefore = dto.reminderDaysBefore;
     if (dto.overdueGraceDays !== undefined) data.overdueGraceDays = dto.overdueGraceDays;
+
+    // Le numéro et l'opérateur mobile money décident où WARAH reverse les
+    // loyers d'un OWNER/MANAGER (voir /architect reversement, révisé le
+    // 2026-09-28 : plus de numéro de réception séparé, c'est ce même champ
+    // `phone` qui sert). Toute modification de l'un ou l'autre exige de
+    // reconfirmer le mot de passe — même garde que l'ancien
+    // PayoutAccountsService qu'ils remplacent.
+    const changesPayoutRouting =
+      (user.role === 'OWNER' || user.role === 'MANAGER') &&
+      ((dto.phone !== undefined && dto.phone !== user.phone) ||
+        (dto.payoutOperator !== undefined && dto.payoutOperator !== user.payoutOperator));
+
+    if (changesPayoutRouting) {
+      if (!dto.password) {
+        throw new UnauthorizedException(
+          'Mot de passe requis pour modifier le numéro ou l’opérateur de réception des loyers',
+        );
+      }
+      const fullUser = await this.prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        omit: { passwordHash: false },
+      });
+      const matches = await this.tokens.comparePassword(dto.password, fullUser.passwordHash);
+      if (!matches) {
+        throw new UnauthorizedException('Mot de passe incorrect');
+      }
+    }
 
     // Suppression effective côté Storage quand la référence Prisma change
     // (voir architecture.md, étape 05 — même invariant que pour les photos
@@ -88,6 +122,27 @@ export class ProfileService {
 
     if (photo && previousPhotoPath) {
       await this.storage.remove('profile-photos', previousPhotoPath);
+    }
+
+    if (changesPayoutRouting) {
+      try {
+        await this.notify.notifyUser({
+          userId: user.id,
+          event: 'payout-account-changed',
+          variables: {
+            operator: updated.payoutOperator ? PAYOUT_OPERATOR_LABEL[updated.payoutOperator] : '',
+            phone: updated.phone ?? '',
+          },
+          forceEmail: true,
+        });
+      } catch (error) {
+        // L'alerte est une mesure de sécurité, pas une condition de succès de
+        // la requête — même réflexe que PaymentsService.reject().
+        this.logger.error(
+          `[profile] alerte de changement du numéro de réception échouée user=${user.id}`,
+          error,
+        );
+      }
     }
 
     return updated;

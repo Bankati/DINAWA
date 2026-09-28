@@ -660,7 +660,7 @@
         "tags": ["Profile"]
       },
       "patch": {
-        "description": "Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage.",
+        "description": "Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage. Pour un OWNER/MANAGER, modifier `phone` ou `payoutOperator` (le numéro de réception des loyers) exige `password`.",
         "operationId": "ProfileController_updateProfile",
         "parameters": [],
         "requestBody": {
@@ -3089,51 +3089,6 @@
         "tags": ["Dashboard"]
       }
     },
-    "/payout-account": {
-      "get": {
-        "operationId": "PayoutAccountsController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Numéro mobile money de réception des loyers (null tant que non renseigné)",
-        "tags": ["Payout account"]
-      },
-      "put": {
-        "description": "Exige le mot de passe du compte. Envoie un email d'alerte et conserve un historique des changements. Sans ce numéro, les locataires ne peuvent pas payer en ligne.",
-        "operationId": "PayoutAccountsController_upsert",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertPayoutAccountDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Enregistre ou modifie le numéro de réception des loyers",
-        "tags": ["Payout account"]
-      }
-    },
     "/contact": {
       "post": {
         "operationId": "ContactController_submit",
@@ -3262,6 +3217,11 @@
             "type": "string",
             "example": "90330557"
           },
+          "payoutOperator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"],
+            "example": "TMONEY"
+          },
           "city": {
             "type": "string",
             "example": "Lomé"
@@ -3277,6 +3237,7 @@
           "firstName",
           "lastName",
           "phone",
+          "payoutOperator",
           "city",
           "residenceCountry"
         ]
@@ -3300,12 +3261,25 @@
             "type": "string",
             "example": "90330557"
           },
+          "payoutOperator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"],
+            "example": "TMONEY"
+          },
           "city": {
             "type": "string",
             "example": "Lomé"
           }
         },
-        "required": ["email", "password", "firstName", "lastName", "phone", "city"]
+        "required": [
+          "email",
+          "password",
+          "firstName",
+          "lastName",
+          "phone",
+          "payoutOperator",
+          "city"
+        ]
       },
       "InviteTenantDto": {
         "type": "object",
@@ -3434,6 +3408,14 @@
           "city": {
             "type": "string",
             "example": "Lomé"
+          },
+          "payoutOperator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"]
+          },
+          "password": {
+            "type": "string",
+            "description": "Mot de passe actuel — requis uniquement si phone ou payoutOperator change pour un OWNER/MANAGER"
           },
           "reminderDaysBefore": {
             "type": "number",
@@ -3936,23 +3918,6 @@
             "type": "string"
           }
         }
-      },
-      "UpsertPayoutAccountDto": {
-        "type": "object",
-        "properties": {
-          "operator": {
-            "type": "string",
-            "enum": ["TMONEY", "FLOOZ"]
-          },
-          "phone": {
-            "type": "string",
-            "example": "90330557"
-          },
-          "password": {
-            "type": "string"
-          }
-        },
-        "required": ["operator", "phone", "password"]
       },
       "CreateContactMessageDto": {
         "type": "object",

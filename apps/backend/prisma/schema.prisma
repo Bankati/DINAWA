@@ -192,6 +192,15 @@ model User {
   supabaseId                String?             @unique
   email                     String?             @unique
   phone                     String?             @unique
+  // Opérateur mobile money du numéro ci-dessus — demandé une fois à
+  // l'inscription (OWNER/MANAGER uniquement, voir signup-owner.dto.ts /
+  // signup-manager.dto.ts) puisque PayDunya a besoin de savoir si un numéro
+  // est T-Money ou Flooz pour y reverser un loyer (voir PayoutsService,
+  // /architect reversement 2026-09-25, révisé le 2026-09-28 : le numéro de
+  // réception est désormais le même que `phone`, plus de numéro séparé).
+  // Toujours null pour TENANT/ADMIN. Modifier `phone` ou `payoutOperator`
+  // pour un OWNER/MANAGER exige le mot de passe (voir ProfileService).
+  payoutOperator            PayoutOperator?
   // bcrypt (12 rounds) — voir modules/auth/token.service.ts. Authentification
   // gérée entièrement côté NestJS depuis le 2026-08-11 (voir architecture.md).
   passwordHash              String
@@ -243,8 +252,6 @@ model User {
   paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
   paymentsConfirmed      Payment[]              @relation("PaymentConfirmedBy")
   paymentsAsBeneficiary  Payment[]              @relation("PaymentBeneficiary")
-  payoutAccount          PayoutAccount?
-  payoutAccountChanges   PayoutAccountChange[]
   payouts                Payout[]               @relation("PayoutBeneficiary")
   managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
   managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
@@ -559,39 +566,6 @@ model Payment {
   @@index([status])
   @@index([paidAt])
   @@map("payments")
-}
-
-// Numéro mobile money où un propriétaire/gestionnaire reçoit ses loyers —
-// distinct de User.phone (numéro de contact, sans opérateur). Un seul par
-// utilisateur, modifiable uniquement avec le mot de passe (voir
-// PayoutAccountsService) ; chaque modification est tracée dans
-// PayoutAccountChange. `phone` : 8 chiffres locaux, sans indicatif +228.
-model PayoutAccount {
-  id        String         @id @default(cuid())
-  userId    String         @unique
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  operator  PayoutOperator
-  phone     String
-  createdAt DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime       @updatedAt @db.Timestamptz(6)
-
-  @@map("payout_accounts")
-}
-
-// Historique append-only des changements de numéro de réception (audit
-// anti-détournement) — jamais modifié ni supprimé.
-model PayoutAccountChange {
-  id               String          @id @default(cuid())
-  userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  previousOperator PayoutOperator?
-  previousPhone    String?
-  newOperator      PayoutOperator
-  newPhone         String
-  changedAt        DateTime        @default(now()) @db.Timestamptz(6)
-
-  @@index([userId])
-  @@map("payout_account_changes")
 }
 
 // Reversement du loyer d'un paiement PayDunya vers son bénéficiaire (API PUSH

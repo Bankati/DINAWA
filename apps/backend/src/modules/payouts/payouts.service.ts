@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Payout, PayoutOperator, Prisma } from '@prisma/client';
+import { Payout, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   PAYOUT_MAX_ATTEMPTS,
@@ -8,6 +8,8 @@ import {
   PAYOUT_STALE_SENDING_MS,
 } from '../../common/constants';
 import { formatPropertyLocation } from '../../common/utils/format-property-location';
+import { normalizeTogoPhone } from '../../common/utils/normalize-togo-phone';
+import { PAYOUT_OPERATOR_LABEL } from '../../common/utils/payout-operator-label';
 import { NotifyService } from '../notify/notify.service';
 import {
   PaydunyaDisburseStatus,
@@ -15,8 +17,6 @@ import {
   PaydunyaService,
 } from '../payments/paydunya.service';
 import { ListPayoutsQueryDto } from './dto/list-payouts-query.dto';
-
-const OPERATOR_LABEL: Record<PayoutOperator, string> = { TMONEY: 'T-Money', FLOOZ: 'Flooz' };
 
 // Code PayDunya « fonds insuffisants » (ou callback injoignable) — voir doc
 // API PUSH. Le seul échec qui exige une action humaine immédiate : rester
@@ -43,9 +43,11 @@ export type PaginatedPayouts = {
 };
 
 // Reversement du loyer au bénéficiaire après un paiement PayDunya confirmé
-// (voir /architect reversement, 2026-09-25 : bénéficiaire = gestionnaire du
-// mandat actif sinon propriétaire, 100 % du loyer, frais à la charge du
-// locataire). Machine à états PENDING → SENDING → SUCCESS | FAILED.
+// (voir /architect reversement, 2026-09-25, révisé le 2026-09-28 : bénéficiaire
+// = gestionnaire du mandat actif sinon propriétaire, 100 % du loyer, frais à
+// la charge du locataire ; le numéro et l'opérateur de réception sont ceux du
+// compte lui-même — User.phone/payoutOperator — plus de numéro séparé).
+// Machine à états PENDING → SENDING → SUCCESS | FAILED.
 //
 // Règles de sécurité de l'argent (jamais de double envoi, jamais de perte) :
 //  1. Le Payout est créé une seule fois par paiement (paymentId unique).
@@ -127,18 +129,32 @@ export class PayoutsService {
       let token = payout.disburseToken;
 
       if (!token) {
-        const account = await this.prisma.payoutAccount.findUnique({
-          where: { userId: payout.beneficiaryUserId },
+        // Le numéro et l'opérateur de réception sont ceux du compte lui-même
+        // (voir /architect reversement, révisé le 2026-09-28 : plus de
+        // numéro séparé — User.phone/payoutOperator, demandés à l'inscription
+        // ou complétés depuis le profil).
+        const beneficiary = await this.prisma.user.findUnique({
+          where: { id: payout.beneficiaryUserId },
+          select: { phone: true, payoutOperator: true },
         });
-        if (!account) {
-          await this.releaseForRetry(payout, "Le bénéficiaire n'a pas de numéro de réception");
+        const normalizedPhone =
+          typeof beneficiary?.phone === 'string'
+            ? String(normalizeTogoPhone(beneficiary.phone))
+            : null;
+        if (!beneficiary?.payoutOperator || !normalizedPhone || !/^\d{8}$/.test(normalizedPhone)) {
+          await this.releaseForRetry(
+            payout,
+            "Le bénéficiaire n'a pas de numéro et d'opérateur mobile money valides dans son profil",
+          );
           return;
         }
+        const operator = beneficiary.payoutOperator;
+        const phone = normalizedPhone;
 
         ({ token } = await this.paydunya.createDisbursement({
           amount: payout.amount,
-          operator: account.operator,
-          phone: account.phone,
+          operator,
+          phone,
           callbackUrl: `${this.config.getOrThrow<string>('API_BASE_URL')}/payouts/webhooks/paydunya?payoutId=${payout.id}`,
         }));
         // Persisté AVANT submit : si le processus s'arrête juste après, le
@@ -146,7 +162,7 @@ export class PayoutsService {
         // d'en créer un second (règle 3).
         await this.prisma.payout.update({
           where: { id: payout.id },
-          data: { disburseToken: token, operator: account.operator, phone: account.phone },
+          data: { disburseToken: token, operator, phone },
         });
         tokenPersisted = true;
       }
@@ -364,7 +380,7 @@ export class PayoutsService {
         variables: {
           propertyAddress: formatPropertyLocation(payout.payment.lease.property),
           amount: payout.amount,
-          operator: done?.operator ? OPERATOR_LABEL[done.operator] : '',
+          operator: done?.operator ? PAYOUT_OPERATOR_LABEL[done.operator] : '',
           phone: done?.phone ?? '',
         },
       });
@@ -382,7 +398,7 @@ export class PayoutsService {
         variables: {
           propertyAddress: formatPropertyLocation(payout.payment.lease.property),
           amount: payout.amount,
-          operator: current?.operator ? OPERATOR_LABEL[current.operator] : '',
+          operator: current?.operator ? PAYOUT_OPERATOR_LABEL[current.operator] : '',
           phone: current?.phone ?? '',
         },
       });

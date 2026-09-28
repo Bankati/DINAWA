@@ -14,7 +14,7 @@ export function render(variables: TemplateVariables): string {
     <p>Bonjour,</p>
     <p>Un locataire a payé le loyer du bien <strong>${propertyAddress}</strong>, mais l'envoi vers votre numéro <strong>${operator} — ${phone}</strong> n'a pas abouti après plusieurs tentatives.</p>
     ${renderAmountBox('Montant à recevoir', variables['amount'] ?? 0)}
-    <p>Vérifiez que votre numéro de réception est correct et que votre compte mobile money est actif (rubrique « Numéro de réception » de votre profil). L'équipe WARAH a été prévenue et relancera l'envoi : votre argent est en sécurité.</p>
+    <p>Vérifiez que votre numéro et votre opérateur mobile money sont corrects (rubrique « Numéro de téléphone » de votre profil) et que votre compte mobile money est actif. L'équipe WARAH a été prévenue et relancera l'envoi : votre argent est en sécurité.</p>
   `;
 
   return renderLayout(body, { preheader: "Nous n'avons pas pu vous envoyer un loyer." });

@@ -97,6 +97,7 @@ export const PAYOUT_STALE_SENDING_MS = 5 * 60 * 1000;
 // Minimum accepté par PayDunya pour une facture Checkout (erreur 4003 en deçà).
 export const PAYDUNYA_MIN_INVOICE_FCFA = 200;
 
-// Modification du numéro de réception : protégée par mot de passe, donc
-// limitée pour éviter de s'en servir comme oracle de mot de passe.
-export const THROTTLE_PAYOUT_ACCOUNT = { default: { limit: 5, ttl: 3_600_000 } };
+// PATCH /profile : peut porter un mot de passe (confirmation requise pour
+// changer phone/payoutOperator d'un OWNER/MANAGER, voir ProfileService) —
+// limité pour ne jamais servir d'oracle de mot de passe.
+export const THROTTLE_PROFILE_UPDATE = { default: { limit: 10, ttl: 3_600_000 } };

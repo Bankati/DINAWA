@@ -25,7 +25,7 @@ describe('PaymentsService', () => {
       updateMany: jest.Mock;
     };
     mandate: { findFirst: jest.Mock };
-    payoutAccount: { findUnique: jest.Mock };
+    user: { findUnique: jest.Mock };
     notification: { findFirst: jest.Mock };
   };
   let tx: {
@@ -107,8 +107,11 @@ describe('PaymentsService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
-      // Par défaut le bénéficiaire (propriétaire) a un numéro de réception.
-      payoutAccount: { findUnique: jest.fn().mockResolvedValue({ id: 'acc-1' }) },
+      // Par défaut le bénéficiaire (propriétaire) a un téléphone + opérateur
+      // (numéro de réception = celui du compte, voir /architect révisé 2026-09-28).
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ phone: '90330557', payoutOperator: 'TMONEY' }),
+      },
       notification: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     storage = { upload: jest.fn().mockResolvedValue(undefined) };
@@ -445,8 +448,8 @@ describe('PaymentsService', () => {
       it('fige le propriétaire comme bénéficiaire quand il n’y a pas de mandat actif', async () => {
         await service.initiate(tenant, dto);
 
-        expect(prisma.payoutAccount.findUnique).toHaveBeenCalledWith(
-          expect.objectContaining({ where: { userId: 'owner-1' } }),
+        expect(prisma.user.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'owner-1' } }),
         );
         const [createArgs] = prisma.payment.create.mock.calls[0] as [{ data: unknown }];
         expect(createArgs.data).toMatchObject({ beneficiaryUserId: 'owner-1', feeAmount: 0 });
@@ -457,15 +460,15 @@ describe('PaymentsService', () => {
 
         await service.initiate(tenant, dto);
 
-        expect(prisma.payoutAccount.findUnique).toHaveBeenCalledWith(
-          expect.objectContaining({ where: { userId: 'manager-1' } }),
+        expect(prisma.user.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'manager-1' } }),
         );
         const [createArgs] = prisma.payment.create.mock.calls[0] as [{ data: unknown }];
         expect(createArgs.data).toMatchObject({ beneficiaryUserId: 'manager-1' });
       });
 
-      it('refuse (409) SANS créer de paiement ni de facture si le bénéficiaire n’a pas de numéro, et le prévient', async () => {
-        prisma.payoutAccount.findUnique.mockResolvedValue(null);
+      it('refuse (409) SANS créer de paiement ni de facture si le bénéficiaire n’a pas de numéro et d’opérateur, et le prévient', async () => {
+        prisma.user.findUnique.mockResolvedValue({ phone: '90330557', payoutOperator: null });
 
         await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
 
@@ -477,7 +480,7 @@ describe('PaymentsService', () => {
       });
 
       it('ne re-notifie pas le bénéficiaire s’il l’a déjà été dans les dernières 24 h (anti-spam)', async () => {
-        prisma.payoutAccount.findUnique.mockResolvedValue(null);
+        prisma.user.findUnique.mockResolvedValue({ phone: null, payoutOperator: null });
         prisma.notification.findFirst.mockResolvedValue({ id: 'notif-1' });
 
         await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
@@ -486,10 +489,10 @@ describe('PaymentsService', () => {
       });
 
       it('affiche toujours au locataire la vraie raison du refus même si la notification échoue', async () => {
-        prisma.payoutAccount.findUnique.mockResolvedValue(null);
+        prisma.user.findUnique.mockResolvedValue({ phone: null, payoutOperator: null });
         notify.notifyUser.mockRejectedValue(new Error('resend down'));
 
-        await expect(service.initiate(tenant, dto)).rejects.toThrow('numéro de réception');
+        await expect(service.initiate(tenant, dto)).rejects.toThrow('numéro et son opérateur');
       });
 
       it('ajoute les frais de service à la facture PayDunya mais garde le loyer seul comme paidAmount', async () => {
@@ -543,8 +546,8 @@ describe('PaymentsService', () => {
       expect(prisma.payment.create).not.toHaveBeenCalled();
     });
 
-    it('signale payoutReady=false (sans notifier) quand le bénéficiaire n’a pas de numéro', async () => {
-      prisma.payoutAccount.findUnique.mockResolvedValue(null);
+    it('signale payoutReady=false (sans notifier) quand le bénéficiaire n’a pas de numéro ou d’opérateur', async () => {
+      prisma.user.findUnique.mockResolvedValue({ phone: '90330557', payoutOperator: null });
 
       const quote = await service.getQuote(tenant, 'entry-1');
 

@@ -17,8 +17,7 @@ describe('PayoutsService', () => {
       update: jest.Mock;
       updateMany: jest.Mock;
     };
-    payoutAccount: { findUnique: jest.Mock };
-    user: { findMany: jest.Mock };
+    user: { findUnique: jest.Mock; findMany: jest.Mock };
   };
   let paydunya: {
     isDisburseEnabled: jest.Mock;
@@ -85,10 +84,12 @@ describe('PayoutsService', () => {
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      payoutAccount: {
-        findUnique: jest.fn().mockResolvedValue({ operator: 'TMONEY', phone: '90330557' }),
+      // Le numéro/opérateur de réception vient désormais du compte lui-même
+      // (voir /architect reversement révisé, 2026-09-28).
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ phone: '90330557', payoutOperator: 'TMONEY' }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'admin-1' }]),
       },
-      user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin-1' }]) },
     };
     paydunya = {
       isDisburseEnabled: jest.fn().mockReturnValue(true),
@@ -307,13 +308,35 @@ describe('PayoutsService', () => {
       expect(notify.notifyUser).not.toHaveBeenCalled();
     });
 
-    it('sans numéro de réception : relance plus tard, aucun appel PayDunya', async () => {
-      prisma.payoutAccount.findUnique.mockResolvedValue(null);
+    it('sans opérateur enregistré : relance plus tard, aucun appel PayDunya', async () => {
+      prisma.user.findUnique.mockResolvedValue({ phone: '90330557', payoutOperator: null });
 
       await service.process('payout-1');
 
       expect(paydunya.createDisbursement).not.toHaveBeenCalled();
       expect(transitions()).toContain('PENDING');
+    });
+
+    it('numéro invalide après normalisation (ex. indicatif étranger) : relance plus tard, aucun appel PayDunya', async () => {
+      prisma.user.findUnique.mockResolvedValue({ phone: '+33612345678', payoutOperator: 'TMONEY' });
+
+      await service.process('payout-1');
+
+      expect(paydunya.createDisbursement).not.toHaveBeenCalled();
+      expect(transitions()).toContain('PENDING');
+    });
+
+    it('normalise le numéro (indicatif +228, espaces) avant de créer le décaissement', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        phone: '+228 90 33 05 57',
+        payoutOperator: 'FLOOZ',
+      });
+
+      await service.process('payout-1');
+
+      expect(paydunya.createDisbursement).toHaveBeenCalledWith(
+        expect.objectContaining({ operator: 'FLOOZ', phone: '90330557' }),
+      );
     });
 
     it('échec avant tout jeton (get-invoice) : échec sûr, relance planifiée', async () => {

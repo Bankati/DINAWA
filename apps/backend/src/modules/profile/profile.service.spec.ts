@@ -19,8 +19,16 @@ describe('ProfileService', () => {
   let supabaseAdmin: { auth: { admin: { deleteUser: jest.Mock } }; withRetry: jest.Mock };
   let authService: { getMe: jest.Mock };
   let tokens: { comparePassword: jest.Mock; hashPassword: jest.Mock };
+  let notify: { notifyUser: jest.Mock };
 
   const user = { id: 'user-1', supabaseId: 'supabase-uid-1', role: 'OWNER' } as AuthenticatedUser;
+  // Rôle non concerné par la confirmation du numéro de réception (OWNER/MANAGER
+  // uniquement) — utilisé par les tests génériques phone/city hérités.
+  const tenant = {
+    id: 'user-1',
+    supabaseId: 'supabase-uid-1',
+    role: 'TENANT',
+  } as AuthenticatedUser;
 
   beforeEach(() => {
     prisma = {
@@ -45,6 +53,7 @@ describe('ProfileService', () => {
       comparePassword: jest.fn().mockResolvedValue(true),
       hashPassword: jest.fn().mockResolvedValue('new-hash'),
     };
+    notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
 
     service = new ProfileService(
       prisma as never,
@@ -52,6 +61,7 @@ describe('ProfileService', () => {
       supabaseAdmin as never,
       authService as never,
       tokens as never,
+      notify as never,
     );
   });
 
@@ -90,8 +100,8 @@ describe('ProfileService', () => {
     // Bug réel corrigé le 2026-08-11 : UpdateProfileDto n'avait pas ces
     // champs — le ValidationPipe global (whitelist) rejetait toute la
     // requête (photo comprise) dès qu'un formulaire envoyait phone/city.
-    it('persiste phone et city (précédemment ignorés silencieusement)', async () => {
-      await service.updateProfile(user, { phone: '+22890000000', city: 'Kara' });
+    it('persiste phone et city (précédemment ignorés silencieusement) — TENANT, non concerné par la confirmation de mot de passe', async () => {
+      await service.updateProfile(tenant, { phone: '+22890000000', city: 'Kara' });
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         data: { phone: '+22890000000', city: 'Kara' },
@@ -107,9 +117,112 @@ describe('ProfileService', () => {
         }),
       );
 
-      await expect(service.updateProfile(user, { phone: '+22890000000' })).rejects.toThrow(
+      await expect(service.updateProfile(tenant, { phone: '+22890000000' })).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    describe('numéro de réception des loyers (OWNER/MANAGER)', () => {
+      const ownerWithPhone = {
+        id: 'user-1',
+        role: 'OWNER',
+        phone: '90330557',
+        payoutOperator: 'TMONEY',
+      } as AuthenticatedUser;
+
+      it('exige le mot de passe pour changer le téléphone d’un OWNER', async () => {
+        await expect(service.updateProfile(ownerWithPhone, { phone: '96000000' })).rejects.toThrow(
+          UnauthorizedException,
+        );
+        expect(prisma.user.update).not.toHaveBeenCalled();
+      });
+
+      it('exige le mot de passe pour changer seulement l’opérateur (même numéro)', async () => {
+        await expect(
+          service.updateProfile(ownerWithPhone, { payoutOperator: 'FLOOZ' }),
+        ).rejects.toThrow(UnauthorizedException);
+      });
+
+      it('rejette un mot de passe incorrect sans écrire ni notifier', async () => {
+        tokens.comparePassword.mockResolvedValueOnce(false);
+
+        await expect(
+          service.updateProfile(ownerWithPhone, { phone: '96000000', password: 'wrong' }),
+        ).rejects.toThrow(UnauthorizedException);
+        expect(prisma.user.update).not.toHaveBeenCalled();
+        expect(notify.notifyUser).not.toHaveBeenCalled();
+      });
+
+      it('applique le changement et envoie une alerte email forcée avec le bon mot de passe', async () => {
+        prisma.user.update.mockResolvedValueOnce({
+          id: 'user-1',
+          phone: '96000000',
+          payoutOperator: 'FLOOZ',
+        });
+
+        await service.updateProfile(ownerWithPhone, {
+          phone: '96000000',
+          payoutOperator: 'FLOOZ',
+          password: 'correct',
+        });
+
+        expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledWith({
+          where: { id: 'user-1' },
+          omit: { passwordHash: false },
+        });
+        expect(tokens.comparePassword).toHaveBeenCalledWith('correct', 'old-hash');
+        expect(prisma.user.update).toHaveBeenCalledWith({
+          where: { id: 'user-1' },
+          data: { phone: '96000000', payoutOperator: 'FLOOZ' },
+        });
+        expect(notify.notifyUser).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: 'user-1',
+            event: 'payout-account-changed',
+            forceEmail: true,
+            variables: { operator: 'Flooz', phone: '96000000' },
+          }),
+        );
+      });
+
+      it('ne demande pas de mot de passe et ne notifie pas si les valeurs envoyées sont identiques', async () => {
+        await service.updateProfile(ownerWithPhone, {
+          phone: '90330557',
+          payoutOperator: 'TMONEY',
+        });
+
+        expect(prisma.user.findUniqueOrThrow).not.toHaveBeenCalled();
+        expect(notify.notifyUser).not.toHaveBeenCalled();
+      });
+
+      it('n’échoue pas si l’alerte email échoue — le numéro est déjà enregistré', async () => {
+        notify.notifyUser.mockRejectedValueOnce(new Error('resend down'));
+
+        await expect(
+          service.updateProfile(ownerWithPhone, { phone: '96000000', password: 'correct' }),
+        ).resolves.toBeDefined();
+      });
+
+      it('MANAGER est concerné par la même garde que OWNER', async () => {
+        const managerWithPhone = { ...ownerWithPhone, role: 'MANAGER' } as AuthenticatedUser;
+
+        await expect(
+          service.updateProfile(managerWithPhone, { phone: '96000000' }),
+        ).rejects.toThrow(UnauthorizedException);
+      });
+
+      it('TENANT/ADMIN peuvent changer leur téléphone sans mot de passe — non concernés par le reversement', async () => {
+        const adminWithPhone = {
+          id: 'user-1',
+          role: 'ADMIN',
+          phone: '90330557',
+        } as AuthenticatedUser;
+
+        await expect(
+          service.updateProfile(adminWithPhone, { phone: '96000000' }),
+        ).resolves.toBeDefined();
+        expect(notify.notifyUser).not.toHaveBeenCalled();
+      });
     });
 
     it('compresse et uploade la photo sous userId/randomUUID.webp', async () => {

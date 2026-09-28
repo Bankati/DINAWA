@@ -64,6 +64,7 @@ describe('AuthService', () => {
     firstName: 'Jean',
     lastName: 'Dupont',
     phone: '90330557',
+    payoutOperator: 'TMONEY',
     city: 'Lomé',
     residenceCountry: 'TG',
   };
@@ -73,6 +74,7 @@ describe('AuthService', () => {
     firstName: 'Awa',
     lastName: 'Gerant',
     phone: '91445566',
+    payoutOperator: 'FLOOZ',
     city: 'Kara',
   };
   const createdUser = { id: 'user-1', email: ownerDto.email, role: 'OWNER' };
@@ -312,6 +314,7 @@ describe('AuthService', () => {
           firstName: ownerDto.firstName,
           lastName: ownerDto.lastName,
           phone: ownerDto.phone,
+          payoutOperator: ownerDto.payoutOperator,
           city: ownerDto.city,
         },
       });
@@ -366,6 +369,7 @@ describe('AuthService', () => {
           firstName: managerDto.firstName,
           lastName: managerDto.lastName,
           phone: managerDto.phone,
+          payoutOperator: managerDto.payoutOperator,
           city: managerDto.city,
         },
       });

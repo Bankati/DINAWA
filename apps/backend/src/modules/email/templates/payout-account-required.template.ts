@@ -2,7 +2,7 @@ import { escapeHtml, renderLayout } from './layout';
 import { TemplateVariables } from './types';
 
 export function subject(): string {
-  return 'Un locataire ne peut pas payer : ajoutez votre numéro de réception';
+  return 'Un locataire ne peut pas payer : complétez votre profil de paiement';
 }
 
 export function render(variables: TemplateVariables): string {
@@ -10,11 +10,11 @@ export function render(variables: TemplateVariables): string {
 
   const body = `
     <p>Bonjour,</p>
-    <p>Un locataire a essayé de payer son loyer en ligne pour le bien <strong>${propertyAddress}</strong>, mais le paiement a été refusé : vous n'avez pas encore renseigné le numéro mobile money sur lequel recevoir vos loyers.</p>
-    <p>Ajoutez votre numéro de réception (T-Money ou Flooz) dans votre profil WARAH, rubrique « Numéro de réception ». Le locataire pourra alors payer immédiatement.</p>
+    <p>Un locataire a essayé de payer son loyer en ligne pour le bien <strong>${propertyAddress}</strong>, mais le paiement a été refusé : votre profil ne précise pas encore l'opérateur mobile money (T-Money ou Flooz) de votre numéro.</p>
+    <p>Complétez-le dans votre profil WARAH, rubrique « Numéro de téléphone ». Le locataire pourra alors payer immédiatement.</p>
   `;
 
   return renderLayout(body, {
-    preheader: 'Ajoutez votre numéro de réception pour recevoir vos loyers.',
+    preheader: 'Complétez votre profil pour recevoir vos loyers.',
   });
 }

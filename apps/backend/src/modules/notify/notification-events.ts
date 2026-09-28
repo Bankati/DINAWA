@@ -76,8 +76,8 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     url: '/gestionnaire/mandats',
   },
   'payout-account-required': {
-    title: 'Numéro de réception requis',
-    body: 'Un locataire ne peut pas payer {propertyAddress} : ajoutez votre numéro de réception.',
+    title: 'Profil de paiement incomplet',
+    body: 'Un locataire ne peut pas payer {propertyAddress} : complétez votre numéro et votre opérateur mobile money.',
     url: '/profil',
   },
   'payout-account-changed': {

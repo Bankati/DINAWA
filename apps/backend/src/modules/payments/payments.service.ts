@@ -185,7 +185,7 @@ export class PaymentsService {
     if (!hasPayoutAccount) {
       await this.notifyMissingPayoutAccount(beneficiaryUserId, scheduleEntry.lease.property);
       throw new ConflictException(
-        "Le paiement en ligne n'est pas encore disponible pour ce bien : le propriétaire ou gestionnaire n'a pas renseigné son numéro de réception. Il vient d'en être informé.",
+        "Le paiement en ligne n'est pas encore disponible pour ce bien : le propriétaire ou gestionnaire n'a pas complété son numéro et son opérateur mobile money dans son profil. Il vient d'en être informé.",
       );
     }
 
@@ -344,12 +344,17 @@ export class PaymentsService {
     });
   }
 
+  // Le numéro de réception est désormais le téléphone du compte lui-même
+  // (voir /architect reversement, révisé le 2026-09-28 : plus de numéro
+  // séparé) — il faut aussi l'opérateur (T-Money/Flooz), demandé à
+  // l'inscription (signup-owner.dto.ts/signup-manager.dto.ts) ou complété
+  // depuis le profil, PayDunya ne pouvant pas le déduire du seul numéro.
   private async hasPayoutAccount(userId: string): Promise<boolean> {
-    const account = await this.prisma.payoutAccount.findUnique({
-      where: { userId },
-      select: { id: true },
+    const beneficiary = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, payoutOperator: true },
     });
-    return account !== null;
+    return Boolean(beneficiary?.phone && beneficiary?.payoutOperator);
   }
 
   // Prévient le bénéficiaire qu'un locataire a été bloqué faute de numéro de
