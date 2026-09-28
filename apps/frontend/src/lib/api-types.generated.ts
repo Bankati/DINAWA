@@ -391,7 +391,7 @@ export interface paths {
     head?: never;
     /**
      * Met à jour les informations personnelles et/ou la photo de profil
-     * @description Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage.
+     * @description Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage. Pour un OWNER/MANAGER, modifier `phone` ou `payoutOperator` (le numéro de réception des loyers) exige `password`.
      */
     patch: operations["ProfileController_updateProfile"];
     trace?: never;
@@ -513,6 +513,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/payments/quote/{scheduleEntryId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Devis avant paiement PayDunya : loyer, frais de service, total, disponibilité
+     * @description Sans effet de bord. payoutReady=false signifie que le propriétaire/gestionnaire n’a pas encore renseigné son numéro de réception — le paiement en ligne serait refusé.
+     */
+    get: operations["PaymentsController_getQuote"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/payments": {
     parameters: {
       query?: never;
@@ -578,6 +598,40 @@ export interface paths {
     get: operations["PaymentsController_downloadReceipt"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/payouts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Liste des reversements de loyers (super admin) */
+    get: operations["PayoutsController_list"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/payouts/{id}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Relance un reversement en échec (super admin) */
+    post: operations["PayoutsController_retry"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1474,6 +1528,11 @@ export interface components {
       lastName: string;
       /** @example 90330557 */
       phone: string;
+      /**
+       * @example TMONEY
+       * @enum {string}
+       */
+      payoutOperator: "TMONEY" | "FLOOZ";
       /** @example Lomé */
       city: string;
       /** @example TG */
@@ -1486,6 +1545,11 @@ export interface components {
       lastName: string;
       /** @example 90330557 */
       phone: string;
+      /**
+       * @example TMONEY
+       * @enum {string}
+       */
+      payoutOperator: "TMONEY" | "FLOOZ";
       /** @example Lomé */
       city: string;
     };
@@ -1536,6 +1600,10 @@ export interface components {
       phone?: string;
       /** @example Lomé */
       city?: string;
+      /** @enum {string} */
+      payoutOperator?: "TMONEY" | "FLOOZ";
+      /** @description Mot de passe actuel — requis uniquement si phone ou payoutOperator change pour un OWNER/MANAGER */
+      password?: string;
       /** @description Jours avant échéance pour le rappel de loyer */
       reminderDaysBefore?: number;
       /** @description Jours de grâce avant l'alerte d'impayé */
@@ -2406,6 +2474,25 @@ export interface operations {
       };
     };
   };
+  PaymentsController_getQuote: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scheduleEntryId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PaymentsController_findAll: {
     parameters: {
       query?: {
@@ -2497,6 +2584,46 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PayoutsController_list: {
+    parameters: {
+      query?: {
+        status?: "PENDING" | "SENDING" | "SUCCESS" | "FAILED";
+        page?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PayoutsController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };

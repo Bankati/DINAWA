@@ -8,6 +8,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "WARAH - Gérez vos biens. Encaissez vos loyers. Dormez tranquille.",
   description: "WARAH - Plateforme de gestion locative immobilière pour le Togo",
+  // Vérification de propriété Google Search Console — l'API Metadata de
+  // Next.js génère automatiquement la balise <meta name="google-site-verification" ...>.
+  verification: {
+    google: "wF1k87RI6uWyieVtvTCRZDjkyUzXNGwXAuwnGxX_7GU",
+  },
 };
 
 export default function RootLayout({

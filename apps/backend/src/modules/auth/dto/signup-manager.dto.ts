@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { PayoutOperator } from '@prisma/client';
+import { IsEmail, IsEnum, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class SignupManagerDto {
   @ApiProperty()
@@ -27,6 +28,11 @@ export class SignupManagerDto {
   @IsString()
   @Matches(/^\+?\d{8,15}$/, { message: 'phone doit être un numéro valide' })
   phone!: string;
+
+  // Opérateur mobile money de `phone` — voir signup-owner.dto.ts.
+  @ApiProperty({ enum: PayoutOperator, example: PayoutOperator.TMONEY })
+  @IsEnum(PayoutOperator)
+  payoutOperator!: PayoutOperator;
 
   // Texte libre, sans logique métier attachée (voir /architect révision
   // inscription owner/manager).

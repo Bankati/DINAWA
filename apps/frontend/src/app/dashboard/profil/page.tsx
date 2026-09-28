@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { initiales } from '@/lib/format';
+import { PAYOUT_OPERATOR_LABELS, type PayoutOperator } from '@/lib/payout-account';
 import { NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
 import { PageHeader, Card, CardBody, Label, Input, Button, Badge } from '@/components/ds';
 
@@ -12,6 +14,7 @@ interface UserProfile {
   id: string;
   email: string | null;
   phone: string | null;
+  payoutOperator: PayoutOperator | null;
   firstName: string;
   lastName: string;
   role: string;
@@ -30,6 +33,7 @@ const STATUS_TONE: Record<string, 'success' | 'error'> = {
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Actif', SUSPENDED_INACTIVITY: 'Suspendu (inactivité)', SUSPENDED_ADMIN: 'Suspendu (admin)', SUSPENDED_PAYMENT: 'Suspendu (paiement)',
 };
+const PAYOUT_OPERATORS: PayoutOperator[] = ['TMONEY', 'FLOOZ'];
 
 export default function ProfilPage() {
   const { refreshProfile } = useAuth();
@@ -39,11 +43,23 @@ export default function ProfilPage() {
     queryFn: () => api.get<UserProfile>('/profile'),
   });
   const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', city: '' });
+  // Séparé de `form` : c'est le numéro qui reçoit les loyers (voir
+  // /architect reversement, révisé le 2026-09-28 — plus de numéro séparé,
+  // c'est le téléphone ci-dessus). Modifier phone OU payoutOperator exige le
+  // mot de passe (ProfileService.updateProfile()).
+  const [payoutOperator, setPayoutOperator] = useState<PayoutOperator | null>(null);
+  const [payoutPassword, setPayoutPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const receivesPayouts = profile?.role === 'OWNER' || profile?.role === 'MANAGER';
+  const payoutRoutingChanged =
+    receivesPayouts &&
+    !!profile &&
+    (form.phone !== (profile.phone ?? '') || payoutOperator !== profile.payoutOperator);
 
   useEffect(() => {
     if (profile) {
@@ -53,6 +69,7 @@ export default function ProfilPage() {
         phone: profile.phone ?? '',
         city: profile.city ?? '',
       });
+      setPayoutOperator(profile.payoutOperator);
     }
   }, [profile]);
 
@@ -79,9 +96,12 @@ export default function ProfilPage() {
       fd.append('lastName', form.lastName);
       if (form.phone) fd.append('phone', form.phone);
       if (form.city) fd.append('city', form.city);
+      if (receivesPayouts && payoutOperator) fd.append('payoutOperator', payoutOperator);
+      if (payoutRoutingChanged && payoutPassword) fd.append('password', payoutPassword);
       if (photoFile) fd.append('photo', photoFile);
       await api.patch('/profile', fd);
       setPhotoFile(null);
+      setPayoutPassword('');
       if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       refreshProfile();
@@ -161,8 +181,11 @@ export default function ProfilPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     <div>
-                      <Label>Téléphone</Label>
+                      <Label>Téléphone {receivesPayouts && <span className="text-destructive">*</span>}</Label>
                       <Input className="mt-1.5" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+228 90 00 00 00" />
+                      {receivesPayouts && (
+                        <p className="text-xs text-muted-foreground mt-1">C&apos;est sur ce numéro que vos loyers payés en ligne sont envoyés.</p>
+                      )}
                     </div>
                     <div>
                       <Label>Ville</Label>
@@ -170,8 +193,50 @@ export default function ProfilPage() {
                     </div>
                   </div>
 
+                  {/* Réservé à ceux qui reçoivent des loyers — le locataire n'en a pas. */}
+                  {receivesPayouts && (
+                    <>
+                      <div>
+                        <Label>Opérateur mobile money du numéro ci-dessus <span className="text-destructive">*</span></Label>
+                        <div className="flex gap-2 mt-1.5" role="group" aria-label="Opérateur mobile money">
+                          {PAYOUT_OPERATORS.map((op) => (
+                            <Button
+                              key={op}
+                              type="button"
+                              aria-pressed={payoutOperator === op}
+                              variant={payoutOperator === op ? 'default' : 'outline'}
+                              onClick={() => setPayoutOperator(op)}
+                            >
+                              {PAYOUT_OPERATOR_LABELS[op]}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {payoutRoutingChanged && (
+                        <div>
+                          <Label htmlFor="payout-password">Votre mot de passe <span className="text-destructive">*</span></Label>
+                          <Input
+                            id="payout-password"
+                            className="mt-1.5"
+                            type="password"
+                            autoComplete="current-password"
+                            value={payoutPassword}
+                            onChange={(e) => setPayoutPassword(e.target.value)}
+                          />
+                          <p className="flex items-start gap-1.5 text-xs text-muted-foreground mt-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-px" />
+                            Requis pour confirmer ce changement — un email vous est envoyé à chaque modification.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   <div className="flex justify-end pt-1">
-                    <Button type="submit" loading={saving}>Enregistrer les modifications</Button>
+                    <Button type="submit" loading={saving} disabled={payoutRoutingChanged && !payoutPassword}>
+                      Enregistrer les modifications
+                    </Button>
                   </div>
                 </form>
               </CardBody>

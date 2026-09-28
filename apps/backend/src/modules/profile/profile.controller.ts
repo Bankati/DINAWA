@@ -9,10 +9,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { User } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
-import { MAX_PHOTO_BYTES } from '../../common/constants';
+import { MAX_PHOTO_BYTES, THROTTLE_PROFILE_UPDATE } from '../../common/constants';
 import { AuthMeResponse } from '../auth/auth.service';
 import { ProfileService } from './profile.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -34,12 +35,14 @@ export class ProfileController {
   }
 
   @Patch()
+  @Throttle(THROTTLE_PROFILE_UPDATE)
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Met à jour les informations personnelles et/ou la photo de profil',
     description:
       'Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est ' +
-      'compressée et convertie en WebP avant stockage.',
+      'compressée et convertie en WebP avant stockage. Pour un OWNER/MANAGER, modifier `phone` ' +
+      'ou `payoutOperator` (le numéro de réception des loyers) exige `password`.',
   })
   @UseInterceptors(FileInterceptor('photo', { limits: { fileSize: MAX_PHOTO_BYTES } }))
   updateProfile(

@@ -44,11 +44,14 @@ describe('PaydunyaService', () => {
   });
 
   it("utilise l'hôte sandbox en mode test et l'hôte production en mode live (bug trouvé le 2026-09-11 — l'API tapait toujours sur l'hôte prod)", () => {
+    // Chaque construction crée deux clients : Checkout (v1) puis API PUSH (v2).
+    const lastBaseUrls = (): string[] =>
+      (axios.create as jest.Mock).mock.calls
+        .slice(-2)
+        .map(([args]: [{ baseURL: string }]) => args.baseURL);
+
     new PaydunyaService(makeConfig({ PAYDUNYA_MODE: 'test' }) as never);
-    const [[testArgs]] = (axios.create as jest.Mock).mock.calls.slice(-1) as [
-      [{ baseURL: string }],
-    ];
-    expect(testArgs.baseURL).toBe('https://app.paydunya.com/sandbox-api/v1');
+    expect(lastBaseUrls()[0]).toBe('https://app.paydunya.com/sandbox-api/v1');
 
     new PaydunyaService(
       makeConfig({
@@ -57,10 +60,9 @@ describe('PaydunyaService', () => {
         PAYDUNYA_LIVE_TOKEN: 'token-live',
       }) as never,
     );
-    const [[liveArgs]] = (axios.create as jest.Mock).mock.calls.slice(-1) as [
-      [{ baseURL: string }],
-    ];
-    expect(liveArgs.baseURL).toBe('https://app.paydunya.com/api/v1');
+    expect(lastBaseUrls()[0]).toBe('https://app.paydunya.com/api/v1');
+    // L'API PUSH (décaissement) a son propre préfixe v2, sans variante sandbox.
+    expect(lastBaseUrls()[1]).toBe('https://app.paydunya.com/api/v2/disburse');
   });
 
   it("n'envoie jamais PAYDUNYA-PUBLIC-KEY — non requis par ces endpoints (doc PayDunya, 2026-09-11)", () => {
@@ -198,6 +200,163 @@ describe('PaydunyaService', () => {
     await expect(service.confirmInvoiceStatus('inv-abc')).resolves.toEqual({
       status: 'completed',
       amount: 55000,
+    });
+  });
+
+  describe('API PUSH (décaissement)', () => {
+    const live = {
+      PAYDUNYA_MODE: 'live',
+      PAYDUNYA_LIVE_PRIVATE_KEY: 'priv-live',
+      PAYDUNYA_LIVE_TOKEN: 'token-live',
+    };
+
+    it('n’est disponible qu’en mode live avec les trois clés', () => {
+      expect(new PaydunyaService(makeConfig() as never).isDisburseEnabled()).toBe(false);
+      expect(new PaydunyaService(makeConfig(live) as never).isDisburseEnabled()).toBe(true);
+      expect(
+        new PaydunyaService(
+          makeConfig({ ...live, PAYDUNYA_LIVE_TOKEN: '' }) as never,
+        ).isDisburseEnabled(),
+      ).toBe(false);
+    });
+
+    it('refuse tout appel sans toucher PayDunya en mode test', async () => {
+      const service = new PaydunyaService(makeConfig() as never);
+
+      await expect(
+        service.createDisbursement({
+          amount: 1000,
+          operator: 'TMONEY',
+          phone: '90330557',
+          callbackUrl: 'https://api/cb',
+        }),
+      ).rejects.toThrow(PaydunyaError);
+      await expect(service.submitDisbursement('tok', 'p1')).rejects.toThrow(PaydunyaError);
+      await expect(service.checkDisbursementStatus('tok')).rejects.toThrow(PaydunyaError);
+      expect(post).not.toHaveBeenCalled();
+    });
+
+    it('createDisbursement envoie le numéro local, le mode opérateur et le callback, et renvoie le jeton', async () => {
+      post.mockResolvedValue({ data: { response_code: '00', disburse_token: 'disb-1' } });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(
+        service.createDisbursement({
+          amount: 55000,
+          operator: 'FLOOZ',
+          phone: '96000000',
+          callbackUrl: 'https://api/cb?payoutId=p1',
+        }),
+      ).resolves.toEqual({ token: 'disb-1' });
+
+      expect(post).toHaveBeenCalledWith('/get-invoice', {
+        account_alias: '96000000',
+        amount: 55000,
+        withdraw_mode: 'moov-togo',
+        callback_url: 'https://api/cb?payoutId=p1',
+      });
+    });
+
+    it('createDisbursement lève PaydunyaError (avec le code) si PayDunya refuse', async () => {
+      post.mockResolvedValue({
+        data: { response_code: '4002', response_text: 'Solde insuffisant' },
+      });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(
+        service.createDisbursement({
+          amount: 1000,
+          operator: 'TMONEY',
+          phone: '90330557',
+          callbackUrl: 'https://api/cb',
+        }),
+      ).rejects.toMatchObject({ name: 'Error', message: 'Solde insuffisant', code: '4002' });
+    });
+
+    it('submitDisbursement renvoie statut et transaction, avec notre identifiant comme disburse_id', async () => {
+      post.mockResolvedValue({
+        data: { response_code: '00', status: 'success', transaction_id: 'TFA-1' },
+      });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(service.submitDisbursement('disb-1', 'payout-1')).resolves.toEqual({
+        status: 'success',
+        transactionId: 'TFA-1',
+      });
+      expect(post).toHaveBeenCalledWith('/submit-invoice', {
+        disburse_invoice: 'disb-1',
+        disburse_id: 'payout-1',
+      });
+    });
+
+    it('submitDisbursement : statut absent (réponse Orange Money sans champ status) → null, jamais supposé', async () => {
+      post.mockResolvedValue({ data: { response_code: '00', transaction_id: 'TFA-2' } });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(service.submitDisbursement('disb-1', 'payout-1')).resolves.toEqual({
+        status: null,
+        transactionId: 'TFA-2',
+      });
+    });
+
+    it('submitDisbursement : refus PayDunya = PaydunyaError avec code (rien n’a été envoyé)', async () => {
+      post.mockResolvedValue({
+        data: { response_code: '4002', response_text: 'Fonds insuffisants' },
+      });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(service.submitDisbursement('disb-1', 'payout-1')).rejects.toMatchObject({
+        code: '4002',
+      });
+    });
+
+    it('submitDisbursement : UN SEUL essai, et une erreur réseau reste une erreur ambiguë (pas PaydunyaError)', async () => {
+      post.mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      const error: unknown = await service
+        .submitDisbursement('disb-1', 'payout-1')
+        .catch((e: unknown) => e);
+
+      expect(error).not.toBeInstanceOf(PaydunyaError);
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['success', 'success'],
+      ['failed', 'failed'],
+      ['pending', 'pending'],
+      ['created', 'created'],
+      ['SUCCESS', 'success'],
+      ['bizarre', 'pending'],
+    ])(
+      'checkDisbursementStatus mappe "%s" en "%s" (inconnu → pending, jamais un succès supposé)',
+      async (raw, expected) => {
+        post.mockResolvedValue({ data: { response_code: '00', status: raw, fees: '8' } });
+        const service = new PaydunyaService(makeConfig(live) as never);
+
+        await expect(service.checkDisbursementStatus('disb-1')).resolves.toMatchObject({
+          status: expected,
+          fees: 8,
+        });
+        expect(post).toHaveBeenCalledWith('/check-status', { disburse_invoice: 'disb-1' });
+      },
+    );
+
+    it('checkDisbursementStatus : frais absents → null', async () => {
+      post.mockResolvedValue({ data: { response_code: '00', status: 'pending' } });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(service.checkDisbursementStatus('disb-1')).resolves.toMatchObject({
+        fees: null,
+      });
+    });
+
+    it('checkDisbursementStatus lève PaydunyaError si response_code ≠ "00"', async () => {
+      post.mockResolvedValue({ data: { response_code: '5000', response_text: 'Erreur service' } });
+      const service = new PaydunyaService(makeConfig(live) as never);
+
+      await expect(service.checkDisbursementStatus('disb-1')).rejects.toThrow(PaydunyaError);
     });
   });
 });

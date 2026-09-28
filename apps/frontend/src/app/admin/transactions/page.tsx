@@ -14,7 +14,7 @@ import {
 const SOURCE_LABELS: Record<string, string> = {
   MANUAL_OWNER: 'Saisie manuelle',
   TENANT_DECLARATION: 'Déclaration locataire',
-  CASHPAY_API: 'Cashpay',
+  PAYDUNYA_API: 'PayDunya (en ligne)',
 };
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'En attente', PENDING_CONFIRMATION: 'À confirmer', PAID: 'Payé',

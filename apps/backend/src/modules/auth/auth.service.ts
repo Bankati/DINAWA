@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { addMonths, format } from 'date-fns';
-import { Lease, Prisma, User } from '@prisma/client';
+import { Lease, PayoutOperator, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { canActOnProperty } from '../../common/permissions/property-access';
@@ -277,6 +277,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone,
+      payoutOperator: dto.payoutOperator,
       city: dto.city,
       createProfile: (tx, created) =>
         tx.ownerProfile.create({
@@ -304,6 +305,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone,
+      payoutOperator: dto.payoutOperator,
       city: dto.city,
       createProfile: (tx, created) => tx.managerProfile.create({ data: { userId: created.id } }),
     });
@@ -568,6 +570,7 @@ export class AuthService {
     firstName: string;
     lastName: string;
     phone: string;
+    payoutOperator: PayoutOperator;
     city: string;
     createProfile: (tx: Prisma.TransactionClient, user: User) => Promise<unknown>;
   }): Promise<{ user: User; confirmationUrl: string }> {
@@ -588,6 +591,7 @@ export class AuthService {
             firstName: params.firstName,
             lastName: params.lastName,
             phone: params.phone,
+            payoutOperator: params.payoutOperator,
             city: params.city,
           },
         });

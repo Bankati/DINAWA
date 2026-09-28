@@ -660,7 +660,7 @@
         "tags": ["Profile"]
       },
       "patch": {
-        "description": "Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage.",
+        "description": "Tous les champs sont optionnels (mise à jour partielle). La photo (`photo`) est compressée et convertie en WebP avant stockage. Pour un OWNER/MANAGER, modifier `phone` ou `payoutOperator` (le numéro de réception des loyers) exige `password`.",
         "operationId": "ProfileController_updateProfile",
         "parameters": [],
         "requestBody": {
@@ -866,6 +866,34 @@
         "tags": ["Payments"]
       }
     },
+    "/payments/quote/{scheduleEntryId}": {
+      "get": {
+        "description": "Sans effet de bord. payoutReady=false signifie que le propriétaire/gestionnaire n’a pas encore renseigné son numéro de réception — le paiement en ligne serait refusé.",
+        "operationId": "PaymentsController_getQuote",
+        "parameters": [
+          {
+            "name": "scheduleEntryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Devis avant paiement PayDunya : loyer, frais de service, total, disponibilité",
+        "tags": ["Payments"]
+      }
+    },
     "/payments": {
       "get": {
         "operationId": "PaymentsController_findAll",
@@ -1062,6 +1090,79 @@
         ],
         "summary": "Quittance PDF générée à la volée — jamais persistée",
         "tags": ["Payments"]
+      }
+    },
+    "/admin/payouts": {
+      "get": {
+        "operationId": "PayoutsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["PENDING", "SENDING", "SUCCESS", "FAILED"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste des reversements de loyers (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/payouts/{id}/retry": {
+      "post": {
+        "operationId": "PayoutsController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Relance un reversement en échec (super admin)",
+        "tags": ["Admin"]
       }
     },
     "/properties": {
@@ -3116,6 +3217,11 @@
             "type": "string",
             "example": "90330557"
           },
+          "payoutOperator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"],
+            "example": "TMONEY"
+          },
           "city": {
             "type": "string",
             "example": "Lomé"
@@ -3131,6 +3237,7 @@
           "firstName",
           "lastName",
           "phone",
+          "payoutOperator",
           "city",
           "residenceCountry"
         ]
@@ -3154,12 +3261,25 @@
             "type": "string",
             "example": "90330557"
           },
+          "payoutOperator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"],
+            "example": "TMONEY"
+          },
           "city": {
             "type": "string",
             "example": "Lomé"
           }
         },
-        "required": ["email", "password", "firstName", "lastName", "phone", "city"]
+        "required": [
+          "email",
+          "password",
+          "firstName",
+          "lastName",
+          "phone",
+          "payoutOperator",
+          "city"
+        ]
       },
       "InviteTenantDto": {
         "type": "object",
@@ -3288,6 +3408,14 @@
           "city": {
             "type": "string",
             "example": "Lomé"
+          },
+          "payoutOperator": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"]
+          },
+          "password": {
+            "type": "string",
+            "description": "Mot de passe actuel — requis uniquement si phone ou payoutOperator change pour un OWNER/MANAGER"
           },
           "reminderDaysBefore": {
             "type": "number",

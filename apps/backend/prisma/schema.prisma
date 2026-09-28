@@ -116,6 +116,24 @@ enum PaymentMethod {
   BANK_TRANSFER
 }
 
+// Opérateurs mobile money acceptés pour RECEVOIR un reversement (Togo) —
+// enum dédié plutôt que PaymentMethod, qui contient aussi CASH/BANK_TRANSFER.
+enum PayoutOperator {
+  TMONEY
+  FLOOZ
+}
+
+// PENDING : à envoyer (ou à renvoyer après un échec temporaire, voir
+// nextAttemptAt). SENDING : pris en charge, jeton PayDunya créé, résultat
+// pas encore connu. SUCCESS/FAILED : états finaux (FAILED relançable par un
+// admin uniquement).
+enum PayoutStatus {
+  PENDING
+  SENDING
+  SUCCESS
+  FAILED
+}
+
 enum ListingStatus {
   ACTIVE
   DISABLED
@@ -174,6 +192,15 @@ model User {
   supabaseId                String?             @unique
   email                     String?             @unique
   phone                     String?             @unique
+  // Opérateur mobile money du numéro ci-dessus — demandé une fois à
+  // l'inscription (OWNER/MANAGER uniquement, voir signup-owner.dto.ts /
+  // signup-manager.dto.ts) puisque PayDunya a besoin de savoir si un numéro
+  // est T-Money ou Flooz pour y reverser un loyer (voir PayoutsService,
+  // /architect reversement 2026-09-25, révisé le 2026-09-28 : le numéro de
+  // réception est désormais le même que `phone`, plus de numéro séparé).
+  // Toujours null pour TENANT/ADMIN. Modifier `phone` ou `payoutOperator`
+  // pour un OWNER/MANAGER exige le mot de passe (voir ProfileService).
+  payoutOperator            PayoutOperator?
   // bcrypt (12 rounds) — voir modules/auth/token.service.ts. Authentification
   // gérée entièrement côté NestJS depuis le 2026-08-11 (voir architecture.md).
   passwordHash              String
@@ -224,6 +251,8 @@ model User {
   mandatesAsManager      Mandate[]              @relation("MandateManager")
   paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
   paymentsConfirmed      Payment[]              @relation("PaymentConfirmedBy")
+  paymentsAsBeneficiary  Payment[]              @relation("PaymentBeneficiary")
+  payouts                Payout[]               @relation("PayoutBeneficiary")
   managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
   managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
   subscription           Subscription?
@@ -516,16 +545,62 @@ model Payment {
   confirmedBy         User?                @relation("PaymentConfirmedBy", fields: [confirmedByUserId], references: [id])
   confirmedAt         DateTime?            @db.Timestamptz(6)
   rejectionReason     String?
+  // Frais de service payés EN PLUS du loyer par le locataire (PayDunya
+  // collecte loyer + frais, seul `paidAmount` est crédité à l'échéance et
+  // reversé au bénéficiaire — voir /architect reversement, 2026-09-25). 0 pour
+  // tout paiement antérieur à cette fonctionnalité ou non-PayDunya.
+  feeAmount           Int                  @default(0)
+  // Qui recevra le loyer (gestionnaire du mandat actif, sinon propriétaire),
+  // figé à la création de la facture PayDunya. null = paiement antérieur au
+  // reversement automatique ou non-PayDunya : jamais reversé rétroactivement.
+  beneficiaryUserId   String?
+  beneficiary         User?                @relation("PaymentBeneficiary", fields: [beneficiaryUserId], references: [id])
   createdAt           DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
 
   declaration PaymentDeclaration?
+  payout      Payout?
 
   @@index([leaseId])
   @@index([scheduleEntryId])
   @@index([status])
   @@index([paidAt])
   @@map("payments")
+}
+
+// Reversement du loyer d'un paiement PayDunya vers son bénéficiaire (API PUSH
+// PayDunya, voir /architect reversement 2026-09-25). Un seul par Payment
+// (paymentId unique) : c'est ce qui rend la création idempotente si
+// l'événement payment.confirmed est rejoué ou rattrapé par le cron.
+// `operator`/`phone` sont posés au moment de l'envoi (dernier numéro connu du
+// bénéficiaire) et gardés ici comme trace de la destination réelle.
+// `disburseToken` (jeton PayDunya) est la clé de la machine à états : on ne
+// renvoie jamais d'argent sans avoir d'abord vérifié son statut chez PayDunya.
+model Payout {
+  id                String          @id @default(cuid())
+  paymentId         String          @unique
+  payment           Payment         @relation(fields: [paymentId], references: [id])
+  beneficiaryUserId String
+  beneficiary       User            @relation("PayoutBeneficiary", fields: [beneficiaryUserId], references: [id])
+  amount            Int
+  operator          PayoutOperator?
+  phone             String?
+  status            PayoutStatus    @default(PENDING)
+  attempts          Int             @default(0)
+  nextAttemptAt     DateTime        @default(now()) @db.Timestamptz(6)
+  disburseToken     String?
+  transactionId     String?
+  // Frais réellement facturés par PayDunya pour cet envoi (remontés par
+  // check-status) — sert à vérifier que TENANT_FEE_* couvre le coût réel.
+  providerFee       Int?
+  lastError         String?
+  completedAt       DateTime?       @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt])
+  @@index([beneficiaryUserId])
+  @@map("payouts")
 }
 
 // Couche éditable par le locataire tant que le Payment lié est en

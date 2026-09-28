@@ -75,6 +75,31 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{ownerName} vous propose un mandat de gestion pour {propertySummary}.',
     url: '/gestionnaire/mandats',
   },
+  'payout-account-required': {
+    title: 'Profil de paiement incomplet',
+    body: 'Un locataire ne peut pas payer {propertyAddress} : complétez votre numéro et votre opérateur mobile money.',
+    url: '/profil',
+  },
+  'payout-account-changed': {
+    title: 'Numéro de réception modifié',
+    body: 'Votre numéro de réception est maintenant {operator} {phone}.',
+    url: '/profil',
+  },
+  'payout-sent': {
+    title: 'Loyer reçu',
+    body: '{amount} FCFA envoyés sur votre numéro pour {propertyAddress}.',
+    url: '/paiements',
+  },
+  'payout-failed': {
+    title: 'Envoi de loyer en échec',
+    body: "Nous n'avons pas pu vous envoyer le loyer de {propertyAddress}. Vérifiez votre numéro.",
+    url: '/profil',
+  },
+  'payout-failed-admin': {
+    title: 'Reversement en échec',
+    body: '{amount} FCFA à reverser à {beneficiaryName} : {reason}.',
+    url: '/admin/reversements',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {

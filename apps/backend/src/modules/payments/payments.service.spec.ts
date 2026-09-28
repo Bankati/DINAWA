@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_CONFIRMED } from './payment.events';
@@ -20,6 +25,8 @@ describe('PaymentsService', () => {
       updateMany: jest.Mock;
     };
     mandate: { findFirst: jest.Mock };
+    user: { findUnique: jest.Mock };
+    notification: { findFirst: jest.Mock };
   };
   let tx: {
     payment: { create: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
@@ -100,6 +107,12 @@ describe('PaymentsService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
+      // Par défaut le bénéficiaire (propriétaire) a un téléphone + opérateur
+      // (numéro de réception = celui du compte, voir /architect révisé 2026-09-28).
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ phone: '90330557', payoutOperator: 'TMONEY' }),
+      },
+      notification: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     storage = { upload: jest.fn().mockResolvedValue(undefined) };
     notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
@@ -430,6 +443,126 @@ describe('PaymentsService', () => {
         expect.objectContaining({ paymentId: 'payment-orphan' }),
       );
     });
+
+    describe('reversement (bénéficiaire, numéro de réception, frais)', () => {
+      it('fige le propriétaire comme bénéficiaire quand il n’y a pas de mandat actif', async () => {
+        await service.initiate(tenant, dto);
+
+        expect(prisma.user.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'owner-1' } }),
+        );
+        const [createArgs] = prisma.payment.create.mock.calls[0] as [{ data: unknown }];
+        expect(createArgs.data).toMatchObject({ beneficiaryUserId: 'owner-1', feeAmount: 0 });
+      });
+
+      it('fige le gestionnaire du mandat actif comme bénéficiaire, et contrôle SON numéro', async () => {
+        prisma.mandate.findFirst.mockResolvedValue({ managerId: 'manager-1' });
+
+        await service.initiate(tenant, dto);
+
+        expect(prisma.user.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'manager-1' } }),
+        );
+        const [createArgs] = prisma.payment.create.mock.calls[0] as [{ data: unknown }];
+        expect(createArgs.data).toMatchObject({ beneficiaryUserId: 'manager-1' });
+      });
+
+      it('refuse (409) SANS créer de paiement ni de facture si le bénéficiaire n’a pas de numéro et d’opérateur, et le prévient', async () => {
+        prisma.user.findUnique.mockResolvedValue({ phone: '90330557', payoutOperator: null });
+
+        await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
+
+        expect(prisma.payment.create).not.toHaveBeenCalled();
+        expect(paydunya.createInvoice).not.toHaveBeenCalled();
+        expect(notify.notifyUser).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: 'owner-1', event: 'payout-account-required' }),
+        );
+      });
+
+      it('ne re-notifie pas le bénéficiaire s’il l’a déjà été dans les dernières 24 h (anti-spam)', async () => {
+        prisma.user.findUnique.mockResolvedValue({ phone: null, payoutOperator: null });
+        prisma.notification.findFirst.mockResolvedValue({ id: 'notif-1' });
+
+        await expect(service.initiate(tenant, dto)).rejects.toThrow(ConflictException);
+
+        expect(notify.notifyUser).not.toHaveBeenCalled();
+      });
+
+      it('affiche toujours au locataire la vraie raison du refus même si la notification échoue', async () => {
+        prisma.user.findUnique.mockResolvedValue({ phone: null, payoutOperator: null });
+        notify.notifyUser.mockRejectedValue(new Error('resend down'));
+
+        await expect(service.initiate(tenant, dto)).rejects.toThrow('numéro et son opérateur');
+      });
+
+      it('ajoute les frais de service à la facture PayDunya mais garde le loyer seul comme paidAmount', async () => {
+        config.get.mockImplementation((key: string) =>
+          key === 'TENANT_FEE_PERCENT' ? 1.5 : key === 'TENANT_FEE_FIXED_FCFA' ? 100 : undefined,
+        );
+
+        await service.initiate(tenant, dto);
+
+        // 1,5 % de 55 000 = 825 + 100 fixes = 925
+        const [createArgs] = prisma.payment.create.mock.calls[0] as [{ data: unknown }];
+        expect(createArgs.data).toMatchObject({ paidAmount: 55000, feeAmount: 925 });
+        expect(paydunya.createInvoice).toHaveBeenCalledWith(
+          expect.objectContaining({ amount: 55925 }),
+        );
+      });
+
+      it('refuse (400) un paiement en ligne sous le minimum PayDunya de 200 FCFA', async () => {
+        prisma.paymentScheduleEntry.findUnique.mockResolvedValue(
+          makeScheduleEntry({ expectedAmount: 150 }),
+        );
+
+        await expect(service.initiate(tenant, dto)).rejects.toThrow(BadRequestException);
+        expect(prisma.payment.create).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('getQuote', () => {
+    beforeEach(() => {
+      prisma.paymentScheduleEntry.findUnique.mockResolvedValue(
+        makeScheduleEntry({ paidAmount: 20000 }),
+      );
+    });
+
+    it('renvoie loyer restant, frais, total et disponibilité, sans aucun effet de bord', async () => {
+      config.get.mockImplementation((key: string) =>
+        key === 'TENANT_FEE_PERCENT' ? 2 : undefined,
+      );
+
+      const quote = await service.getQuote(tenant, 'entry-1');
+
+      // solde restant 35 000 ; 2 % = 700
+      expect(quote).toEqual({
+        rentAmount: 35000,
+        feeAmount: 700,
+        totalAmount: 35700,
+        payoutReady: true,
+      });
+      expect(notify.notifyUser).not.toHaveBeenCalled();
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('signale payoutReady=false (sans notifier) quand le bénéficiaire n’a pas de numéro ou d’opérateur', async () => {
+      prisma.user.findUnique.mockResolvedValue({ phone: '90330557', payoutOperator: null });
+
+      const quote = await service.getQuote(tenant, 'entry-1');
+
+      expect(quote.payoutReady).toBe(false);
+      expect(notify.notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('réserve le devis au locataire du bail', async () => {
+      await expect(service.getQuote(owner, 'entry-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('404 si l’échéance est introuvable', async () => {
+      prisma.paymentScheduleEntry.findUnique.mockResolvedValue(null);
+      await expect(service.getQuote(tenant, 'nope')).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('reconcilePaydunyaPayment', () => {
@@ -441,6 +574,7 @@ describe('PaymentsService', () => {
         status: 'PENDING',
         transactionId: 'pd-token-1',
         paidAmount: 55000,
+        feeAmount: 0,
         createdAt: new Date(),
         scheduleEntry: { expectedAmount: 55000, paidAmount: 0 },
         ...overrides,
@@ -501,6 +635,39 @@ describe('PaymentsService', () => {
         data: { paidAmount: { increment: 55000 } },
       });
       expect(events.emit).toHaveBeenCalledWith(PAYMENT_CONFIRMED, { paymentId: 'payment-1' });
+    });
+
+    it('déduit les frais de service du total confirmé : seul le loyer est crédité (/architect reversement 2026-09-25)', async () => {
+      prisma.payment.findUnique.mockResolvedValue(
+        makePaydunyaPayment({ paidAmount: 55000, feeAmount: 925 }),
+      );
+      // PayDunya confirme le TOTAL encaissé : loyer 55 000 + frais 925
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 55925 });
+
+      await service.reconcilePaydunyaPayment('payment-1');
+
+      const [updateManyArgs] = tx.payment.updateMany.mock.calls[0] as [
+        { data: { paidAmount: number } },
+      ];
+      expect(updateManyArgs.data.paidAmount).toBe(55000);
+      expect(tx.paymentScheduleEntry.update).toHaveBeenCalledWith({
+        where: { id: 'entry-1' },
+        data: { paidAmount: { increment: 55000 } },
+      });
+    });
+
+    it('retombe sur le loyer attendu si le total confirmé ne couvre même pas les frais', async () => {
+      prisma.payment.findUnique.mockResolvedValue(
+        makePaydunyaPayment({ paidAmount: 55000, feeAmount: 925 }),
+      );
+      paydunya.confirmInvoiceStatus.mockResolvedValue({ status: 'completed', amount: 900 });
+
+      await service.reconcilePaydunyaPayment('payment-1');
+
+      const [updateManyArgs] = tx.payment.updateMany.mock.calls[0] as [
+        { data: { paidAmount: number } },
+      ];
+      expect(updateManyArgs.data.paidAmount).toBe(55000);
     });
 
     it('crédite le montant confirmé par PayDunya, pas notre propre montant attendu, en cas de divergence (/architect 2026-09-14)', async () => {
