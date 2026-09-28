@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { Home, Users, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { PHONE_PREFIXES, matchPrefix, phoneLengthError, phoneIsValid, type PhonePrefix } from '@/lib/phone-prefixes';
 import { signupOwner, signupManager } from '@/lib/signup';
+import { PAYOUT_OPERATOR_LABELS, type PayoutOperator } from '@/lib/payout-account';
 import { ApiError } from '@/lib/auth-context';
 import { AuthShell } from '../auth-shell';
 import './page.css';
 
 type Role = 'OWNER' | 'MANAGER';
 type Step = 'role' | 'info' | 'success';
+const PAYOUT_OPERATORS: PayoutOperator[] = ['TMONEY', 'FLOOZ'];
 
 interface InfoForm {
   firstName: string;
@@ -18,11 +20,17 @@ interface InfoForm {
   email: string;
   password: string;
   phone: string;
+  // Opérateur mobile money de `phone` — WARAH y reversera les loyers de ce
+  // compte, aucun numéro séparé n'est demandé (voir /architect reversement,
+  // révisé le 2026-09-28).
+  payoutOperator: PayoutOperator | '';
   city: string;
   residenceCountry: string;
 }
 
-const EMPTY_INFO: InfoForm = { firstName: '', lastName: '', email: '', password: '', phone: '', city: '', residenceCountry: '' };
+const EMPTY_INFO: InfoForm = {
+  firstName: '', lastName: '', email: '', password: '', phone: '', payoutOperator: '', city: '', residenceCountry: '',
+};
 
 export default function RegisterPage() {
   const [step, setStep] = useState<Step>('role');
@@ -80,6 +88,7 @@ export default function RegisterPage() {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(info.email) &&
     info.password.length >= 6 &&
     phoneIsValid(info.phone) &&
+    !!info.payoutOperator &&
     !!info.city.trim();
 
   const filteredPrefixes = (() => {
@@ -127,6 +136,8 @@ export default function RegisterPage() {
 
     const phone = info.phone.replace(/\s+/g, '');
 
+    if (!info.payoutOperator) return;
+
     try {
       if (selectedRole === 'OWNER') {
         await signupOwner({
@@ -135,6 +146,7 @@ export default function RegisterPage() {
           firstName: info.firstName,
           lastName: info.lastName,
           phone,
+          payoutOperator: info.payoutOperator,
           city: info.city,
           residenceCountry: info.residenceCountry || 'TG',
         });
@@ -145,6 +157,7 @@ export default function RegisterPage() {
           firstName: info.firstName,
           lastName: info.lastName,
           phone,
+          payoutOperator: info.payoutOperator,
           city: info.city,
         });
       }
@@ -289,6 +302,24 @@ export default function RegisterPage() {
                   ) : phoneInvalid ? (
                     <span className="error">Numéro de téléphone invalide (ex : +22890123456)</span>
                   ) : null}
+                </div>
+
+                {/* WARAH y reversera vos loyers — pas de numéro séparé à
+                    saisir (voir /architect reversement, révisé le 2026-09-28). */}
+                <div className="field">
+                  <label>Opérateur mobile money de ce numéro * <small>vos locataires y paieront leur loyer</small></label>
+                  <div className="role-grid">
+                    {PAYOUT_OPERATORS.map((op) => (
+                      <button
+                        key={op}
+                        type="button"
+                        className={`role-card${info.payoutOperator === op ? ' selected' : ''}`}
+                        onClick={() => setField('payoutOperator', op)}
+                      >
+                        <strong>{PAYOUT_OPERATOR_LABELS[op]}</strong>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="field">

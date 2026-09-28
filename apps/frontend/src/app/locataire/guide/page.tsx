@@ -8,12 +8,13 @@ const SECTIONS: GuideSection[] = [
     summary: 'Chaque mois, réglez votre échéance par Mobile Money',
     steps: [
       "Depuis « Déclarer un paiement », choisissez l'échéance à régler puis cliquez sur « Payer en ligne ».",
+      "Le détail s'affiche : loyer, frais de service du paiement mobile money, et total à payer.",
       'Sélectionnez votre opérateur mobile money (TMoney ou Flooz) et validez.',
       'Vous êtes redirigé vers la page de paiement sécurisée PayDunya pour confirmer.',
       "De retour sur WARAH, le statut du paiement se met à jour automatiquement dès la confirmation reçue.",
       'Une quittance PDF est générée et vous est envoyée par email dès le paiement confirmé.',
     ],
-    tip: 'Recommencez cette même démarche chaque mois, à chaque nouvelle échéance affichée.',
+    tip: "Recommencez cette même démarche chaque mois, à chaque nouvelle échéance affichée. Si le paiement en ligne n'est pas disponible pour votre bien, prévenez votre propriétaire depuis la même page ou déclarez un paiement effectué autrement.",
   },
   {
     icon: FileText,

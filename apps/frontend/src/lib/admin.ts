@@ -36,7 +36,7 @@ function toQueryString(
 
 export interface AdminTransaction {
   id: string;
-  source: "MANUAL_OWNER" | "TENANT_DECLARATION" | "CASHPAY_API";
+  source: "MANUAL_OWNER" | "TENANT_DECLARATION" | "PAYDUNYA_API";
   status: string;
   paymentMethod: string | null;
   paidAmount: number;

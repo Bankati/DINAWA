@@ -426,6 +426,11 @@ export default function BiensPage() {
                     )}
                   </TableCell>
                   <TableCell>
+                    {manager ? (
+                      // Bien sous mandat actif : seul le gestionnaire peut agir
+                      // (canActOnProperty() côté API), le propriétaire consulte.
+                      <span className="text-xs text-muted-foreground">Lecture seule</span>
+                    ) : (
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(b)}>
                         <Pencil className="w-3.5 h-3.5" />Modifier
@@ -452,6 +457,7 @@ export default function BiensPage() {
                         </AlertDialog>
                       )}
                     </div>
+                    )}
                   </TableCell>
                 </TableRow>
                 );

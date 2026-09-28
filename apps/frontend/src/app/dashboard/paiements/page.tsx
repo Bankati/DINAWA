@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { CheckCircle2, Clock, AlertTriangle, Wallet, Search } from 'lucide-react';
-import { paymentsApi, type Payment, type PaymentDeclaration } from '@/lib/payments';
+import {
+  paymentsApi, PAYOUT_STATUS_LABELS, PAYOUT_STATUS_TONE,
+  type Payment, type PaymentDeclaration,
+} from '@/lib/payments';
 import { api } from '@/lib/api';
 import { formatFcfa } from '@/lib/format';
 import { toast } from '@/components/ui';
@@ -25,6 +28,13 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'info' | 'ne
 const METHOD_LABELS: Record<string, string> = {
   TMONEY: 'T-Money', FLOOZ: 'Flooz', CASH: 'Espèces', BANK_TRANSFER: 'Virement',
 };
+
+// Gestionnaire du mandat actif du bien, s'il y en a un : le propriétaire voit
+// alors ses paiements en lecture seule (canActOnProperty() : canMutate = false,
+// le backend refuse d'ailleurs toute action) — on masque donc les boutons.
+function delegatedManager(property?: { mandates?: { manager: { firstName: string; lastName: string } }[] }) {
+  return property?.mandates?.[0]?.manager ?? null;
+}
 
 function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -62,6 +72,8 @@ export default function PaiementsPage() {
     ),
   });
   const declarations = declRes?.data ?? [];
+  // Déclarations sur lesquelles le propriétaire peut réellement agir.
+  const actionableCount = declarations.filter((d) => !delegatedManager(d.lease?.property)).length;
 
   // Requête indépendante du filtre/onglet actif — uniquement pour les
   // compteurs de la rangée StatCard, sur les 100 paiements les plus récents.
@@ -121,14 +133,14 @@ export default function PaiementsPage() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-        <StatCard index={0} label="Déclarations à valider" value={declarations.length} sub={declarations.length > 0 ? 'Action requise' : 'À jour'} tone="warning" icon={<Clock className="w-[18px] h-[18px]" />} />
+        <StatCard index={0} label="Déclarations à valider" value={actionableCount} sub={actionableCount > 0 ? 'Action requise' : 'À jour'} tone="warning" icon={<Clock className="w-[18px] h-[18px]" />} />
         <StatCard index={1} label="Payés" value={paidCount} sub={statsSub} tone="success" icon={<CheckCircle2 className="w-[18px] h-[18px]" />} />
         <StatCard index={2} label="Impayés" value={overdueCount} sub={statsSub} tone={overdueCount > 0 ? 'error' : 'success'} icon={<AlertTriangle className="w-[18px] h-[18px]" />} />
         <StatCard index={3} label="Montant encaissé" value={formatFcfa(totalEncaisse)} sub={statsSub} tone="primary" icon={<Wallet className="w-[18px] h-[18px]" />} />
       </div>
 
       <div className="flex gap-1 mb-5 bg-ds-secondary rounded-lg p-1 max-w-md">
-        {([['declarations', `Déclarations${declarations.length > 0 ? ` (${declarations.length})` : ''}`], ['historique', 'Historique']] as const).map(([k, l]) => (
+        {([['declarations', `Déclarations${actionableCount > 0 ? ` (${actionableCount})` : ''}`], ['historique', 'Historique']] as const).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
@@ -165,10 +177,16 @@ export default function PaiementsPage() {
                       <div className="text-xs text-muted-foreground">{METHOD_LABELS[d.paymentMethod] ?? d.paymentMethod}</div>
                     </div>
                   </div>
-                  <div className="flex gap-2.5 justify-end">
-                    <Button variant="destructive" size="sm" onClick={() => { setRejectId(d.id); setRejectReason(''); }} disabled={confirmMutation.isPending && confirmMutation.variables === d.id}>Rejeter</Button>
-                    <Button size="sm" onClick={() => confirmMutation.mutate(d.id)} loading={confirmMutation.isPending && confirmMutation.variables === d.id}>Confirmer</Button>
-                  </div>
+                  {delegatedManager(d.lease?.property) ? (
+                    <p className="text-xs text-muted-foreground text-right">
+                      Bien géré par {delegatedManager(d.lease?.property)?.firstName} {delegatedManager(d.lease?.property)?.lastName} — lecture seule, seul le gestionnaire peut valider.
+                    </p>
+                  ) : (
+                    <div className="flex gap-2.5 justify-end">
+                      <Button variant="destructive" size="sm" onClick={() => { setRejectId(d.id); setRejectReason(''); }} disabled={confirmMutation.isPending && confirmMutation.variables === d.id}>Rejeter</Button>
+                      <Button size="sm" onClick={() => confirmMutation.mutate(d.id)} loading={confirmMutation.isPending && confirmMutation.variables === d.id}>Confirmer</Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -214,6 +232,7 @@ export default function PaiementsPage() {
                     <TableHead>Montant</TableHead>
                     <TableHead>Mode</TableHead>
                     <TableHead>Statut</TableHead>
+                    <TableHead>Reversement</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -231,9 +250,17 @@ export default function PaiementsPage() {
                       <TableCell className="text-muted-foreground">{p.paymentMethod ? (METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod) : '—'}</TableCell>
                       <TableCell><Badge tone={STATUS_TONE[p.status] ?? 'neutral'}>{STATUS_LABELS[p.status] ?? p.status}</Badge></TableCell>
                       <TableCell>
+                        {/* Seuls les paiements PayDunya sont reversés (espèces/virement ne transitent pas par WARAH). */}
+                        {p.payout ? (
+                          <Badge tone={PAYOUT_STATUS_TONE[p.payout.status]}>{PAYOUT_STATUS_LABELS[p.payout.status]}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {p.status === 'PAID' ? (
                           <Button variant="outline" size="sm" onClick={() => downloadReceipt(p.id)} loading={downloading === p.id}>Quittance</Button>
-                        ) : p.status === 'PENDING_CONFIRMATION' ? (
+                        ) : p.status === 'PENDING_CONFIRMATION' && !delegatedManager(p.lease?.property) ? (
                           <Button variant="outline" size="sm" onClick={() => setTab('declarations')}>Valider</Button>
                         ) : null}
                       </TableCell>

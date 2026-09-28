@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Home, CheckCircle2, Upload, Check, Smartphone, ExternalLink } from 'lucide-react';
+import { Home, CheckCircle2, Upload, Check, Smartphone, ExternalLink, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { paymentsApi } from '@/lib/payments';
@@ -10,7 +10,7 @@ import { formatFcfa } from '@/lib/format';
 import { toast } from '@/components/ui';
 import {
   PageHeader, Card, CardBody, Label, Input, Textarea, Button, EmptyState,
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Skeleton,
 } from '@/components/ds';
 
 interface ScheduleEntry {
@@ -100,6 +100,19 @@ export default function PaymentDeclarationPage() {
   // --- Payer en ligne (PayDunya) ---
   const [onlineMethod, setOnlineMethod] = useState<'TMONEY' | 'FLOOZ'>('TMONEY');
   const [isInitiating, setIsInitiating] = useState(false);
+
+  // Devis (loyer + frais de service) et disponibilité du paiement en ligne :
+  // le propriétaire/gestionnaire doit avoir renseigné son numéro de réception.
+  const { data: quote, isLoading: quoteLoading, isError: quoteError } = useQuery({
+    queryKey: ['payment-quote', selectedEntry?.id],
+    queryFn: () => paymentsApi.getQuote(selectedEntry!.id),
+    enabled: !!selectedEntry && mode === 'online',
+    // Montant à payer : toujours revérifié à l'affichage, jamais servi depuis
+    // le cache (30 s par défaut + copie persistée) — le total et la
+    // disponibilité peuvent changer entre deux visites.
+    staleTime: 0,
+  });
+  const payoutUnavailable = quote?.payoutReady === false;
 
   // --- Déclarer un paiement déjà effectué ---
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH');
@@ -298,15 +311,57 @@ export default function PaymentDeclarationPage() {
                         </p>
                       </div>
 
+                      {quoteLoading && <Skeleton className="h-24" />}
+
+                      {quoteError && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                          Impossible de calculer le montant à payer. Rechargez la page et réessayez.
+                        </div>
+                      )}
+
+                      {quote && (
+                        <div className="rounded-lg border border-ds-border divide-y divide-ds-border text-sm" aria-label="Détail du montant à payer">
+                          <div className="flex justify-between gap-3 px-4 py-2.5">
+                            <span className="text-muted-foreground">Loyer</span>
+                            <span className="font-semibold tabular-nums">{formatFcfa(quote.rentAmount)}</span>
+                          </div>
+                          {quote.feeAmount > 0 && (
+                            <div className="flex justify-between gap-3 px-4 py-2.5">
+                              <span className="text-muted-foreground">Frais de service (paiement mobile money)</span>
+                              <span className="font-semibold tabular-nums">{formatFcfa(quote.feeAmount)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between gap-3 px-4 py-2.5 bg-ds-secondary">
+                            <span className="font-bold">Total à payer</span>
+                            <span className="font-extrabold text-primary-dark tabular-nums">{formatFcfa(quote.totalAmount)}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {payoutUnavailable && (
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                          <span>
+                            Le paiement en ligne n&apos;est pas encore disponible pour ce bien : votre propriétaire ou gestionnaire
+                            doit d&apos;abord indiquer où recevoir vos loyers. Vous pouvez le prévenir ci-dessous, ou déclarer un
+                            paiement effectué autrement.
+                          </span>
+                        </div>
+                      )}
+
                       <div>
                         <Button
                           type="button"
+                          size="lg"
+                          variant={payoutUnavailable ? 'outline' : 'default'}
                           loading={isInitiating}
-                          disabled={!selectedEntry}
+                          disabled={!selectedEntry || quoteLoading || quoteError}
                           onClick={handlePayOnline}
                         >
-                          Payer {selectedEntry ? formatFcfa(selectedEntry.expectedAmount - selectedEntry.paidAmount) : ''} maintenant
-                          <ExternalLink className="w-4 h-4" />
+                          {payoutUnavailable
+                            ? 'Prévenir mon propriétaire'
+                            : `Payer ${quote ? formatFcfa(quote.totalAmount) : ''} maintenant`}
+                          {!payoutUnavailable && <ExternalLink className="w-4 h-4" />}
                         </Button>
                       </div>
                     </div>
