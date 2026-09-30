@@ -86,12 +86,16 @@ export default function ComptesPage() {
       )}
 
       <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
-        <div className="flex gap-1 bg-ds-secondary rounded-lg p-1">
+        {/* max-w-full + overflow-x-auto : 4 onglets ne tenaient pas sur
+            375px et débordaient de l'écran (audit responsive du 2026-09-30) —
+            défile horizontalement dans sa propre zone plutôt que de casser
+            la mise en page, shrink-0 empêche les onglets de s'écraser. */}
+        <div className="flex gap-1 bg-ds-secondary rounded-lg p-1 max-w-full overflow-x-auto">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`rounded-md py-2 px-3.5 text-sm font-bold transition-colors ${activeTab === t.key ? 'bg-card text-primary shadow-sm' : 'bg-transparent text-muted-foreground'}`}
+              className={`shrink-0 rounded-md py-2 px-3.5 text-sm font-bold transition-colors whitespace-nowrap ${activeTab === t.key ? 'bg-card text-primary shadow-sm' : 'bg-transparent text-muted-foreground'}`}
             >
               {t.label}
             </button>

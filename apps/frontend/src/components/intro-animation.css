@@ -1,0 +1,137 @@
+/* Overlay plein écran, par-dessus la page qui continue de charger en
+   dessous (jamais bloquant) — voir /architect animation d'accueil,
+   2026-09-30. Dégradé bleu marine canonique du projet (CLAUDE.md). */
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(10, 38, 80, 0.97) 0%, rgba(15, 76, 129, 0.97) 60%, rgba(8, 30, 65, 0.97) 100%);
+  opacity: 1;
+  animation: introOverlayIn 0.4s ease-out;
+  /* La fermeture est pilotée par le composant (classe ajoutée puis démontage
+     après la transition, voir intro-animation.tsx) — un seul minutage à
+     tenir à jour plutôt qu'un délai CSS figé à resynchroniser à la main. */
+  transition: opacity 0.4s ease-in;
+}
+.intro-overlay-closing { opacity: 0; }
+
+@keyframes introOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.intro-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.intro-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+.intro-card {
+  width: 340px;
+  max-width: calc(100vw - 2.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: introCardIn 0.5s ease-out;
+}
+@keyframes introCardIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.intro-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+  opacity: 0;
+  animation: introLogoIn 0.6s ease-out 0.1s forwards;
+}
+.intro-logo-mark { height: 34px; width: auto; }
+.intro-logo-word {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+@keyframes introLogoIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.intro-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 84px;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.intro-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out, color 0.4s ease-out;
+}
+.intro-line-active {
+  opacity: 1;
+  transform: translateY(0);
+  color: #fff;
+}
+.intro-line-done {
+  opacity: 1;
+  transform: translateY(0);
+  color: rgba(255, 255, 255, 0.4);
+}
+.intro-line-active svg { color: var(--color-accent-light, #E0B655); }
+
+.intro-progress {
+  width: 140px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.intro-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-accent, #C9982E), var(--color-accent-light, #E0B655));
+  border-radius: 999px;
+  transition: width 0.9s ease-in-out;
+}
+
+/* Accessibilité : moins de mouvement, l'overlay reste tout aussi lisible,
+   juste sans les transitions/animations intermédiaires. */
+@media (prefers-reduced-motion: reduce) {
+  .intro-overlay { animation: none; }
+  .intro-card, .intro-logo, .intro-line { animation: none; transition: none; }
+  .intro-logo { opacity: 1; transform: none; }
+  .intro-line { opacity: 1; transform: none; }
+}
+
+@media (max-width: 420px) {
+  .intro-card { width: 100%; }
+  .intro-line { font-size: 15px; }
+}
