@@ -10,7 +10,7 @@ import { initiales } from '@/lib/format';
 import {
   Search, LayoutDashboard, Home, Users, CreditCard, Megaphone, User, UserCircle2,
   IdCard, Bell, Download, Handshake, Briefcase, BarChart3, Scale, LogOut, X, Menu,
-  AlertTriangle, UserSearch, History, BookOpen, Send, Wallet, type LucideIcon,
+  AlertTriangle, UserSearch, History, BookOpen, Send, Wallet, Settings, type LucideIcon,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui';
 import { CommandPalette, ThemeToggle, type CommandPaletteItem } from '@/components/ds';
@@ -20,7 +20,7 @@ import './app-shell.css';
 type NavIcon =
   | 'dashboard' | 'biens' | 'locataires' | 'paiements' | 'annonces'
   | 'profil' | 'notifications' | 'export' | 'identite' | 'delegation'
-  | 'portefeuille' | 'rapports' | 'profil-public' | 'litiges' | 'gestionnaires' | 'audit-logs' | 'guide' | 'reversements';
+  | 'portefeuille' | 'rapports' | 'profil-public' | 'litiges' | 'gestionnaires' | 'audit-logs' | 'guide' | 'reversements' | 'parametres';
 
 interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; }
 interface NavSection { label?: string; items: NavItem[]; }
@@ -82,6 +82,7 @@ const ADMIN_NAV: NavSection[] = [
       { icon: 'reversements', label: 'Reversements', route: '/admin/reversements' },
       { icon: 'litiges', label: 'Litiges', route: '/admin/litiges' },
       { icon: 'audit-logs', label: "Journal d'audit", route: '/admin/audit-logs' },
+      { icon: 'parametres', label: 'Paramètres', route: '/admin/parametres' },
       { icon: 'guide', label: "Guide d'utilisation", route: '/admin/guide' },
     ],
   },
@@ -135,6 +136,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   'audit-logs': History,
   guide: BookOpen,
   reversements: Send,
+  parametres: Settings,
 };
 
 interface AccountStatusResponse {

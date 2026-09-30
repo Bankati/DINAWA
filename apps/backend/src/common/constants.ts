@@ -53,6 +53,22 @@ export const SUBSCRIPTION_TIERS = {
 // y compris pour les comptes rétro-remplis lors de la sortie de cette unité.
 export const BETA_FREE_MONTHS = 3;
 
+// Facturation mensuelle des abonnements (unité 36, ressuscitée — voir
+// /architect abonnements, 2026-09-30) — cron global le 1er du mois à 6h
+// Lomé (UTC+0), pas un anniversaire par utilisateur. Piloté par
+// PlatformSettings.subscriptionBillingEnabled (super-admin), jamais actif
+// tant que le client ne l'a pas explicitement allumé.
+export const CRON_SUBSCRIPTION_BILLING = '0 6 1 * *';
+
+// Relances/suspension : cron quotidien distinct (la création de facture est
+// mensuelle, mais J+3/J+7 exigent une granularité journalière — même
+// principe que payment-declaration-reminders.task.ts). Puis suspension
+// (accountStatus = SUSPENDED_PAYMENT) au dernier palier — reprend le plan
+// d'origine (build-plan.md unité 36).
+export const CRON_SUBSCRIPTION_REMINDERS = '0 9 * * *';
+export const SUBSCRIPTION_INVOICE_REMINDER_DAYS = [3, 7] as const;
+export const SUBSCRIPTION_SUSPENSION_DAYS = 7;
+
 // Quotas de rate limiting renforcés sur les endpoints publics les plus
 // exposés à l'abus (voir /architect Phase 11, 2026-08-13) — surchargent le
 // throttler global 'default' (100 req/min/IP, app.module.ts) uniquement sur

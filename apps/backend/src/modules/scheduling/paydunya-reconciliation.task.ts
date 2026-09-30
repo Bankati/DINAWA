@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
 import { CRON_PAYDUNYA_RECONCILIATION, PAYDUNYA_RECONCILE_AFTER_MS } from '../../common/constants';
 
@@ -29,6 +30,7 @@ export class PaydunyaReconciliationTask {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   @Cron(CRON_PAYDUNYA_RECONCILIATION)
@@ -65,6 +67,35 @@ export class PaydunyaReconciliationTask {
           this.paymentsService.reconcilePaydunyaPayment(id).catch((error: unknown) => {
             this.logger.error(`[paydunya-reconciliation] échec pour payment=${id}`, error);
           }),
+        ),
+      );
+    }
+
+    await this.reconcileSubscriptionInvoices(cutoff);
+  }
+
+  // Même filet de sécurité que ci-dessus, pour les factures d'abonnement
+  // (unité 36, voir /architect abonnements, 2026-09-30) — filtrées sur
+  // `transactionId` non nul : une facture jamais payée (aucun essai de
+  // paiement) n'a rien à revérifier auprès de PayDunya, c'est
+  // SubscriptionBillingTask (relances/suspension) qui s'en occupe.
+  private async reconcileSubscriptionInvoices(cutoff: Date): Promise<void> {
+    const candidates = await this.prisma.subscriptionInvoice.findMany({
+      where: { status: 'PENDING', transactionId: { not: null }, createdAt: { lt: cutoff } },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: RECONCILE_BATCH,
+    });
+
+    for (let i = 0; i < candidates.length; i += RECONCILE_PARALLELISM) {
+      const slice = candidates.slice(i, i + RECONCILE_PARALLELISM);
+      await Promise.all(
+        slice.map(({ id }) =>
+          this.subscriptionsService
+            .reconcilePaydunyaSubscriptionInvoice(id)
+            .catch((error: unknown) => {
+              this.logger.error(`[paydunya-reconciliation] échec pour invoice=${id}`, error);
+            }),
         ),
       );
     }

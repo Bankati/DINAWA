@@ -39,4 +39,17 @@ export class SubscriptionsController {
   cancel(@CurrentUser() user: AuthenticatedUser): Promise<Subscription> {
     return this.subscriptions.cancel(user);
   }
+
+  @Post('invoices/pay')
+  @ApiOperation({
+    summary: 'Crée (ou réutilise) la facture PayDunya de la facture d’abonnement en attente',
+    description:
+      'Le propriétaire/gestionnaire est redirigé vers checkoutUrl pour compléter le paiement — ' +
+      'jamais de lien pré-généré par le cron de facturation, créé ici à la demande.',
+  })
+  payCurrentInvoice(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ invoiceId: string; checkoutUrl: string }> {
+    return this.subscriptions.payCurrentInvoice(user);
+  }
 }

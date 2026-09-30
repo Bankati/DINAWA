@@ -9,13 +9,27 @@ jest.mock('../../common/utils/advisory-lock', () => ({
 
 describe('PaydunyaReconciliationTask', () => {
   let task: PaydunyaReconciliationTask;
-  let prisma: { payment: { findMany: jest.Mock } };
+  let prisma: {
+    payment: { findMany: jest.Mock };
+    subscriptionInvoice: { findMany: jest.Mock };
+  };
   let paymentsService: { reconcilePaydunyaPayment: jest.Mock };
+  let subscriptionsService: { reconcilePaydunyaSubscriptionInvoice: jest.Mock };
 
   beforeEach(() => {
-    prisma = { payment: { findMany: jest.fn().mockResolvedValue([]) } };
+    prisma = {
+      payment: { findMany: jest.fn().mockResolvedValue([]) },
+      subscriptionInvoice: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     paymentsService = { reconcilePaydunyaPayment: jest.fn().mockResolvedValue(undefined) };
-    task = new PaydunyaReconciliationTask(prisma as never, paymentsService as never);
+    subscriptionsService = {
+      reconcilePaydunyaSubscriptionInvoice: jest.fn().mockResolvedValue(undefined),
+    };
+    task = new PaydunyaReconciliationTask(
+      prisma as never,
+      paymentsService as never,
+      subscriptionsService as never,
+    );
     (withAdvisoryLock as jest.Mock).mockClear();
   });
 
@@ -58,5 +72,36 @@ describe('PaydunyaReconciliationTask', () => {
 
     await expect(task.run()).resolves.toBeUndefined();
     expect(paymentsService.reconcilePaydunyaPayment).toHaveBeenCalledTimes(8);
+  });
+
+  it('cible aussi les SubscriptionInvoice PENDING avec transactionId, bloquées au-delà du seuil (voir /architect abonnements)', async () => {
+    await task.run();
+
+    const [findManyArgs] = prisma.subscriptionInvoice.findMany.mock.calls[0] as [
+      {
+        where: { status: string; transactionId: { not: null }; createdAt: { lt: Date } };
+        take: number;
+      },
+    ];
+    expect(findManyArgs.where.status).toBe('PENDING');
+    expect(findManyArgs.where.transactionId).toEqual({ not: null });
+    expect(findManyArgs.where.createdAt.lt).toBeInstanceOf(Date);
+    expect(findManyArgs.take).toBe(30);
+  });
+
+  it('réconcilie chaque facture d’abonnement trouvée', async () => {
+    prisma.subscriptionInvoice.findMany.mockResolvedValue([
+      { id: 'invoice-1' },
+      { id: 'invoice-2' },
+    ]);
+
+    await task.run();
+
+    expect(subscriptionsService.reconcilePaydunyaSubscriptionInvoice).toHaveBeenCalledWith(
+      'invoice-1',
+    );
+    expect(subscriptionsService.reconcilePaydunyaSubscriptionInvoice).toHaveBeenCalledWith(
+      'invoice-2',
+    );
   });
 });
