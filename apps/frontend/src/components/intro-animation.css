@@ -1,6 +1,6 @@
 /* Overlay plein écran, par-dessus la page qui continue de charger en
-   dessous (jamais bloquant) — voir /architect animation d'accueil,
-   2026-09-30. Dégradé bleu marine canonique du projet (CLAUDE.md). */
+   dessous (jamais bloquant) — dégradé bleu marine canonique du projet
+   (CLAUDE.md). Voir /architect animation d'accueil, révisé le 2026-09-30. */
 .intro-overlay {
   position: fixed;
   inset: 0;
@@ -8,25 +8,52 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(10, 38, 80, 0.97) 0%, rgba(15, 76, 129, 0.97) 60%, rgba(8, 30, 65, 0.97) 100%);
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(10, 38, 80, 0.98) 0%, rgba(15, 76, 129, 0.98) 55%, rgba(8, 30, 65, 0.98) 100%);
   opacity: 1;
-  animation: introOverlayIn 0.4s ease-out;
+  transform: scale(1);
+  animation: introOverlayIn 0.5s ease-out;
   /* La fermeture est pilotée par le composant (classe ajoutée puis démontage
      après la transition, voir intro-animation.tsx) — un seul minutage à
      tenir à jour plutôt qu'un délai CSS figé à resynchroniser à la main. */
-  transition: opacity 0.4s ease-in;
+  transition: opacity 0.5s ease-in, transform 0.6s ease-in;
 }
-.intro-overlay-closing { opacity: 0; }
+/* Léger zoom à la sortie plutôt qu'un simple fondu plat — donne une
+   sensation de "rideau qui s'ouvre" vers le vrai contenu. */
+.intro-overlay-closing { opacity: 0; transform: scale(1.04); }
 
 @keyframes introOverlayIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
+/* Texture de fond — points dorés flous qui dérivent lentement. Coûte
+   quasiment rien (transform/opacity uniquement), même esprit que
+   .hero-glow-dots déjà utilisé sur la page d'accueil : cohérence visuelle
+   plutôt qu'un nouveau motif inventé. */
+.intro-orbs { position: absolute; inset: 0; pointer-events: none; }
+.intro-orb {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(224, 182, 85, 0.55) 0%, rgba(224, 182, 85, 0) 70%);
+  filter: blur(2px);
+  animation: introOrbFloat 7s ease-in-out infinite;
+}
+.intro-orb-1 { width: 220px; height: 220px; top: 8%; left: 10%; animation-duration: 8s; }
+.intro-orb-2 { width: 160px; height: 160px; bottom: 12%; right: 12%; animation-duration: 9s; animation-delay: 1s; }
+.intro-orb-3 { width: 120px; height: 120px; top: 55%; left: 78%; animation-duration: 6.5s; animation-delay: 0.4s; }
+.intro-orb-4 { width: 90px; height: 90px; bottom: 22%; left: 20%; animation-duration: 7.5s; animation-delay: 2s; }
+
+@keyframes introOrbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
+  50% { transform: translate(14px, -18px) scale(1.08); opacity: 0.85; }
+}
+
 .intro-close {
   position: absolute;
   top: 16px;
   right: 16px;
+  z-index: 2;
   width: 44px;
   height: 44px;
   border-radius: 999px;
@@ -41,97 +68,105 @@
 }
 .intro-close:hover { background: rgba(255, 255, 255, 0.2); }
 
-.intro-card {
-  width: 340px;
-  max-width: calc(100vw - 2.5rem);
+.intro-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 720px;
+  padding: 0 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  animation: introCardIn 0.5s ease-out;
 }
-@keyframes introCardIn {
-  from { opacity: 0; transform: translateY(14px); }
+
+.intro-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 40px;
+  opacity: 0;
+  animation: introFadeIn 0.5s ease-out 0.1s forwards;
+}
+.intro-kicker-mark { height: 30px; width: auto; }
+.intro-kicker-word {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.85);
+}
+@keyframes introFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.intro-logo {
+/* Hauteur fixe : les 3 accroches se superposent (position absolute) et se
+   fondent l'une dans l'autre au même endroit, plutôt que de s'empiler et de
+   faire bouger le reste de la mise en page. */
+.intro-headline-stack {
+  position: relative;
+  width: 100%;
+  height: 168px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 28px;
-  opacity: 0;
-  animation: introLogoIn 0.6s ease-out 0.1s forwards;
+  justify-content: center;
 }
-.intro-logo-mark { height: 34px; width: auto; }
-.intro-logo-word {
-  font-size: 22px;
+
+.intro-headline {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: clamp(28px, 5.4vw, 50px);
+  line-height: 1.15;
   font-weight: 800;
-  letter-spacing: 0.04em;
   color: #fff;
-}
-@keyframes introLogoIn {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-.intro-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 84px;
-  justify-content: center;
-  margin-bottom: 22px;
-}
-
-.intro-line {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 16px;
-  font-weight: 600;
+  letter-spacing: -0.01em;
   opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.4s ease-out, transform 0.4s ease-out, color 0.4s ease-out;
+  transform: translateY(16px) scale(0.97);
+  transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.intro-line-active {
+.intro-headline-active {
   opacity: 1;
-  transform: translateY(0);
-  color: #fff;
+  transform: translateY(0) scale(1);
+  background: linear-gradient(90deg, #fff 0%, #fff 55%, var(--color-accent-light, #E0B655) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-.intro-line-done {
-  opacity: 1;
-  transform: translateY(0);
-  color: rgba(255, 255, 255, 0.4);
-}
-.intro-line-active svg { color: var(--color-accent-light, #E0B655); }
-
-.intro-progress {
-  width: 140px;
-  height: 3px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-  overflow: hidden;
-}
-.intro-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-accent, #C9982E), var(--color-accent-light, #E0B655));
-  border-radius: 999px;
-  transition: width 0.9s ease-in-out;
+.intro-headline-past {
+  opacity: 0;
+  transform: translateY(-16px) scale(0.97);
 }
 
-/* Accessibilité : moins de mouvement, l'overlay reste tout aussi lisible,
-   juste sans les transitions/animations intermédiaires. */
+.intro-dots { display: flex; align-items: center; gap: 10px; margin-top: 36px; }
+.intro-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 0.4s ease, transform 0.4s ease;
+}
+.intro-dot-active {
+  background: var(--color-accent-light, #E0B655);
+  transform: scale(1.3);
+}
+
+/* Accessibilité : moins de mouvement, le contenu final reste tout aussi
+   lisible, juste sans les transitions/dérives intermédiaires. */
 @media (prefers-reduced-motion: reduce) {
-  .intro-overlay { animation: none; }
-  .intro-card, .intro-logo, .intro-line { animation: none; transition: none; }
-  .intro-logo { opacity: 1; transform: none; }
-  .intro-line { opacity: 1; transform: none; }
+  .intro-overlay { animation: none; transition: opacity 0.3s ease; }
+  .intro-orb { animation: none; opacity: 0.4; }
+  .intro-kicker { animation: none; opacity: 1; }
+  .intro-headline { transition: opacity 0.3s ease; transform: none; }
+  .intro-headline-past { transform: none; }
+  .intro-headline-active { transform: none; }
 }
 
-@media (max-width: 420px) {
-  .intro-card { width: 100%; }
-  .intro-line { font-size: 15px; }
+@media (max-width: 480px) {
+  .intro-headline-stack { height: 130px; }
+  .intro-kicker { margin-bottom: 28px; }
+  .intro-dots { margin-top: 24px; }
 }

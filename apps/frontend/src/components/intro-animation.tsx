@@ -1,25 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Home, Wallet, Moon, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import './intro-animation.css';
 
 const STORAGE_KEY = 'warah_intro_seen';
 
-// Trois temps, calqués sur le rythme (logo → phrases qui se révèlent l'une
-// après l'autre, barre dorée qui progresse) observé sur le site de
-// référence donné par le client, adapté à l'identité WARAH : pas de carte
-// ni de chiffre inventé, seulement le logo et l'accroche déjà utilisée par
+// Une grande accroche à la fois (façon titre, pas une liste) — plus imposant
+// à l'écran que 3 petites lignes empilées, sur le même principe de
+// révélation séquentielle que le site de référence du client, sans le
+// copier : pas de carte ni de chiffre inventé, l'accroche déjà utilisée par
 // le site (voir <title>, layout.tsx) — voir /architect animation d'accueil,
-// 2026-09-30.
-const LINES: { icon: typeof Home; text: string }[] = [
-  { icon: Home, text: 'Gérez vos biens' },
-  { icon: Wallet, text: 'Encaissez vos loyers' },
-  { icon: Moon, text: 'Dormez tranquille' },
-];
-const LINE_DURATION_MS = 1000;
-const LOGO_DURATION_MS = 700;
-const TOTAL_MS = LOGO_DURATION_MS + LINES.length * LINE_DURATION_MS;
+// révisé le 2026-09-30 (« plus impressionnant » demandé par le client).
+const LINES = ['Gérez vos biens.', 'Encaissez vos loyers.', 'Dormez tranquille.'];
+const LINE_DURATION_MS = 1300;
+const KICKER_DURATION_MS = 500;
+const TOTAL_MS = KICKER_DURATION_MS + LINES.length * LINE_DURATION_MS;
 
 // Jouée une seule fois par appareil (mémorisée en localStorage) — jamais
 // rejouée ensuite, jamais si elle retarderait le rendu du vrai contenu en
@@ -30,7 +26,7 @@ export function IntroAnimation() {
   // undefined tant qu'on ne sait pas encore si elle a déjà été vue (évite un
   // flash côté serveur/premier rendu client avant lecture du localStorage).
   const [visible, setVisible] = useState<boolean | undefined>(undefined);
-  const [step, setStep] = useState(0); // 0 = logo, 1..N = ligne affichée
+  const [step, setStep] = useState(0); // 0 = juste le sigle, 1..N = ligne N affichée
   // Piloté par JS plutôt qu'un délai figé en CSS — un seul minutage à tenir
   // à jour, jamais deux horloges indépendantes à resynchroniser à la main.
   const [closing, setClosing] = useState(false);
@@ -49,9 +45,9 @@ export function IntroAnimation() {
 
   useEffect(() => {
     if (!visible) return;
-    // prefers-reduced-motion : on saute directement à la dernière étape
-    // (logo + accroche visibles sans les transitions intermédiaires) puis
-    // referme presque aussitôt, au lieu d'imposer les animations.
+    // prefers-reduced-motion : on affiche directement la dernière accroche
+    // sans les transitions intermédiaires, puis referme presque aussitôt,
+    // au lieu d'imposer les animations.
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) {
       setStep(LINES.length);
@@ -60,10 +56,10 @@ export function IntroAnimation() {
     }
 
     const timers: ReturnType<typeof setTimeout>[] = [];
-    for (let i = 0; i <= LINES.length; i++) {
-      timers.push(setTimeout(() => setStep(i), LOGO_DURATION_MS + i * LINE_DURATION_MS));
+    for (let i = 1; i <= LINES.length; i++) {
+      timers.push(setTimeout(() => setStep(i), KICKER_DURATION_MS + (i - 1) * LINE_DURATION_MS));
     }
-    timers.push(setTimeout(dismiss, TOTAL_MS + 500));
+    timers.push(setTimeout(dismiss, TOTAL_MS + 600));
     return () => timers.forEach(clearTimeout);
   }, [visible]);
 
@@ -78,31 +74,50 @@ export function IntroAnimation() {
       // pourra rejouer à la prochaine visite ; jamais bloquant.
     }
     setClosing(true);
-    setTimeout(() => setVisible(false), 400);
+    setTimeout(() => setVisible(false), 500);
   }
 
   if (!visible) return null;
 
   return (
     <div className={`intro-overlay${closing ? ' intro-overlay-closing' : ''}`} role="dialog" aria-label="Bienvenue sur WARAH">
+      {/* Texture de fond discrète (points dorés qui dérivent lentement) —
+          coûte quasiment rien (transform/opacity en CSS pur), même esprit
+          que .hero-glow-dots déjà utilisé sur la page d'accueil, pour rester
+          cohérent avec l'identité visuelle plutôt que d'inventer un nouveau
+          motif. */}
+      <div className="intro-orbs" aria-hidden="true">
+        <span className="intro-orb intro-orb-1" />
+        <span className="intro-orb intro-orb-2" />
+        <span className="intro-orb intro-orb-3" />
+        <span className="intro-orb intro-orb-4" />
+      </div>
+
       <button type="button" className="intro-close" onClick={dismiss} aria-label="Passer l'introduction">
         <X className="w-4 h-4" />
       </button>
-      <div className="intro-card">
-        <div className="intro-logo">
-          <img src="/warah-icon.png" alt="" className="intro-logo-mark" />
-          <span className="intro-logo-word">WARAH</span>
+
+      <div className="intro-content">
+        <div className="intro-kicker">
+          <img src="/warah-icon.png" alt="" className="intro-kicker-mark" />
+          <span className="intro-kicker-word">WARAH</span>
         </div>
-        <div className="intro-lines">
-          {LINES.map(({ icon: Icon, text }, i) => (
-            <div key={text} className={`intro-line${step === i + 1 ? ' intro-line-active' : ''}${step > i + 1 ? ' intro-line-done' : ''}`}>
-              <Icon className="w-4 h-4 shrink-0" />
-              <span>{text}</span>
-            </div>
+
+        <div className="intro-headline-stack">
+          {LINES.map((line, i) => (
+            <h2
+              key={line}
+              className={`intro-headline${step === i + 1 ? ' intro-headline-active' : ''}${step > i + 1 ? ' intro-headline-past' : ''}`}
+            >
+              {line}
+            </h2>
           ))}
         </div>
-        <div className="intro-progress">
-          <div className="intro-progress-fill" style={{ width: `${Math.min(step, LINES.length) * (100 / LINES.length)}%` }} />
+
+        <div className="intro-dots">
+          {LINES.map((line, i) => (
+            <span key={line} className={`intro-dot${step >= i + 1 ? ' intro-dot-active' : ''}`} />
+          ))}
         </div>
       </div>
     </div>
