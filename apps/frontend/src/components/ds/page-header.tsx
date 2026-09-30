@@ -23,7 +23,12 @@ export function PageHeader({ title, subtitle, badge, actions }: PageHeaderProps)
         </div>
         {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
+      {/* flex-wrap : sans lui, 2 boutons (icône + texte) dans `actions` peuvent
+          dépasser la largeur de l'écran sur mobile au lieu de passer à la
+          ligne — trouvé lors de l'audit responsive du 2026-09-30 sur la page
+          Délégation (2 actions), présent partout où PageHeader reçoit
+          plusieurs actions. */}
+      {actions && <div className="flex flex-wrap items-center justify-end gap-2.5 shrink-0 max-sm:w-full">{actions}</div>}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
 interface ManagerSummary { id: string; firstName: string; lastName: string; }
 interface Property {
   id: string; address: string | null; neighborhood: string; city: string; status: string;
+  building: string | null;
 }
 type Mandate = MandateWithParties;
 
@@ -68,10 +69,31 @@ export default function DelegationPage() {
     const q = propSearch.trim().toLowerCase();
     if (!q) return availableProps;
     return availableProps.filter(
-      (p) => (p.address ?? '').toLowerCase().includes(q) || p.neighborhood.toLowerCase().includes(q) || p.city.toLowerCase().includes(q),
+      (p) =>
+        (p.address ?? '').toLowerCase().includes(q) ||
+        p.neighborhood.toLowerCase().includes(q) ||
+        p.city.toLowerCase().includes(q) ||
+        (p.building ?? '').toLowerCase().includes(q),
     );
   })();
   const allFilteredSelected = filteredProps.length > 0 && filteredProps.every((p) => selected.includes(p.id));
+
+  // Regroupé par immeuble pour rester lisible même avec beaucoup de biens
+  // (voir /architect délégation, 2026-09-30) — les biens sans immeuble
+  // renseigné forment un dernier groupe « Sans immeuble ».
+  const groupedFilteredProps = (() => {
+    const groups = new Map<string, Property[]>();
+    for (const p of filteredProps) {
+      const key = p.building ?? '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(p);
+    }
+    const named = Array.from(groups.entries())
+      .filter(([key]) => key !== '')
+      .sort(([a], [b]) => a.localeCompare(b, 'fr'));
+    const withoutBuilding = groups.get('');
+    return withoutBuilding ? [...named, ['Sans immeuble', withoutBuilding] as [string, Property[]]] : named;
+  })();
 
   function toggleProp(id: string) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -228,38 +250,65 @@ export default function DelegationPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 mt-1.5 mb-2">
-                    <div className="relative flex-1">
+                  {/* Recherche sur sa propre ligne pleine largeur — accolée à
+                      "Tout sélectionner" sur la même ligne, le placeholder se
+                      retrouvait tronqué dès 375px de large (trouvé lors de
+                      l'audit responsive du 2026-09-30). */}
+                  <div className="flex flex-col gap-2 mt-1.5 mb-2">
+                    <div className="relative">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                       <Input
-                        className="pl-8 h-9"
-                        placeholder="Rechercher un bien (adresse, quartier, ville)…"
+                        className="pl-8 h-9 w-full"
+                        placeholder="Rechercher (adresse, quartier, immeuble)…"
                         value={propSearch}
                         onChange={(e) => setPropSearch(e.target.value)}
                       />
                     </div>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-primary whitespace-nowrap hover:underline shrink-0"
-                      onClick={toggleSelectAllFiltered}
-                    >
-                      {allFilteredSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
-                    </button>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {filteredProps.length} bien{filteredProps.length > 1 ? 's' : ''} disponible{filteredProps.length > 1 ? 's' : ''}
+                      </span>
+                      {/* min-h-11 (44px) : zone cliquable conforme même si le
+                          texte du lien reste petit visuellement. */}
+                      <button
+                        type="button"
+                        className="flex items-center min-h-11 px-2 -my-2.5 text-xs font-semibold text-primary whitespace-nowrap hover:underline shrink-0"
+                        onClick={toggleSelectAllFiltered}
+                      >
+                        {allFilteredSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                      </button>
+                    </div>
                   </div>
                   {filteredProps.length === 0 ? (
                     <div className="text-sm text-muted-foreground text-center py-6 border border-ds-border rounded-lg">
                       Aucun bien ne correspond à votre recherche.
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 max-h-56 overflow-y-auto border border-ds-border rounded-lg p-3">
-                      {filteredProps.map((p) => (
-                        <label key={p.id} className={`flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md border ${selected.includes(p.id) ? 'bg-primary-50 dark:bg-ds-secondary border-primary/20' : 'border-transparent'}`}>
-                          <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} className="w-4 h-4 shrink-0 accent-primary" />
-                          <div>
-                            <div className="font-semibold text-sm text-foreground">{p.address || p.neighborhood}</div>
-                            <div className="text-xs text-muted-foreground">{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
+                    // max-h-[45vh] plutôt que 56 (224px) fixe : la liste garde
+                    // beaucoup plus d'espace visible sur mobile comme sur
+                    // desktop au lieu d'être coincée dans une petite fenêtre —
+                    // c'était le cœur de la plainte client sur la délégation.
+                    <div className="flex flex-col gap-3 max-h-[45vh] overflow-y-auto border border-ds-border rounded-lg p-2.5">
+                      {groupedFilteredProps.map(([building, props]) => (
+                        <div key={building}>
+                          <div className="px-1.5 pb-1 text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
+                            {building} · {props.length}
                           </div>
-                        </label>
+                          <div className="flex flex-col gap-1">
+                            {props.map((p) => (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-3 cursor-pointer min-h-11 px-3 py-2.5 rounded-md border ${selected.includes(p.id) ? 'bg-primary-50 dark:bg-ds-secondary border-primary/20' : 'border-transparent hover:bg-ds-secondary'}`}
+                              >
+                                <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleProp(p.id)} className="w-[18px] h-[18px] shrink-0 accent-primary" />
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-sm text-foreground truncate">{p.address || p.neighborhood}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{p.neighborhood}, {p.city} · {STATUS_LABELS[p.status] ?? p.status}</div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
