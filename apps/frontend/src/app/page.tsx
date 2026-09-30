@@ -6,6 +6,7 @@ import AOS from 'aos';
 import 'aos/dist/aos.css';
 import PublicNavbar from '@/components/public-navbar';
 import PublicFooter from '@/components/public-footer';
+import { IntroAnimation } from '@/components/intro-animation';
 import './page.css';
 
 interface HeroSlide { badge: string; title: string; subtitle: string; cta: string; link: string; photo: string; }
@@ -172,6 +173,7 @@ export default function LandingPage() {
 
   return (
     <div className="lp">
+      <IntroAnimation />
       <PublicNavbar />
 
       {/* ── HERO ── */}
