@@ -5,10 +5,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { initiales } from '@/lib/format';
+import { initiales, formatFcfa } from '@/lib/format';
 import { PAYOUT_OPERATOR_LABELS, type PayoutOperator } from '@/lib/payout-account';
+import {
+  getQuotaStatus,
+  payCurrentInvoice,
+  SUBSCRIPTION_TIER_LABELS,
+  SUBSCRIPTION_TIER_TONE,
+} from '@/lib/subscription';
 import { NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
-import { PageHeader, Card, CardBody, Label, Input, Button, Badge } from '@/components/ds';
+import { PageHeader, Card, CardBody, Label, Input, Button, Badge, Skeleton } from '@/components/ds';
 
 interface UserProfile {
   id: string;
@@ -54,12 +60,36 @@ export default function ProfilPage() {
   const [success, setSuccess] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [payingInvoice, setPayingInvoice] = useState(false);
+  const [payError, setPayError] = useState('');
 
   const receivesPayouts = profile?.role === 'OWNER' || profile?.role === 'MANAGER';
   const payoutRoutingChanged =
     receivesPayouts &&
     !!profile &&
     (form.phone !== (profile.phone ?? '') || payoutOperator !== profile.payoutOperator);
+
+  // Abonnement (forfait + quota) — lecture seule, voir /architect
+  // abonnements, 2026-09-30 : pas de bouton "changer de forfait gratuitement"
+  // tant qu'aucun vrai paiement n'existe derrière cet endpoint. TENANT/ADMIN
+  // n'ont pas d'abonnement, jamais interrogé pour ces rôles.
+  const { data: quota, isLoading: quotaLoading, isError: quotaError } = useQuery({
+    queryKey: ['subscription-quota'],
+    queryFn: getQuotaStatus,
+    enabled: !!receivesPayouts,
+  });
+
+  async function payInvoice() {
+    setPayingInvoice(true);
+    setPayError('');
+    try {
+      const { checkoutUrl } = await payCurrentInvoice();
+      window.location.href = checkoutUrl;
+    } catch (err: unknown) {
+      setPayError(err instanceof Error ? err.message : 'Erreur lors de la création du paiement');
+      setPayingInvoice(false);
+    }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -154,6 +184,54 @@ export default function ProfilPage() {
           </Card>
 
           <div className="flex flex-col gap-5">
+            {receivesPayouts && (
+              <Card>
+                <CardBody>
+                  <h2 className="text-base font-bold text-foreground mb-3">Abonnement</h2>
+                  {quotaLoading ? (
+                    <Skeleton className="h-16" />
+                  ) : quotaError ? (
+                    <div className="text-sm text-red-600">
+                      Impossible de charger votre abonnement. Rechargez la page.
+                    </div>
+                  ) : quota ? (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge tone={SUBSCRIPTION_TIER_TONE[quota.tier]}>
+                          {SUBSCRIPTION_TIER_LABELS[quota.tier]}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {quota.managedPropertiesQuota === null
+                            ? 'Biens facturables : illimité'
+                            : `${quota.billablePropertiesCount} / ${quota.managedPropertiesQuota} biens facturables`}
+                        </span>
+                      </div>
+                      {quota.betaUntil && new Date(quota.betaUntil) > new Date() && (
+                        <p className="text-xs text-muted-foreground">
+                          Gratuit jusqu&apos;au{' '}
+                          {new Date(quota.betaUntil).toLocaleDateString('fr-FR', {
+                            day: 'numeric', month: 'long', year: 'numeric',
+                          })}
+                        </p>
+                      )}
+                      {quota.pendingInvoice && (
+                        <div className="bg-ds-secondary rounded-lg px-3.5 py-3 flex flex-col gap-2">
+                          <p className="text-sm text-foreground">
+                            Abonnement {quota.pendingInvoice.periodLabel} à régler —{' '}
+                            <strong>{formatFcfa(quota.pendingInvoice.amount)}</strong>
+                          </p>
+                          {payError && <p className="text-sm text-red-600">{payError}</p>}
+                          <Button type="button" loading={payingInvoice} onClick={payInvoice} className="self-start">
+                            Payer mon abonnement maintenant
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </CardBody>
+              </Card>
+            )}
+
             <Card>
               <CardBody>
                 <h2 className="text-base font-bold text-foreground mb-5">Informations personnelles</h2>

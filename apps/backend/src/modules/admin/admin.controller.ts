@@ -11,6 +11,8 @@ import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { SuspendUserDto } from './dto/suspend-user.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
+import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -20,6 +22,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly managerReviews: ManagerReviewsService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   @Get('stats')
@@ -100,5 +103,19 @@ export class AdminController {
   @ApiOperation({ summary: 'Masque ou réaffiche un avis signalé (super admin)' })
   moderateReview(@Param('id') id: string, @Body() dto: ModerateReviewDto): Promise<ManagerReview> {
     return this.managerReviews.moderate(id, dto);
+  }
+
+  @Get('settings')
+  @ApiOperation({
+    summary: 'Réglages plateforme (super admin) — suspension des quotas, facturation abonnements',
+  })
+  getSettings() {
+    return this.platformSettings.get();
+  }
+
+  @Patch('settings')
+  @ApiOperation({ summary: 'Modifie les réglages plateforme (super admin)' })
+  updateSettings(@Body() dto: UpdatePlatformSettingsDto) {
+    return this.platformSettings.update(dto);
   }
 }

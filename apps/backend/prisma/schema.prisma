@@ -737,15 +737,31 @@ model SubscriptionInvoice {
   amount         Int
   status         InvoiceStatus @default(PENDING)
   transactionId  String?       @unique
+  checkoutUrl    String?
   attemptCount   Int           @default(0)
   paidAt         DateTime?     @db.Timestamptz(6)
   periodStart    DateTime      @db.Timestamptz(6)
   periodEnd      DateTime      @db.Timestamptz(6)
+  reminder3SentAt DateTime?    @db.Timestamptz(6)
+  reminder7SentAt DateTime?    @db.Timestamptz(6)
   createdAt      DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
 
   @@index([subscriptionId])
   @@map("subscription_invoices")
+}
+
+// Réglages plateforme pilotés par le super-admin (voir /architect abonnements,
+// 2026-09-30) — ligne unique (id fixe "singleton"), jamais un système de
+// clé-valeur générique : seuls ces deux interrupteurs existent aujourd'hui,
+// pas besoin d'une table ouverte à n'importe quelle clé pour deux booléens.
+model PlatformSettings {
+  id                          String   @id @default("singleton")
+  subscriptionQuotasSuspended Boolean  @default(false)
+  subscriptionBillingEnabled  Boolean  @default(false)
+  updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("platform_settings")
 }
 
 // ────────────────────────────────────────────────────────────────

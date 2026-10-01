@@ -6,14 +6,26 @@ describe('SubscriptionsService', () => {
   let service: SubscriptionsService;
   let prisma: {
     subscription: { findUnique: jest.Mock; update: jest.Mock };
+    subscriptionInvoice: {
+      findFirst: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    user: { updateMany: jest.Mock };
     property: { count: jest.Mock };
     $executeRaw: jest.Mock;
   };
+  let platformSettings: { quotasSuspended: jest.Mock };
+  let paydunya: { createInvoice: jest.Mock; confirmInvoiceStatus: jest.Mock };
+  let config: { getOrThrow: jest.Mock };
+  let notify: { notifyUser: jest.Mock };
 
   const owner = { id: 'owner-1', role: 'OWNER' } as AuthenticatedUser;
 
   function makeSubscription(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
+      id: 'sub-1',
       userId: 'owner-1',
       tier: 'STARTER',
       status: 'ACTIVE',
@@ -27,10 +39,31 @@ describe('SubscriptionsService', () => {
   beforeEach(() => {
     prisma = {
       subscription: { findUnique: jest.fn(), update: jest.fn() },
+      subscriptionInvoice: {
+        findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      user: { updateMany: jest.fn() },
       property: { count: jest.fn() },
       $executeRaw: jest.fn().mockResolvedValue(undefined),
     };
-    service = new SubscriptionsService(prisma as never);
+    platformSettings = { quotasSuspended: jest.fn().mockResolvedValue(false) };
+    paydunya = { createInvoice: jest.fn(), confirmInvoiceStatus: jest.fn() };
+    config = {
+      getOrThrow: jest.fn((key: string) =>
+        key === 'API_BASE_URL' ? 'https://api.warahcontact.com' : 'https://www.warahcontact.com',
+      ),
+    };
+    notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
+    service = new SubscriptionsService(
+      prisma as never,
+      platformSettings as never,
+      paydunya as never,
+      config as never,
+      notify as never,
+    );
   });
 
   describe('countBillableProperties', () => {
@@ -88,6 +121,43 @@ describe('SubscriptionsService', () => {
 
       expect(result.remaining).toBe(0);
     });
+
+    it('renvoie un quota illimité si le super-admin a suspendu les quotas (voir /architect abonnements)', async () => {
+      platformSettings.quotasSuspended.mockResolvedValueOnce(true);
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription({ tier: 'STARTER' }));
+      prisma.property.count.mockResolvedValueOnce(9);
+
+      const result = await service.getQuotaStatus(owner);
+
+      expect(result.managedPropertiesQuota).toBeNull();
+      expect(result.remaining).toBeNull();
+    });
+
+    it('renvoie pendingInvoice=null si aucune facture en attente', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.property.count.mockResolvedValueOnce(1);
+      prisma.subscriptionInvoice.findFirst.mockResolvedValueOnce(null);
+
+      const result = await service.getQuotaStatus(owner);
+
+      expect(result.pendingInvoice).toBeNull();
+    });
+
+    it('renvoie le montant et la période de la facture PENDING la plus ancienne', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.property.count.mockResolvedValueOnce(1);
+      prisma.subscriptionInvoice.findFirst.mockResolvedValueOnce({
+        amount: 2000,
+        periodStart: new Date('2026-10-01'),
+      });
+
+      const result = await service.getQuotaStatus(owner);
+
+      expect(result.pendingInvoice).toEqual({
+        amount: 2000,
+        periodLabel: expect.any(String) as string,
+      });
+    });
   });
 
   describe('assertQuotaAvailable', () => {
@@ -121,6 +191,16 @@ describe('SubscriptionsService', () => {
       await expect(
         service.assertQuotaAvailable(prisma as never, 'owner-1'),
       ).resolves.toBeUndefined();
+    });
+
+    it('ne lève rien et ne verrouille/ne lit rien si le super-admin a suspendu les quotas', async () => {
+      platformSettings.quotasSuspended.mockResolvedValueOnce(true);
+
+      await expect(
+        service.assertQuotaAvailable(prisma as never, 'owner-1'),
+      ).resolves.toBeUndefined();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      expect(prisma.subscription.findUnique).not.toHaveBeenCalled();
     });
   });
 
@@ -170,6 +250,148 @@ describe('SubscriptionsService', () => {
 
       const [args] = prisma.subscription.update.mock.calls[0] as [{ data: { cancelAt: Date } }];
       expect(args.data.cancelAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('payCurrentInvoice', () => {
+    it('lève NotFoundException si aucune facture PENDING', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.subscriptionInvoice.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.payCurrentInvoice(owner)).rejects.toThrow(NotFoundException);
+    });
+
+    it('réutilise la référence PayDunya déjà créée plutôt que d’en recréer une (même pattern que PaymentsService.initiate())', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.subscriptionInvoice.findFirst.mockResolvedValueOnce({
+        id: 'invoice-1',
+        transactionId: 'token-1',
+        checkoutUrl: 'https://paydunya.test/checkout/token-1',
+      });
+
+      const result = await service.payCurrentInvoice(owner);
+
+      expect(paydunya.createInvoice).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        invoiceId: 'invoice-1',
+        checkoutUrl: 'https://paydunya.test/checkout/token-1',
+      });
+    });
+
+    it('crée une facture PayDunya à la demande si aucun essai précédent', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.subscriptionInvoice.findFirst.mockResolvedValueOnce({
+        id: 'invoice-1',
+        amount: 2000,
+        periodStart: new Date('2026-10-01'),
+        transactionId: null,
+        checkoutUrl: null,
+      });
+      paydunya.createInvoice.mockResolvedValueOnce({
+        token: 'token-2',
+        checkoutUrl: 'https://paydunya.test/checkout/token-2',
+      });
+      prisma.subscriptionInvoice.update.mockResolvedValueOnce({});
+
+      const result = await service.payCurrentInvoice(owner);
+
+      expect(paydunya.createInvoice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 2000,
+          paymentId: 'invoice-1',
+          callbackUrl: expect.stringContaining('subscriptionInvoiceId=invoice-1') as string,
+        }),
+      );
+      expect(prisma.subscriptionInvoice.update).toHaveBeenCalledWith({
+        where: { id: 'invoice-1' },
+        data: {
+          transactionId: 'token-2',
+          checkoutUrl: 'https://paydunya.test/checkout/token-2',
+          attemptCount: { increment: 1 },
+        },
+      });
+      expect(result).toEqual({
+        invoiceId: 'invoice-1',
+        checkoutUrl: 'https://paydunya.test/checkout/token-2',
+      });
+    });
+  });
+
+  describe('reconcilePaydunyaSubscriptionInvoice', () => {
+    it('ne fait rien si la facture est introuvable, déjà payée, ou sans transactionId', async () => {
+      prisma.subscriptionInvoice.findUnique.mockResolvedValueOnce(null);
+      await service.reconcilePaydunyaSubscriptionInvoice('invoice-1');
+      expect(paydunya.confirmInvoiceStatus).not.toHaveBeenCalled();
+    });
+
+    it('marque PAID et réactive un compte SUSPENDED_PAYMENT si PayDunya confirme "completed"', async () => {
+      prisma.subscriptionInvoice.findUnique.mockResolvedValueOnce({
+        id: 'invoice-1',
+        status: 'PENDING',
+        transactionId: 'token-1',
+        subscription: { userId: 'owner-1' },
+      });
+      paydunya.confirmInvoiceStatus.mockResolvedValueOnce({ status: 'completed', amount: 2000 });
+      prisma.subscriptionInvoice.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.user.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      await service.reconcilePaydunyaSubscriptionInvoice('invoice-1');
+
+      expect(prisma.subscriptionInvoice.updateMany).toHaveBeenCalledWith({
+        where: { id: 'invoice-1', status: 'PENDING' },
+        data: { status: 'PAID', paidAt: expect.any(Date) as Date },
+      });
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'owner-1', accountStatus: 'SUSPENDED_PAYMENT' },
+        data: { accountStatus: 'ACTIVE' },
+      });
+      expect(notify.notifyUser).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'owner-1', event: 'account-reactivated' }),
+      );
+    });
+
+    it('ne réactive rien si le compte n’était pas suspendu pour impayé', async () => {
+      prisma.subscriptionInvoice.findUnique.mockResolvedValueOnce({
+        id: 'invoice-1',
+        status: 'PENDING',
+        transactionId: 'token-1',
+        subscription: { userId: 'owner-1' },
+      });
+      paydunya.confirmInvoiceStatus.mockResolvedValueOnce({ status: 'completed', amount: 2000 });
+      prisma.subscriptionInvoice.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.user.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await service.reconcilePaydunyaSubscriptionInvoice('invoice-1');
+
+      expect(notify.notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('ne touche à rien si PayDunya renvoie "pending"', async () => {
+      prisma.subscriptionInvoice.findUnique.mockResolvedValueOnce({
+        id: 'invoice-1',
+        status: 'PENDING',
+        transactionId: 'token-1',
+        subscription: { userId: 'owner-1' },
+      });
+      paydunya.confirmInvoiceStatus.mockResolvedValueOnce({ status: 'pending', amount: null });
+
+      await service.reconcilePaydunyaSubscriptionInvoice('invoice-1');
+
+      expect(prisma.subscriptionInvoice.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('laisse la facture PENDING si PayDunya renvoie "cancelled"/"failed" — la relance/suspension s’en occupe, pas la réconciliation', async () => {
+      prisma.subscriptionInvoice.findUnique.mockResolvedValueOnce({
+        id: 'invoice-1',
+        status: 'PENDING',
+        transactionId: 'token-1',
+        subscription: { userId: 'owner-1' },
+      });
+      paydunya.confirmInvoiceStatus.mockResolvedValueOnce({ status: 'failed', amount: null });
+
+      await service.reconcilePaydunyaSubscriptionInvoice('invoice-1');
+
+      expect(prisma.subscriptionInvoice.updateMany).not.toHaveBeenCalled();
     });
   });
 });

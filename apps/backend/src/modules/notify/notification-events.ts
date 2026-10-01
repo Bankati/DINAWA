@@ -100,6 +100,11 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{amount} FCFA à reverser à {beneficiaryName} : {reason}.',
     url: '/admin/reversements',
   },
+  'subscription-invoice-due': {
+    title: 'Abonnement à régler',
+    body: 'Votre abonnement {tierLabel} pour {periodLabel} est à régler.',
+    url: '/profil',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {
