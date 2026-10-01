@@ -10,6 +10,7 @@ import * as bodyParser from 'body-parser';
 import { AppModule } from './app.module';
 import { buildSwaggerConfig } from './swagger.config';
 import { parseAllowedOrigins } from './common/utils/parse-allowed-origins';
+import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -38,6 +39,12 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix('api', {
     exclude: ['health/live', 'health/ready'],
   });
+
+  // Messages d'erreur Multer (taille/nombre de fichiers) traduits en
+  // français — sans ça, un dépassement de limite remonte un message brut
+  // en anglais directement au client (voir /architect messages d'erreur en
+  // français, 2026-10-01).
+  app.useGlobalFilters(new MulterExceptionFilter());
 
   // Validation globale des DTOs
   app.useGlobalPipes(
