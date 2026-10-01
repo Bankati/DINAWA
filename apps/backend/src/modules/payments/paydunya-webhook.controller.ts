@@ -1,4 +1,4 @@
-import { Controller, HttpCode, Logger, Post, Query } from '@nestjs/common';
+import { Controller, HttpCode, Post, Query } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
@@ -19,8 +19,6 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 @SkipThrottle()
 @Controller('payments/webhooks')
 export class PaydunyaWebhookController {
-  private readonly logger = new Logger(PaydunyaWebhookController.name);
-
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly subscriptionsService: SubscriptionsService,
@@ -29,26 +27,17 @@ export class PaydunyaWebhookController {
   @Public()
   @Post('paydunya')
   @HttpCode(200)
-  async handle(
+  // Pur dispatcher — toute la logique (réponse 200 systématique, gestion
+  // d'erreur, logging) vit dans les services, jamais ici (voir /review
+  // abonnements, 2026-10-01). Paramètre distinct (pas un préfixe sur
+  // paymentId) — voir /architect abonnements, 2026-09-30 : zéro risque sur
+  // le flux loyer existant.
+  handle(
     @Query('paymentId') paymentId?: string,
     @Query('subscriptionInvoiceId') subscriptionInvoiceId?: string,
   ): Promise<{ status: string }> {
-    // Réponse 200 dans tous les cas (même id absent/inconnu) — voir
-    // build-plan.md unité 18 : ne jamais faire échouer l'accusé de réception
-    // PayDunya, un échec de traitement se rattrape via le cron de
-    // réconciliation plutôt que par un retry PayDunya qu'on ne contrôle pas.
-    // Paramètre distinct (pas un préfixe sur paymentId) — voir /architect
-    // abonnements, 2026-09-30 : zéro risque sur le flux loyer existant.
     if (subscriptionInvoiceId) {
-      try {
-        await this.subscriptionsService.reconcilePaydunyaSubscriptionInvoice(subscriptionInvoiceId);
-      } catch (error) {
-        this.logger.error(
-          `[paydunya/webhook] échec inattendu pour subscriptionInvoice=${subscriptionInvoiceId}`,
-          error,
-        );
-      }
-      return { status: 'ok' };
+      return this.subscriptionsService.handleSubscriptionInvoiceCallback(subscriptionInvoiceId);
     }
     return this.paymentsService.handlePaydunyaCallback(paymentId);
   }

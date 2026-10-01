@@ -315,6 +315,51 @@ describe('SubscriptionsService', () => {
         checkoutUrl: 'https://paydunya.test/checkout/token-2',
       });
     });
+
+    it('lève ServiceUnavailableException "incident technique" si la persistance de la référence échoue après création de la facture (jamais l’erreur brute, voir /review abonnements)', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.subscriptionInvoice.findFirst.mockResolvedValueOnce({
+        id: 'invoice-1',
+        amount: 2000,
+        periodStart: new Date('2026-10-01'),
+        transactionId: null,
+        checkoutUrl: null,
+      });
+      paydunya.createInvoice.mockResolvedValueOnce({
+        token: 'token-2',
+        checkoutUrl: 'https://paydunya.test/checkout/token-2',
+      });
+      prisma.subscriptionInvoice.update.mockRejectedValue(new Error('DB down'));
+
+      await expect(service.payCurrentInvoice(owner)).rejects.toThrow('incident technique');
+      expect(paydunya.createInvoice).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleSubscriptionInvoiceCallback', () => {
+    it('renvoie "ignored" sans rien appeler si subscriptionInvoiceId est absent', async () => {
+      const result = await service.handleSubscriptionInvoiceCallback(undefined);
+
+      expect(result).toEqual({ status: 'ignored' });
+      expect(prisma.subscriptionInvoice.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('réconcilie puis renvoie "ok"', async () => {
+      prisma.subscriptionInvoice.findUnique.mockResolvedValueOnce(null);
+
+      const result = await service.handleSubscriptionInvoiceCallback('invoice-1');
+
+      expect(prisma.subscriptionInvoice.findUnique).toHaveBeenCalled();
+      expect(result).toEqual({ status: 'ok' });
+    });
+
+    it('renvoie toujours "ok" même si la réconciliation échoue de façon inattendue (jamais faire échouer l’accusé de réception webhook, voir /review abonnements)', async () => {
+      prisma.subscriptionInvoice.findUnique.mockRejectedValueOnce(new Error('boom'));
+
+      const result = await service.handleSubscriptionInvoiceCallback('invoice-1');
+
+      expect(result).toEqual({ status: 'ok' });
+    });
   });
 
   describe('reconcilePaydunyaSubscriptionInvoice', () => {

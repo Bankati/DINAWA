@@ -15,7 +15,19 @@ const SINGLETON_ID = 'singleton';
 export class PlatformSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Lecture pure dans l'immense majorité des cas (la ligne singleton existe
+  // dès le premier appel jamais fait sur cette table) — l'upsert ne sert
+  // plus qu'au tout premier bootstrap, jamais à chaque lecture. Appelé
+  // depuis des chemins chauds (assertQuotaAvailable() à chaque création de
+  // bien, getQuotaStatus() à chaque chargement du profil) : un upsert
+  // systématique y aurait verrouillé une ligne partagée par toute la
+  // plateforme à chaque appel (trouvé en /review abonnements, 2026-10-01).
   async get(): Promise<PlatformSettings> {
+    const existing = await this.prisma.platformSettings.findUnique({
+      where: { id: SINGLETON_ID },
+    });
+    if (existing) return existing;
+
     return this.prisma.platformSettings.upsert({
       where: { id: SINGLETON_ID },
       update: {},

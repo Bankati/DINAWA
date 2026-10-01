@@ -102,6 +102,26 @@ describe('SubscriptionBillingTask', () => {
       await expect(task.runMonthlyBilling()).resolves.toBeUndefined();
       expect(prisma.subscriptionInvoice.create).toHaveBeenCalledTimes(2);
     });
+
+    it('pagine par curseur au-delà d’une page — aucun abonnement éligible laissé de côté (voir /review abonnements)', async () => {
+      const page1 = Array.from({ length: 100 }, (_, i) => ({
+        id: `sub-${i}`,
+        userId: `owner-${i}`,
+        tier: 'STARTER' as const,
+      }));
+      const page2 = [{ id: 'sub-100', userId: 'owner-100', tier: 'STARTER' as const }];
+      prisma.subscription.findMany.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+
+      await task.runMonthlyBilling();
+
+      expect(prisma.subscription.findMany).toHaveBeenCalledTimes(2);
+      const [secondCallArgs] = prisma.subscription.findMany.mock.calls[1] as [
+        { cursor?: { id: string }; skip?: number },
+      ];
+      expect(secondCallArgs.cursor).toEqual({ id: 'sub-99' });
+      expect(secondCallArgs.skip).toBe(1);
+      expect(prisma.subscriptionInvoice.create).toHaveBeenCalledTimes(101);
+    });
   });
 
   describe('runReminders', () => {
