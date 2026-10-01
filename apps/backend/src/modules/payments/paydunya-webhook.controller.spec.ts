@@ -5,7 +5,7 @@ describe('PaydunyaWebhookController', () => {
     const paymentsService = {
       handlePaydunyaCallback: jest.fn().mockResolvedValue({ status: 'ok' }),
     };
-    const subscriptionsService = { reconcilePaydunyaSubscriptionInvoice: jest.fn() };
+    const subscriptionsService = { handleSubscriptionInvoiceCallback: jest.fn() };
     const controller = new PaydunyaWebhookController(
       paymentsService as never,
       subscriptionsService as never,
@@ -14,7 +14,7 @@ describe('PaydunyaWebhookController', () => {
     const result = await controller.handle('payment-1');
 
     expect(paymentsService.handlePaydunyaCallback).toHaveBeenCalledWith('payment-1');
-    expect(subscriptionsService.reconcilePaydunyaSubscriptionInvoice).not.toHaveBeenCalled();
+    expect(subscriptionsService.handleSubscriptionInvoiceCallback).not.toHaveBeenCalled();
     expect(result).toEqual({ status: 'ok' });
   });
 
@@ -22,7 +22,7 @@ describe('PaydunyaWebhookController', () => {
     const paymentsService = {
       handlePaydunyaCallback: jest.fn().mockResolvedValue({ status: 'ignored' }),
     };
-    const subscriptionsService = { reconcilePaydunyaSubscriptionInvoice: jest.fn() };
+    const subscriptionsService = { handleSubscriptionInvoiceCallback: jest.fn() };
     const controller = new PaydunyaWebhookController(
       paymentsService as never,
       subscriptionsService as never,
@@ -33,10 +33,10 @@ describe('PaydunyaWebhookController', () => {
     expect(paymentsService.handlePaydunyaCallback).toHaveBeenCalledWith(undefined);
   });
 
-  it('route vers SubscriptionsService quand subscriptionInvoiceId est présent, jamais vers PaymentsService (voir /architect abonnements)', async () => {
+  it('route vers SubscriptionsService.handleSubscriptionInvoiceCallback quand subscriptionInvoiceId est présent, jamais vers PaymentsService (voir /architect abonnements)', async () => {
     const paymentsService = { handlePaydunyaCallback: jest.fn() };
     const subscriptionsService = {
-      reconcilePaydunyaSubscriptionInvoice: jest.fn().mockResolvedValue(undefined),
+      handleSubscriptionInvoiceCallback: jest.fn().mockResolvedValue({ status: 'ok' }),
     };
     const controller = new PaydunyaWebhookController(
       paymentsService as never,
@@ -45,25 +45,10 @@ describe('PaydunyaWebhookController', () => {
 
     const result = await controller.handle(undefined, 'invoice-1');
 
-    expect(subscriptionsService.reconcilePaydunyaSubscriptionInvoice).toHaveBeenCalledWith(
+    expect(subscriptionsService.handleSubscriptionInvoiceCallback).toHaveBeenCalledWith(
       'invoice-1',
     );
     expect(paymentsService.handlePaydunyaCallback).not.toHaveBeenCalled();
-    expect(result).toEqual({ status: 'ok' });
-  });
-
-  it('répond toujours 200 même si la réconciliation d’abonnement échoue de façon inattendue', async () => {
-    const paymentsService = { handlePaydunyaCallback: jest.fn() };
-    const subscriptionsService = {
-      reconcilePaydunyaSubscriptionInvoice: jest.fn().mockRejectedValue(new Error('boom')),
-    };
-    const controller = new PaydunyaWebhookController(
-      paymentsService as never,
-      subscriptionsService as never,
-    );
-
-    const result = await controller.handle(undefined, 'invoice-1');
-
     expect(result).toEqual({ status: 'ok' });
   });
 });

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { addMonths } from 'date-fns';
+import { SubscriptionTier } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
@@ -83,23 +84,7 @@ export class SubscriptionBillingTask {
 
   private async createDueInvoices(): Promise<void> {
     const now = new Date();
-
-    // Facturé : ACTIVE, ou PENDING_CANCELLATION tant que la période payée
-    // n'est pas terminée (résiliation effective seulement à cancelAt, voir
-    // SubscriptionsService.cancel()). Jamais en bêta (betaUntil futur).
-    // `invoices: { none: { status: 'PENDING' } }` évite d'empiler une 2e
-    // facture sur un abonnement déjà suspendu pour impayé.
-    const subscriptions = await this.prisma.subscription.findMany({
-      where: {
-        AND: [
-          { OR: [{ status: 'ACTIVE' }, { status: 'PENDING_CANCELLATION', cancelAt: { gt: now } }] },
-          { OR: [{ betaUntil: null }, { betaUntil: { lt: now } }] },
-          { invoices: { none: { status: 'PENDING' } } },
-        ],
-      },
-      take: 200,
-    });
-
+    const subscriptions = await this.collectDueSubscriptions(now);
     const periodEnd = addMonths(now, 1);
 
     for (const subscription of subscriptions) {
@@ -132,6 +117,53 @@ export class SubscriptionBillingTask {
         );
       }
     }
+  }
+
+  // Pagination par curseur (même pattern que
+  // MonthlyReportsTask.collectActiveMandatePairs(), /review unité 33) —
+  // sans ça, un `take` fixe laisse silencieusement de côté tout abonnement
+  // au-delà de la première page, jamais rattrapé (trouvé en /review
+  // abonnements, 2026-10-01). La sélection complète est faite AVANT tout
+  // traitement : les factures créées plus bas dans `createDueInvoices()`
+  // n'influencent jamais une page déjà lue.
+  private async collectDueSubscriptions(
+    now: Date,
+  ): Promise<{ id: string; userId: string; tier: SubscriptionTier }[]> {
+    const results: { id: string; userId: string; tier: SubscriptionTier }[] = [];
+    const PAGE_SIZE = 100;
+    let cursor: string | undefined;
+
+    for (;;) {
+      const batch = await this.prisma.subscription.findMany({
+        // Facturé : ACTIVE, ou PENDING_CANCELLATION tant que la période
+        // payée n'est pas terminée (résiliation effective seulement à
+        // cancelAt, voir SubscriptionsService.cancel()). Jamais en bêta
+        // (betaUntil futur). `invoices: { none: { status: 'PENDING' } }`
+        // évite d'empiler une 2e facture sur un abonnement déjà suspendu
+        // pour impayé.
+        where: {
+          AND: [
+            {
+              OR: [{ status: 'ACTIVE' }, { status: 'PENDING_CANCELLATION', cancelAt: { gt: now } }],
+            },
+            { OR: [{ betaUntil: null }, { betaUntil: { lt: now } }] },
+            { invoices: { none: { status: 'PENDING' } } },
+          ],
+        },
+        select: { id: true, userId: true, tier: true },
+        orderBy: { id: 'asc' },
+        take: PAGE_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+      if (batch.length === 0) break;
+
+      results.push(...batch);
+
+      if (batch.length < PAGE_SIZE) break;
+      cursor = batch[batch.length - 1].id;
+    }
+
+    return results;
   }
 
   private async executeReminders(): Promise<void> {

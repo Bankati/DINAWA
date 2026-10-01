@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Subscription, SubscriptionTier } from '@prisma/client';
@@ -194,10 +195,36 @@ export class SubscriptionsService {
         `[subscriptions/pay] CRITIQUE — facture PayDunya créée mais référence non persistée. invoice=${invoice.id} token=${created.token} url=${created.checkoutUrl}`,
         error,
       );
-      throw error;
+      throw new ServiceUnavailableException(
+        'Facture créée mais un incident technique est survenu — réessayez depuis votre profil avant de contacter le support',
+      );
     }
 
     return { invoiceId: invoice.id, checkoutUrl: created.checkoutUrl };
+  }
+
+  // Point d'entrée du webhook PayDunya pour la branche abonnement — même
+  // contrat que PaymentsService.handlePaydunyaCallback() (jamais faire
+  // échouer l'accusé de réception, un échec se rattrape via
+  // PaydunyaReconciliationTask) : le controller ne fait que router selon le
+  // paramètre présent, toute la logique d'erreur vit ici (voir /review
+  // abonnements, 2026-10-01 — ce try/catch vivait à tort dans le controller).
+  async handleSubscriptionInvoiceCallback(
+    subscriptionInvoiceId: string | undefined,
+  ): Promise<{ status: string }> {
+    if (!subscriptionInvoiceId) {
+      this.logger.warn('[subscriptions/webhook] callback reçu sans subscriptionInvoiceId — ignoré');
+      return { status: 'ignored' };
+    }
+    try {
+      await this.reconcilePaydunyaSubscriptionInvoice(subscriptionInvoiceId);
+    } catch (error) {
+      this.logger.error(
+        `[subscriptions/webhook] échec inattendu pour subscriptionInvoice=${subscriptionInvoiceId}`,
+        error,
+      );
+    }
+    return { status: 'ok' };
   }
 
   // Revérifie le statut réel d'une SubscriptionInvoice auprès de PayDunya —
