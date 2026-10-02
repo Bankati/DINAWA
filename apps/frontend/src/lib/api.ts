@@ -155,7 +155,11 @@ export const api = {
       method: "PUT",
       body: data instanceof FormData ? data : JSON.stringify(data),
     }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  delete: <T>(path: string, data?: unknown) =>
+    request<T>(path, {
+      method: "DELETE",
+      ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
+    }),
 };
 
 // Pour les réponses binaires (PDF, etc.) — `request()` ne peut pas les

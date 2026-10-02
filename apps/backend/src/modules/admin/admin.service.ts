@@ -424,7 +424,11 @@ export class AdminService {
     return user;
   }
 
-  async deleteUser(id: string): Promise<{ message: string }> {
+  // `_reason` n'est pas utilisé ici — il sert uniquement à ce que
+  // AuditLogInterceptor (global) le capture automatiquement dans
+  // AuditLog.metadata (corps de requête), voir DeleteUserDto. Aucune autre
+  // conséquence métier.
+  async deleteUser(id: string, _reason: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: { id: true, supabaseId: true, email: true },
