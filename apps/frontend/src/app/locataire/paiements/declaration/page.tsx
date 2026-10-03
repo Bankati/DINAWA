@@ -34,7 +34,6 @@ interface LeaseEntry {
 
 const MANUAL_PAYMENT_METHODS = [
   { value: 'CASH', label: 'Espèces' },
-  { value: 'BANK_TRANSFER', label: 'Virement bancaire' },
 ];
 
 // Choix indicatif côté WARAH — PayDunya ne permet pas de l'imposer, le
@@ -115,7 +114,7 @@ export default function PaymentDeclarationPage() {
   const payoutUnavailable = quote?.payoutReady === false;
 
   // --- Déclarer un paiement déjà effectué ---
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH'>('CASH');
   const [declaredAmount, setDeclaredAmount] = useState('');
   const [note, setNote] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -374,7 +373,7 @@ export default function PaymentDeclarationPage() {
                         </div>
                         <div>
                           <Label>Mode de paiement <span className="text-destructive">*</span></Label>
-                          <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'CASH' | 'BANK_TRANSFER')}>
+                          <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'CASH')}>
                             <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {MANUAL_PAYMENT_METHODS.map((m) => (

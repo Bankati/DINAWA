@@ -35,7 +35,6 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'neutral'> =
 
 const METHOD_LABELS: Record<string, string> = {
   MOBILE_MONEY: 'Mobile Money',
-  BANK_TRANSFER: 'Virement',
   CASH: 'Espèces',
   CHECK: 'Chèque',
   TMONEY: 'T-Money',

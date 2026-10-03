@@ -112,7 +112,7 @@ export interface CreatePaymentDeclarationDto {
   scheduleEntryId: string;
   declaredAmount: number;
   declaredAt: string;
-  declaredMethod: "CASH" | "BANK_TRANSFER";
+  declaredMethod: "CASH";
   note?: string;
 }
 
@@ -159,7 +159,6 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: "Espèces",
-  BANK_TRANSFER: "Virement",
   TMONEY: "T-Money",
   FLOOZ: "Flooz",
 };

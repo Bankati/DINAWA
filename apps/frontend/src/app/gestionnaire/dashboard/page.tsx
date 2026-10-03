@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { formatFcfa } from '@/lib/format';
 import type { MandateWithParties } from '@/lib/api-types';
-import { Card, CardHeader, CardTitle, CardBody, StatCard, Badge, EmptyState, Skeleton } from '@/components/ds';
+import { Card, CardHeader, CardTitle, CardBody, StatCard, Badge, EmptyState, Skeleton, Button } from '@/components/ds';
+import { toast } from '@/components/ui';
 import { RentTypeDonut, MonthlyRevenueChart, DashboardFilters, type DashboardFiltersValue } from '@/components/dashboard';
 import { formatMoisLong, type RepartitionType } from '@/lib/dashboard';
 
@@ -60,6 +61,7 @@ export default function GestionnaireDashboard() {
   const queryClient = useQueryClient();
   const now = new Date();
   const [filters, setFilters] = useState<DashboardFiltersValue>({ mois: now.getMonth() + 1, annee: now.getFullYear() });
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const { data: mandates, isLoading: mLoading } = useQuery({
     queryKey: ['mandates'],
@@ -112,6 +114,33 @@ export default function GestionnaireDashboard() {
   function refreshAll() {
     queryClient.invalidateQueries({ queryKey: ['mandates'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-manager'] });
+  }
+
+  // Le bien mandaté ne devient visible dans "Mes biens" qu'une fois le
+  // mandat ACTIVE côté backend (propertyVisibilityWhere()) — jusqu'ici,
+  // rien dans l'interface gestionnaire n'appelait réellement
+  // POST /mandates/:id/accept : le mandat restait PENDING indéfiniment,
+  // d'où le bien absent malgré la notification reçue (voir /recover).
+  async function respondToMandate(id: string, action: 'accept' | 'revoke') {
+    setRespondingId(id);
+    try {
+      if (action === 'accept') {
+        await api.post(`/mandates/${id}/accept`, {});
+        toast.success('Mandat accepté — le bien apparaît dans "Mes biens"');
+      } else {
+        // POST /mandates/:id/revoke sert aussi au refus d'un mandat PENDING
+        // (voir mandates.service.ts#revoke).
+        await api.post(`/mandates/${id}/revoke`, { reason: 'Refusé par le gestionnaire' });
+        toast.success('Mandat refusé');
+      }
+      queryClient.invalidateQueries({ queryKey: ['mandates'] });
+      queryClient.invalidateQueries({ queryKey: ['gestionnaire-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-manager'] });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erreur lors de la réponse au mandat");
+    } finally {
+      setRespondingId(null);
+    }
   }
 
   return (
@@ -279,12 +308,31 @@ export default function GestionnaireDashboard() {
           <h3 className="text-sm font-bold text-foreground mb-3.5">Mandats en attente d&apos;acceptation</h3>
           <Card>
             {pending.map((m, i) => (
-              <div key={m.id} className={`px-5 py-4 flex items-center gap-3.5 ${i < pending.length - 1 ? 'border-b border-ds-border' : ''}`}>
-                <div className="flex-1">
+              <div key={m.id} className={`px-5 py-4 flex items-center gap-3.5 flex-wrap ${i < pending.length - 1 ? 'border-b border-ds-border' : ''}`}>
+                <div className="flex-1 min-w-[180px]">
                   <div className="font-semibold text-sm text-foreground">{m.property.address || m.property.neighborhood}</div>
-                  <div className="text-xs text-muted-foreground">{m.property.neighborhood}, {m.property.city}</div>
+                  <div className="text-xs text-muted-foreground">{m.property.neighborhood}, {m.property.city} · Proposé par {m.owner.firstName} {m.owner.lastName}</div>
                 </div>
-                <Badge tone="warning">En attente</Badge>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={respondingId !== null}
+                    loading={respondingId === m.id}
+                    onClick={() => respondToMandate(m.id, 'revoke')}
+                  >
+                    Refuser
+                  </Button>
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    disabled={respondingId !== null}
+                    loading={respondingId === m.id}
+                    onClick={() => respondToMandate(m.id, 'accept')}
+                  >
+                    Accepter
+                  </Button>
+                </div>
               </div>
             ))}
           </Card>
