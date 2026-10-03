@@ -135,8 +135,8 @@ export default function LandingPage() {
         ([entry]) => {
           if (entry.isIntersecting && !statsAnimatedRef.current) {
             statsAnimatedRef.current = true;
-            animateCounter(setStatAnnonces, 1200, 1600);
-            animateCounter(setStatProprio, 500, 1400);
+            animateCounter(setStatAnnonces, 800, 1600);
+            animateCounter(setStatProprio, 50, 1400);
             animateCounter(setStatSatisfaction, 98, 1200);
             animateCounter(setStatVilles, 6, 900);
           }
@@ -265,9 +265,9 @@ export default function LandingPage() {
         </div>
 
         <div className="hero-stats-band">
-          <div className="hsb-stat"><span className="hsb-n">1 200+</span><span className="hsb-l">Annonces</span></div>
+          <div className="hsb-stat"><span className="hsb-n">800+</span><span className="hsb-l">Annonces</span></div>
           <div className="hsb-sep" />
-          <div className="hsb-stat"><span className="hsb-n">500+</span><span className="hsb-l">Propriétaires</span></div>
+          <div className="hsb-stat"><span className="hsb-n">50+</span><span className="hsb-l">Propriétaires</span></div>
           <div className="hsb-sep" />
           <div className="hsb-stat"><span className="hsb-n">98%</span><span className="hsb-l">Satisfaction</span></div>
           <div className="hsb-sep" />
