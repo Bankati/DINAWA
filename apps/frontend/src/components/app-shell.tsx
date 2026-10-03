@@ -202,7 +202,9 @@ function formatPromoCountdown(remainingMs: number): string {
 function FreePromoBanner({ enabled }: { enabled: boolean }) {
   const [endsAt, setEndsAt] = useState<Date | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const [, forceTick] = useState(0);
+  // L'heure courante vient d'un effet, jamais d'un Date.now() lu pendant le
+  // rendu (impur — risque de désync avec l'hydratation SSR, voir CI).
+  const [now, setNow] = useState<number | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -222,12 +224,13 @@ function FreePromoBanner({ enabled }: { enabled: boolean }) {
   // pour un bandeau, jamais un minuteur à la seconde qui distrairait inutilement.
   useEffect(() => {
     if (!endsAt) return;
-    const interval = setInterval(() => forceTick((v) => v + 1), 60_000);
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(interval);
   }, [endsAt]);
 
-  const remainingMs = endsAt ? endsAt.getTime() - Date.now() : 0;
-  const visible = enabled && !dismissed && !!endsAt && remainingMs > 0;
+  const remainingMs = endsAt && now ? endsAt.getTime() - now : 0;
+  const visible = enabled && !dismissed && !!endsAt && !!now && remainingMs > 0;
 
   // Hauteur réelle posée en variable CSS (--promo-banner-height), lue par
   // .app-frame/.mobile-btn (app-shell.css) — sans ça, un bandeau en flux
@@ -266,15 +269,19 @@ function FreePromoBanner({ enabled }: { enabled: boolean }) {
   return (
     <div
       ref={bannerRef}
-      aria-label="WARAH est gratuite pour tous les propriétaires et gestionnaires pendant 6 mois"
       className="relative w-full px-12 py-2.5 text-center text-sm text-white"
       style={{ background: 'linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%)' }}
     >
-      {/* Pas de role="status" : le compte à rebours change toutes les minutes
-          (forceTick) et une région live réannoncerait le bandeau en continu
+      {/* role="status" porte uniquement sur la phrase fixe, annoncée une
+          seule fois à l'apparition du bandeau (asynchrone : endsAt arrive
+          après l'appel /subscription/quota). Le compte à rebours reste hors
+          de cette région live — il change toutes les minutes (effet qui
+          rappelle setNow(Date.now())) et serait sinon réannoncé en continu
           aux lecteurs d'écran — voir /review, 2026-10-03. */}
       <p className="m-0 leading-snug">
-        🎉 WARAH est <strong>gratuite</strong> pour tous les propriétaires et gestionnaires — gérez tous vos biens sans limite.{' '}
+        <span role="status">
+          🎉 WARAH est <strong>gratuite</strong> pour tous les propriétaires et gestionnaires — gérez tous vos biens sans limite.
+        </span>{' '}
         <strong style={{ color: 'var(--color-accent)' }}>Fin dans {formatPromoCountdown(remainingMs)}</strong>
       </p>
       <button
