@@ -307,7 +307,10 @@ export class AuthService {
       phone: dto.phone,
       payoutOperator: dto.payoutOperator,
       city: dto.city,
-      createProfile: (tx, created) => tx.managerProfile.create({ data: { userId: created.id } }),
+      createProfile: (tx, created) =>
+        tx.managerProfile.create({
+          data: { userId: created.id, companyName: dto.companyName },
+        }),
     });
 
     // Fire-and-forget — ne bloque pas la réponse si l'email est lent ou échoue

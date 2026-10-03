@@ -50,7 +50,7 @@ export default function CguPage() {
           <p className="legal-intro">
             Les présentes Conditions Générales d&apos;Utilisation (« CGU ») constituent un contrat entre vous
             (« l&apos;Utilisateur ») et <strong>WARAH SARL</strong>, société de droit togolais (RCCM :{' '}
-            <span className="legal-placeholder">[RCCM à compléter]</span>), dont le siège social est à Lomé, Togo
+            TG-LFW-01-2026-B13-02630), dont le siège social est à Lomé, Togo
             (« WARAH », « nous »). Elles régissent l&apos;accès et l&apos;usage de la plateforme WARAH, accessible
             notamment via son site web et ses applications (la « Plateforme »). En créant un compte ou en utilisant
             la Plateforme, vous déclarez avoir lu, compris et accepté sans réserve les présentes CGU ainsi que notre{' '}

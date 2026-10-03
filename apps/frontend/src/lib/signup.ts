@@ -26,6 +26,9 @@ export function signupManager(data: {
   phone: string;
   payoutOperator: PayoutOperator;
   city: string;
+  // Facultatif — un gestionnaire peut être un particulier sans structure
+  // enregistrée.
+  companyName?: string;
 }): Promise<{ user: WARAHUser }> {
   return api.post<{ user: WARAHUser }>("/auth/signup/manager", data);
 }

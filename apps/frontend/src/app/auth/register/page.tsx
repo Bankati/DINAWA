@@ -26,10 +26,14 @@ interface InfoForm {
   payoutOperator: PayoutOperator | '';
   city: string;
   residenceCountry: string;
+  // Facultatif, gestionnaire uniquement — un gestionnaire peut être un
+  // particulier sans structure enregistrée (voir demande développeur,
+  // 2026-10-03).
+  companyName: string;
 }
 
 const EMPTY_INFO: InfoForm = {
-  firstName: '', lastName: '', email: '', password: '', phone: '', payoutOperator: '', city: '', residenceCountry: '',
+  firstName: '', lastName: '', email: '', password: '', phone: '', payoutOperator: '', city: '', residenceCountry: '', companyName: '',
 };
 
 export default function RegisterPage() {
@@ -161,6 +165,7 @@ export default function RegisterPage() {
           phone,
           payoutOperator: info.payoutOperator,
           city: info.city,
+          ...(info.companyName.trim() ? { companyName: info.companyName.trim() } : {}),
         });
       }
       setIsLoading(false);
@@ -329,6 +334,13 @@ export default function RegisterPage() {
                   <input type="text" placeholder="Lomé" value={info.city} onChange={(e) => setField('city', e.target.value)} onBlur={() => markTouched('city')} />
                   {cityInvalid && <span className="error">Ville requise</span>}
                 </div>
+
+                {selectedRole === 'MANAGER' && (
+                  <div className="field">
+                    <label>Nom entreprise <small>(optionnel)</small></label>
+                    <input type="text" placeholder="Immo Togo SARL" value={info.companyName} onChange={(e) => setField('companyName', e.target.value)} />
+                  </div>
+                )}
 
                 <label className="lf-remember">
                   <input

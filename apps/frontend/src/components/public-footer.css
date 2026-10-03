@@ -63,6 +63,18 @@
 .pf-contact-item:hover { color: white; }
 .pf-ci-icon { width: 15px; height: 15px; flex-shrink: 0; }
 
+/* Réseaux sociaux */
+.pf-socials { display: flex; gap: 10px; margin-top: 14px; }
+.pf-social-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.6);
+  transition: color .18s, border-color .18s, background .18s;
+}
+.pf-social-link svg { width: 17px; height: 17px; }
+.pf-social-link:hover { color: white; border-color: var(--color-accent); background: rgba(201,152,46,0.12); }
+
 /* ── BARRE DU BAS ── */
 .pf-bottom { border-top: 1px solid rgba(255,255,255,0.06); padding: 20px 0; }
 .pf-bottom-inner {

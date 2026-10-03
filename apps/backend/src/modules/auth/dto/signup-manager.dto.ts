@@ -1,6 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PayoutOperator } from '@prisma/client';
-import { IsEmail, IsEnum, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class SignupManagerDto {
   @ApiProperty()
@@ -40,4 +48,12 @@ export class SignupManagerDto {
   @IsString()
   @MaxLength(100)
   city!: string;
+
+  // Facultatif — un gestionnaire peut être un particulier sans structure
+  // enregistrée (voir demande développeur, 2026-10-03).
+  @ApiPropertyOptional({ example: 'Immo Togo SARL' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  companyName?: string;
 }
