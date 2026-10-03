@@ -21,6 +21,7 @@ function ActivateForm() {
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +40,7 @@ function ActivateForm() {
       return;
     }
     if (password !== confirmPassword) return;
+    if (!acceptedTerms) return;
 
     setLoading(true);
     setError('');
@@ -151,10 +153,23 @@ function ActivateForm() {
                 </div>
                 {pwMismatch && <span className="lf-err-msg">Les mots de passe ne correspondent pas</span>}
               </div>
+              <label className="lf-remember">
+                <input
+                  type="checkbox"
+                  className="lf-check"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                />
+                <span className="lf-check-box" />
+                <span>
+                  J&apos;accepte les <Link href="/cgu" target="_blank" rel="noopener noreferrer">Conditions Générales d&apos;Utilisation</Link>{' '}
+                  et la <Link href="/confidentialite" target="_blank" rel="noopener noreferrer">Politique de confidentialité</Link>
+                </span>
+              </label>
               <button
                 type="submit"
                 className="lf-btn"
-                disabled={!password || !confirmPassword || pwMismatch || loading}
+                disabled={!password || !confirmPassword || pwMismatch || !acceptedTerms || loading}
               >
                 {loading ? 'Activation…' : 'Activer mon compte'}
               </button>

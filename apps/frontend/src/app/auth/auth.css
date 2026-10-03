@@ -96,7 +96,9 @@
 
 .lf-err-msg { font-size: 12px; color: #D64545; }
 
-.lf-remember { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13px; color: #4B5563; }
+.lf-remember { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; font-size: 13px; color: #4B5563; line-height: 1.5; }
+.lf-remember a { color: var(--color-primary); font-weight: 600; text-decoration: none; }
+.lf-remember a:hover { text-decoration: underline; }
 .lf-check { display: none; }
 .lf-check-box {
   position: relative; width: 18px; height: 18px;
