@@ -6,7 +6,7 @@ describe('PaymentConfirmedListener', () => {
   let receiptPdf: { generate: jest.Mock };
   let notify: { notifyUser: jest.Mock };
 
-  function makePayment(): Record<string, unknown> {
+  function makePayment(mandates: Array<{ managerId: string }> = []): Record<string, unknown> {
     return {
       id: 'payment-1',
       paidAmount: 55000,
@@ -14,7 +14,7 @@ describe('PaymentConfirmedListener', () => {
       lease: {
         ownerId: 'owner-1',
         tenantUserId: 'tenant-1',
-        property: { address: '12 rue de Lomé' },
+        property: { address: '12 rue de Lomé', mandates },
         owner: { firstName: 'Jean', lastName: 'Dupont' },
         tenant: { firstName: 'Ama', lastName: 'Kodjo' },
       },
@@ -54,5 +54,21 @@ describe('PaymentConfirmedListener', () => {
   it("n'échoue jamais même si notifyUser rejette", async () => {
     notify.notifyUser.mockRejectedValue(new Error('down'));
     await expect(listener.handle({ paymentId: 'payment-1' })).resolves.toBeUndefined();
+  });
+
+  it('notifie aussi le gestionnaire quand le bien est sous mandat actif', async () => {
+    prisma.payment.findUnique.mockResolvedValue(makePayment([{ managerId: 'manager-1' }]));
+
+    await listener.handle({ paymentId: 'payment-1' });
+
+    expect(notify.notifyUser).toHaveBeenCalledTimes(3);
+    const calls = notify.notifyUser.mock.calls.map(
+      ([params]: [{ userId: string; event: string; emailAttachments?: unknown[] }]) => params,
+    );
+    expect(calls.map((c) => c.userId).sort()).toEqual(['manager-1', 'owner-1', 'tenant-1']);
+    for (const call of calls) {
+      expect(call.event).toBe('receipt');
+      expect(call.emailAttachments).toHaveLength(1);
+    }
   });
 });

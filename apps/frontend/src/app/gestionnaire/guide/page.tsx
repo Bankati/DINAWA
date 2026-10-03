@@ -47,7 +47,7 @@ const SECTIONS: GuideSection[] = [
     summary: 'Suivre les loyers et valider les paiements déclarés',
     steps: [
       'Les paiements en ligne sont confirmés automatiquement ; les paiements déclarés par un locataire doivent être validés.',
-      "Chaque paiement confirmé génère une quittance PDF envoyée au propriétaire et au locataire.",
+      "Chaque paiement confirmé génère une quittance PDF envoyée au propriétaire et au locataire — et à vous aussi sur un bien sous mandat.",
       'Sur un bien sous mandat, la quittance porte votre nom dans la zone de signature.',
     ],
   },

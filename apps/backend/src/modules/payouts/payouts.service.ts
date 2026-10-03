@@ -132,7 +132,11 @@ export class PayoutsService {
         // Le numéro et l'opérateur de réception sont ceux du compte lui-même
         // (voir /architect reversement, révisé le 2026-09-28 : plus de
         // numéro séparé — User.phone/payoutOperator, demandés à l'inscription
-        // ou complétés depuis le profil).
+        // ou complétés depuis le profil). `payout.beneficiaryUserId` n'est
+        // pas toujours le propriétaire : sur un bien sous mandat actif,
+        // c'est le gestionnaire mandaté (voir resolveResponsibleUserId,
+        // common/permissions/property-access.ts) — l'argent part donc sur
+        // le mobile money du gestionnaire, pas du propriétaire.
         const beneficiary = await this.prisma.user.findUnique({
           where: { id: payout.beneficiaryUserId },
           select: { phone: true, payoutOperator: true },

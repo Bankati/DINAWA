@@ -15,7 +15,12 @@ import {
 } from '@/components/ds';
 
 const LIMIT = 12;
-const TYPE_LABELS: Record<string, string> = { VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial' };
+const TYPE_LABELS: Record<string, string> = {
+  CHAMBRE_SIMPLE: 'Chambre simple', CHAMBRE_SALON: 'Chambre-salon',
+  DEUX_CHAMBRES_SALON: '2 chambres-salon', TROIS_CHAMBRES_SALON: '3 chambres-salon',
+  STUDIO: 'Studio', APARTMENT: 'Appartement', VILLA: 'Villa', VILLA_DUPLEX: 'Villa duplex',
+  APPARTEMENT_MEUBLE: 'Appartement meublé', COMMERCIAL: 'Professionnel',
+};
 
 interface HeroSlide { tag: string; title: string; subtitle: string; photo: string; objectPosition: string; }
 
