@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -180,6 +180,112 @@ function AccountBanner({ isManager, isTenant }: { isManager: boolean; isTenant: 
   );
 }
 
+const PROMO_DISMISS_KEY = 'warah_promo_dismissed_session';
+
+function formatPromoCountdown(remainingMs: number): string {
+  const days = Math.floor(remainingMs / 86_400_000);
+  if (days >= 2) return `${days} jours restants`;
+  const hours = Math.floor(remainingMs / 3_600_000);
+  const minutes = Math.floor((remainingMs % 3_600_000) / 60_000);
+  return `${hours}h ${String(minutes).padStart(2, '0')}min restantes`;
+}
+
+// Bandeau promotionnel "offre de lancement" — visible uniquement tant que
+// PlatformSettings.freePromotionEndsAt est renseigné (calculé automatiquement
+// côté backend quand le super-admin active la suspension des quotas, voir
+// /architect bandeau promotionnel, 2026-10-02). Volontairement au-dessus de
+// toute l'interface (avant la sidebar/topbar), pas dans `.main-content` comme
+// AccountBanner — c'est la demande explicite du développeur ("avant tout sur
+// la plateforme"). Fermeture : masqué pour la session en cours seulement
+// (sessionStorage) — une offre à durée limitée ne doit jamais disparaître
+// définitivement après un simple clic.
+function FreePromoBanner({ enabled }: { enabled: boolean }) {
+  const [endsAt, setEndsAt] = useState<Date | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const [, forceTick] = useState(0);
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    try {
+      if (sessionStorage.getItem(PROMO_DISMISS_KEY)) setDismissed(true);
+    } catch {
+      // Stockage indisponible — le bandeau reste affichable, jamais bloquant.
+    }
+    api
+      .get<{ freePromotionEndsAt: string | null }>('/subscription/quota')
+      .then((d) => setEndsAt(d.freePromotionEndsAt ? new Date(d.freePromotionEndsAt) : null))
+      .catch(() => {});
+  }, [enabled]);
+
+  // Recalcule le compte à rebours toutes les minutes — précision suffisante
+  // pour un bandeau, jamais un minuteur à la seconde qui distrairait inutilement.
+  useEffect(() => {
+    if (!endsAt) return;
+    const interval = setInterval(() => forceTick((v) => v + 1), 60_000);
+    return () => clearInterval(interval);
+  }, [endsAt]);
+
+  const remainingMs = endsAt ? endsAt.getTime() - Date.now() : 0;
+  const visible = enabled && !dismissed && !!endsAt && remainingMs > 0;
+
+  // Hauteur réelle posée en variable CSS (--promo-banner-height), lue par
+  // .app-frame/.mobile-btn (app-shell.css) — sans ça, un bandeau en flux
+  // normal au-dessus d'un bloc à 100vh fixe ajoute un scroll de page inutile
+  // et le bouton hamburger (position: fixed) se superpose au bandeau.
+  // ResizeObserver plutôt qu'une mesure unique : le texte change de nombre
+  // de lignes selon la largeur d'écran et selon le format du compte à rebours.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!visible || !bannerRef.current) {
+      root.style.setProperty('--promo-banner-height', '0px');
+      return;
+    }
+    const el = bannerRef.current;
+    const observer = new ResizeObserver(([entry]) => {
+      root.style.setProperty('--promo-banner-height', `${Math.ceil(entry.contentRect.height)}px`);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.setProperty('--promo-banner-height', '0px');
+    };
+  }, [visible]);
+
+  function dismiss() {
+    setDismissed(true);
+    try {
+      sessionStorage.setItem(PROMO_DISMISS_KEY, '1');
+    } catch {
+      // Rien à faire — la fermeture reste effective pour le reste du rendu en cours.
+    }
+  }
+
+  if (!visible) return null;
+
+  return (
+    <div
+      ref={bannerRef}
+      role="status"
+      className="relative w-full px-12 py-2.5 text-center text-sm text-white"
+      style={{ background: 'linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%)' }}
+    >
+      <p className="m-0 leading-snug">
+        🎉 WARAH est <strong>gratuite</strong> pour tous les propriétaires et gestionnaires — gérez tous vos biens sans limite.{' '}
+        <strong style={{ color: 'var(--color-accent)' }}>Fin dans {formatPromoCountdown(remainingMs)}</strong>
+      </p>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Fermer ce message"
+        className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center hover:bg-white/10"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 // Rappel tant que le numéro de réception des loyers n'est pas complet — sans
 // lui les locataires ne peuvent pas payer en ligne (voir /architect
 // reversement, révisé le 2026-09-28 : c'est le téléphone + opérateur du
@@ -273,6 +379,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell-page">
+      <FreePromoBanner enabled={!!user && (isOwner || isManager)} />
       <CommandPalette items={commandItems} open={paletteOpen} onOpenChange={setPaletteOpen} />
       <button className="mobile-btn" type="button" onClick={() => setSidebarOpen((v) => !v)} aria-label="Menu">
         <Menu className="w-5 h-5" strokeWidth={2.5} />

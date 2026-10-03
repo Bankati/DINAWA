@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PlatformSettings } from '@prisma/client';
+import { Prisma, PlatformSettings } from '@prisma/client';
+import { addMonths } from 'date-fns';
 import { PrismaService } from '../../prisma/prisma.service';
+
+const FREE_PROMOTION_MONTHS = 6;
 
 const SINGLETON_ID = 'singleton';
 
@@ -35,12 +38,27 @@ export class PlatformSettingsService {
     });
   }
 
+  // `freePromotionEndsAt` n'est jamais un champ exposé à l'admin — calculée
+  // ici automatiquement (+6 mois) dès que `subscriptionQuotasSuspended`
+  // passe à true, effacée dès qu'il repasse à false. Un seul bouton côté
+  // admin ("Suspendre les quotas") active les deux à la fois, pour que le
+  // bandeau promotionnel frontend ne puisse jamais afficher une promesse
+  // que le quota réel ne tient pas (voir /architect bandeau promotionnel,
+  // 2026-10-02).
   async update(data: {
     subscriptionQuotasSuspended?: boolean;
     subscriptionBillingEnabled?: boolean;
   }): Promise<PlatformSettings> {
     await this.get(); // garantit que la ligne singleton existe avant l'update
-    return this.prisma.platformSettings.update({ where: { id: SINGLETON_ID }, data });
+
+    const patch: Prisma.PlatformSettingsUpdateInput = { ...data };
+    if (data.subscriptionQuotasSuspended === true) {
+      patch.freePromotionEndsAt = addMonths(new Date(), FREE_PROMOTION_MONTHS);
+    } else if (data.subscriptionQuotasSuspended === false) {
+      patch.freePromotionEndsAt = null;
+    }
+
+    return this.prisma.platformSettings.update({ where: { id: SINGLETON_ID }, data: patch });
   }
 
   async quotasSuspended(): Promise<boolean> {

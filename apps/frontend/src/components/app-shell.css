@@ -2,7 +2,7 @@
 
 /* ── Bouton hamburger mobile ── */
 .mobile-btn {
-  display: none; position: fixed; top: 1rem; left: 1rem; z-index: 200;
+  display: none; position: fixed; top: calc(1rem + var(--promo-banner-height, 0px)); left: 1rem; z-index: 200;
   width: 44px; height: 44px; border-radius: 10px; border: none; color: white;
   background: var(--color-primary); box-shadow: 0 4px 12px rgba(15,76,129,0.35);
   align-items: center; justify-content: center; cursor: pointer;
@@ -10,7 +10,11 @@
 .overlay { position: fixed; inset: 0; z-index: 99; background: rgba(10,20,45,0.4); backdrop-filter: blur(3px); }
 
 /* ── Cadre applicatif — plein écran, bord à bord ── */
-.app-frame { display: flex; height: 100vh; background: #fff; }
+/* `--promo-banner-height` posée par FreePromoBanner (mesure réelle via ref,
+   voir app-shell.tsx) — sans elle, un bandeau en flux normal au-dessus de
+   ce bloc à 100vh fixe ferait dépasser la page d'un scroll inutile, et le
+   bouton hamburger (position: fixed) se superposerait au bandeau. */
+.app-frame { display: flex; height: calc(100vh - var(--promo-banner-height, 0px)); background: #fff; }
 
 /* ── Sidebar — thème sombre unifié (tous rôles) ── */
 .sidebar {
