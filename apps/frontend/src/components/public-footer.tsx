@@ -90,7 +90,7 @@ export default function PublicFooter() {
 
             <div className="pf-socials">
               <a
-                href="https://www.tiktok.com/@warah002?is_from_webapp=1&sender_device=pc"
+                href="https://www.tiktok.com/@warah618?_r=1&_t=ZN-9AFl5l2S7K2"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="pf-social-link"
