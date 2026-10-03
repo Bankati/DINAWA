@@ -25,7 +25,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'info' | 'ne
   PARTIAL: 'warning', LATE: 'warning', OVERDUE: 'error', REJECTED: 'error',
 };
 const METHOD_LABELS: Record<string, string> = {
-  TMONEY: 'T-Money', FLOOZ: 'Flooz', CASH: 'Espèces', BANK_TRANSFER: 'Virement',
+  TMONEY: 'T-Money', FLOOZ: 'Flooz', CASH: 'Espèces',
 };
 
 function fmtDate(s: string) {

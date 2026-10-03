@@ -19,10 +19,10 @@ const SECTIONS: GuideSection[] = [
   {
     icon: FileText,
     title: 'Déclarer un paiement déjà effectué',
-    summary: 'Si vous avez payé en espèces ou par virement',
+    summary: 'Si vous avez payé en espèces',
     steps: [
       "Choisissez l'échéance concernée, puis basculez sur « Paiement déjà effectué ».",
-      'Indiquez le montant, le mode de paiement (espèces ou virement) et, si besoin, une preuve (photo ou PDF, 5 Mo max).',
+      'Indiquez le montant, le mode de paiement et, si besoin, une preuve (photo ou PDF, 5 Mo max).',
       "Votre propriétaire ou gestionnaire examine la déclaration avant de la valider.",
       "Une quittance est générée automatiquement une fois la déclaration validée.",
     ],
