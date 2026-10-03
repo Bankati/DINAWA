@@ -46,7 +46,7 @@ export default function ConfidentialitePage() {
             WARAH est une plateforme togolaise de gestion locative qui met en relation propriétaires, gestionnaires
             immobiliers et locataires, et qui permet le suivi et le paiement des loyers en ligne. La présente
             politique explique <strong>quelles données nous collectons, pourquoi, pendant combien de temps, avec qui
-            elles sont partagées, et quels droits vous pouvez exercer</strong> — conformément à la loi togolaise
+            elles sont partagées, et quels droits vous pouvez exercer</strong>{' '}— conformément à la loi togolaise
             n°2019-014 du 29 janvier 2019 relative à la protection des données à caractère personnel, sous le
             contrôle de l&apos;Instance Nationale de Protection des Données à Caractère Personnel (INPDCP).
           </p>
@@ -67,7 +67,7 @@ export default function ConfidentialitePage() {
             <p>
               Le responsable du traitement de vos données personnelles est :<br />
               <strong>WARAH SARL</strong>, société de droit togolais, dont le siège social est à Lomé, Togo.<br />
-              RCCM : <span className="legal-placeholder">[RCCM à compléter]</span>
+              RCCM : TG-LFW-01-2026-B13-02630
             </p>
             <p>
               Pour toute question relative à vos données personnelles, vous pouvez nous contacter à{' '}
