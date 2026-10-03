@@ -1,6 +1,16 @@
 import { api } from "./api";
 
-export type PropertyType = "APARTMENT" | "VILLA" | "STUDIO" | "COMMERCIAL";
+export type PropertyType =
+  | "CHAMBRE_SIMPLE"
+  | "CHAMBRE_SALON"
+  | "DEUX_CHAMBRES_SALON"
+  | "TROIS_CHAMBRES_SALON"
+  | "STUDIO"
+  | "APARTMENT"
+  | "VILLA"
+  | "VILLA_DUPLEX"
+  | "APPARTEMENT_MEUBLE"
+  | "COMMERCIAL";
 
 export interface PublicListingSummary {
   id: string;
@@ -53,10 +63,16 @@ export interface PublicListingsFilters {
 }
 
 export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
+  CHAMBRE_SIMPLE: "Chambre simple",
+  CHAMBRE_SALON: "Chambre-salon",
+  DEUX_CHAMBRES_SALON: "2 chambres-salon",
+  TROIS_CHAMBRES_SALON: "3 chambres-salon",
+  STUDIO: "Studio",
   APARTMENT: "Appartement",
   VILLA: "Villa",
-  STUDIO: "Studio",
-  COMMERCIAL: "Bureau / Commerce",
+  VILLA_DUPLEX: "Villa duplex",
+  APPARTEMENT_MEUBLE: "Appartement meublé",
+  COMMERCIAL: "Professionnel",
 };
 
 export function getPublicListings(

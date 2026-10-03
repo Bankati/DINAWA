@@ -1,7 +1,17 @@
 import { api } from "./api";
 import { formatFcfa } from "./format";
 
-export type PropertyType = "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
+export type PropertyType =
+  | "CHAMBRE_SIMPLE"
+  | "CHAMBRE_SALON"
+  | "DEUX_CHAMBRES_SALON"
+  | "TROIS_CHAMBRES_SALON"
+  | "STUDIO"
+  | "APARTMENT"
+  | "VILLA"
+  | "VILLA_DUPLEX"
+  | "APPARTEMENT_MEUBLE"
+  | "COMMERCIAL";
 export type PropertyStatus = "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
 export type PaymentStatus =
   | "PENDING"
@@ -13,10 +23,16 @@ export type PaymentStatus =
   | "REJECTED";
 
 export const PROPERTY_TYPE_LABELS: Record<string, string> = {
-  VILLA: "Villa",
-  APARTMENT: "Appartement",
+  CHAMBRE_SIMPLE: "Chambre simple",
+  CHAMBRE_SALON: "Chambre-salon",
+  DEUX_CHAMBRES_SALON: "2 chambres-salon",
+  TROIS_CHAMBRES_SALON: "3 chambres-salon",
   STUDIO: "Studio",
-  COMMERCIAL: "Commercial",
+  APARTMENT: "Appartement",
+  VILLA: "Villa",
+  VILLA_DUPLEX: "Villa duplex",
+  APPARTEMENT_MEUBLE: "Appartement meublé",
+  COMMERCIAL: "Professionnel",
 };
 
 const MOIS_COURTS = [

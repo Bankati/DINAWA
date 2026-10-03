@@ -26,6 +26,20 @@
 .bi-villa svg { stroke: #059669 !important; }
 .bi-commercial { background: rgba(139,92,246,0.08) !important; }
 .bi-commercial svg { stroke: #7C3AED !important; }
+/* Types du catalogue togolais (voir lib/dashboard.ts#PROPERTY_TYPE_LABELS) —
+   mêmes couleurs que le donut de répartition (components/dashboard/donut-chart.tsx). */
+.bi-chambre_simple { background: rgba(220,38,38,0.08) !important; }
+.bi-chambre_simple svg { stroke: #DC2626 !important; }
+.bi-chambre_salon { background: rgba(8,145,178,0.08) !important; }
+.bi-chambre_salon svg { stroke: #0891B2 !important; }
+.bi-deux_chambres_salon { background: rgba(217,119,6,0.08) !important; }
+.bi-deux_chambres_salon svg { stroke: #D97706 !important; }
+.bi-trois_chambres_salon { background: rgba(67,56,202,0.08) !important; }
+.bi-trois_chambres_salon svg { stroke: #4338CA !important; }
+.bi-villa_duplex { background: rgba(219,39,119,0.08) !important; }
+.bi-villa_duplex svg { stroke: #DB2777 !important; }
+.bi-appartement_meuble { background: rgba(101,163,13,0.08) !important; }
+.bi-appartement_meuble svg { stroke: #65A30D !important; }
 .row-info { flex: 1; min-width: 0; }
 .row-name { font-size: 13px; font-weight: 600; color: var(--color-primary-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { font-size: 11.5px; color: #9CA3AF; margin-top: 1px; }

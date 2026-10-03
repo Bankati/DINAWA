@@ -6,7 +6,9 @@ import { api } from '@/lib/api';
 import { formatFcfa } from '@/lib/format';
 import { PageHeader, Card, Badge, EmptyState, Skeleton } from '@/components/ds';
 
-type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
+type PropertyType =
+  | 'CHAMBRE_SIMPLE' | 'CHAMBRE_SALON' | 'DEUX_CHAMBRES_SALON' | 'TROIS_CHAMBRES_SALON'
+  | 'STUDIO' | 'APARTMENT' | 'VILLA' | 'VILLA_DUPLEX' | 'APPARTEMENT_MEUBLE' | 'COMMERCIAL';
 type PropertyStatus = 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
 
 interface Property {
@@ -21,7 +23,10 @@ interface Property {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial',
+  CHAMBRE_SIMPLE: 'Chambre simple', CHAMBRE_SALON: 'Chambre-salon',
+  DEUX_CHAMBRES_SALON: '2 chambres-salon', TROIS_CHAMBRES_SALON: '3 chambres-salon',
+  STUDIO: 'Studio', APARTMENT: 'Appartement', VILLA: 'Villa', VILLA_DUPLEX: 'Villa duplex',
+  APPARTEMENT_MEUBLE: 'Appartement meublé', COMMERCIAL: 'Professionnel',
 };
 
 // Aucune action manuelle ici — voir /architect module Annonces : un bien

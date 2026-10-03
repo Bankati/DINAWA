@@ -3,7 +3,13 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { fcfa, PROPERTY_TYPE_LABELS, type RepartitionType } from '@/lib/dashboard';
 
-const DONUT_COLORS = ['#0F4C81', '#C9982E', '#059669', '#7C3AED'];
+// 10 couleurs distinctes — un bien peut désormais avoir l'un des 10 types du
+// catalogue togolais (voir PROPERTY_TYPE_LABELS, lib/dashboard.ts), plus que
+// les 4 couleurs d'origine ne pouvaient distinguer sans répétition.
+const DONUT_COLORS = [
+  '#0F4C81', '#C9982E', '#059669', '#7C3AED',
+  '#DC2626', '#0891B2', '#D97706', '#4338CA', '#DB2777', '#65A30D',
+];
 
 export interface RentTypeDonutProps {
   data: RepartitionType[];

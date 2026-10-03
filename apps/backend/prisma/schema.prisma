@@ -51,10 +51,20 @@ enum NotificationConsent {
   DECLINED
 }
 
+// Liste alignée sur le marché locatif togolais (voir demande développeur,
+// 2026-10-03) — VILLA/APARTMENT/STUDIO/COMMERCIAL existaient déjà et ne sont
+// jamais renommés (éviter une migration d'enum destructive côté Postgres) ;
+// COMMERCIAL correspond au libellé "Professionnel" côté frontend.
 enum PropertyType {
-  VILLA
-  APARTMENT
+  CHAMBRE_SIMPLE
+  CHAMBRE_SALON
+  DEUX_CHAMBRES_SALON
+  TROIS_CHAMBRES_SALON
   STUDIO
+  APARTMENT
+  VILLA
+  VILLA_DUPLEX
+  APPARTEMENT_MEUBLE
   COMMERCIAL
 }
 

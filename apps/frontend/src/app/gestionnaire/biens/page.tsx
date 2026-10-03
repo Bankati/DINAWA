@@ -20,7 +20,9 @@ import {
 } from '@/components/ds';
 import { PhotoThumbnailGrid, PhotoUploadZone, toast, type PhotoGridItem } from '@/components/ui';
 
-type PropertyType = 'VILLA' | 'APARTMENT' | 'STUDIO' | 'COMMERCIAL';
+type PropertyType =
+  | 'CHAMBRE_SIMPLE' | 'CHAMBRE_SALON' | 'DEUX_CHAMBRES_SALON' | 'TROIS_CHAMBRES_SALON'
+  | 'STUDIO' | 'APARTMENT' | 'VILLA' | 'VILLA_DUPLEX' | 'APPARTEMENT_MEUBLE' | 'COMMERCIAL';
 type PropertyStatus = 'OCCUPIED' | 'VACANT' | 'RENOVATION' | 'ARCHIVED';
 
 interface PropertyPhoto { id: string; url: string; position: number; }
@@ -33,13 +35,21 @@ interface Property {
   createdAt: string;
 }
 
-const TYPE_LABELS: Record<PropertyType, string> = { VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Commercial' };
+const TYPE_LABELS: Record<PropertyType, string> = {
+  CHAMBRE_SIMPLE: 'Chambre simple', CHAMBRE_SALON: 'Chambre-salon',
+  DEUX_CHAMBRES_SALON: '2 chambres-salon', TROIS_CHAMBRES_SALON: '3 chambres-salon',
+  STUDIO: 'Studio', APARTMENT: 'Appartement', VILLA: 'Villa', VILLA_DUPLEX: 'Villa duplex',
+  APPARTEMENT_MEUBLE: 'Appartement meublé', COMMERCIAL: 'Professionnel',
+};
 const STATUS_LABELS: Record<string, string> = { OCCUPIED: 'Occupé', VACANT: 'Vacant', RENOVATION: 'Travaux', ARCHIVED: 'Archivé' };
 const STATUS_TONE: Record<string, 'success' | 'warning' | 'info' | 'neutral'> = { OCCUPIED: 'success', VACANT: 'warning', RENOVATION: 'info', ARCHIVED: 'neutral' };
 const FILTERS: [string, string][] = [['', 'Tous'], ['OCCUPIED', 'Occupés'], ['VACANT', 'Vacants'], ['RENOVATION', 'Travaux'], ['ARCHIVED', 'Archivés']];
 
 const propertySchema = z.object({
-  type: z.enum(['VILLA', 'APARTMENT', 'STUDIO', 'COMMERCIAL']),
+  type: z.enum([
+    'CHAMBRE_SIMPLE', 'CHAMBRE_SALON', 'DEUX_CHAMBRES_SALON', 'TROIS_CHAMBRES_SALON',
+    'STUDIO', 'APARTMENT', 'VILLA', 'VILLA_DUPLEX', 'APPARTEMENT_MEUBLE', 'COMMERCIAL',
+  ]),
   neighborhood: z.string().min(1, 'Le quartier est requis'),
   city: z.string().min(1, 'La ville est requise'),
   building: z.string().optional(),
@@ -52,7 +62,7 @@ const propertySchema = z.object({
 type PropertyFormValues = z.infer<typeof propertySchema>;
 
 const EMPTY_VALUES: PropertyFormValues = {
-  type: 'APARTMENT', neighborhood: '', city: '', building: '',
+  type: 'CHAMBRE_SALON', neighborhood: '', city: '', building: '',
   surfaceArea: '', roomsCount: '', monthlyRent: '', monthlyCharges: '0', description: '',
 };
 
