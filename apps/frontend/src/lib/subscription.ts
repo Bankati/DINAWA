@@ -18,6 +18,7 @@ export interface QuotaStatus {
   remaining: number | null;
   betaUntil: string | null;
   pendingInvoice: { amount: number; periodLabel: string } | null;
+  freePromotionEndsAt: string | null;
 }
 
 export const SUBSCRIPTION_TIER_LABELS: Record<SubscriptionTier, string> = {

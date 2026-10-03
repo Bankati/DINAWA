@@ -10,7 +10,6 @@ import { initiales } from '@/lib/format';
 import {
   Card, CardBody, Badge, Button, Skeleton, Label, Textarea,
   Dialog, DialogContent, DialogHeader, DialogTitle,
-  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from '@/components/ds';
 import { toast } from '@/components/ui';
 
@@ -50,6 +49,7 @@ export default function CompteDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [suspendReason, setSuspendReason] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
 
   const invalidateUser = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-user', id] });
@@ -57,7 +57,7 @@ export default function CompteDetailPage() {
   };
 
   const deleteMutation = useMutation({
-    mutationFn: () => adminApi.deleteUser(id),
+    mutationFn: () => adminApi.deleteUser(id, deleteReason.trim()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast.success('Compte supprimé avec succès.');
@@ -203,22 +203,22 @@ export default function CompteDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={showDeleteModal} onOpenChange={(open) => !deleteMutation.isPending && setShowDeleteModal(open)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce compte ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Le compte de <strong className="text-foreground">{user.firstName} {user.lastName}</strong> sera anonymisé. Cette action est irréversible.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => deleteMutation.mutate()}>
+      <Dialog open={showDeleteModal} onOpenChange={(open) => !deleteMutation.isPending && setShowDeleteModal(open)}>
+        <DialogContent maxWidth={440}>
+          <DialogHeader><DialogTitle>Supprimer ce compte ?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">
+            Le compte de <strong className="text-foreground">{user.firstName} {user.lastName}</strong> sera anonymisé (email, téléphone, nom remplacés) — ses biens/baux/paiements restent conservés. Cette action est irréversible. Le motif reste consultable dans le journal d&apos;audit.
+          </p>
+          <Label>Motif <span className="text-destructive">*</span></Label>
+          <Textarea className="mt-1.5" rows={3} value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="Ex : compte de test, doublon, demande du titulaire…" />
+          <div className="flex gap-2.5 justify-end mt-4">
+            <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={deleteMutation.isPending}>Annuler</Button>
+            <Button variant="destructive" onClick={() => deleteMutation.mutate()} disabled={!deleteReason.trim()} loading={deleteMutation.isPending}>
               Confirmer la suppression
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

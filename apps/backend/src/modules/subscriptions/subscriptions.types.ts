@@ -11,4 +11,10 @@ export interface QuotaStatus {
   // abonnements, 2026-09-30. Permet à la carte "Abonnement" du profil
   // d'afficher le bouton "Payer maintenant" sans appel réseau supplémentaire.
   pendingInvoice: { amount: number; periodLabel: string } | null;
+  // Date de fin de l'offre de lancement plateforme (PlatformSettings,
+  // jamais par utilisateur) — voir /architect bandeau promotionnel,
+  // 2026-10-02. `null` si l'offre n'est pas active. Permet au bandeau
+  // AppShell de lire la même route que la carte Abonnement du profil, sans
+  // endpoint dédié.
+  freePromotionEndsAt: Date | null;
 }

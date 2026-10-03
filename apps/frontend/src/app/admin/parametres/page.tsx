@@ -59,7 +59,7 @@ export default function ParametresPage() {
 
           <SettingRow
             title="Suspendre les quotas de biens"
-            description="Désactive le blocage par quota sur toute la plateforme — tout propriétaire ou gestionnaire peut ajouter des biens sans limite, quel que soit son forfait (Starter/Pro/Premium). Rien n'est supprimé, réactivable à tout moment."
+            description="Désactive le blocage par quota sur toute la plateforme — tout propriétaire ou gestionnaire peut ajouter des biens sans limite, quel que soit son forfait (Starter/Pro/Premium). Affiche aussi automatiquement un bandeau « gratuit pendant 6 mois » à tous les propriétaires/gestionnaires, avec compte à rebours. Rien n'est supprimé, réactivable à tout moment (le bandeau disparaît immédiatement si vous désactivez)."
             active={settings.subscriptionQuotasSuspended}
             saving={savingKey === 'subscriptionQuotasSuspended'}
             onToggle={() =>

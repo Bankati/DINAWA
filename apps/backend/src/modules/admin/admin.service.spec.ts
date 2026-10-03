@@ -226,6 +226,32 @@ describe('AdminService', () => {
     });
   });
 
+  describe('deleteUser', () => {
+    it('lève une NotFoundException si le compte est introuvable', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(null);
+      await expect(service.deleteUser('missing', 'motif test')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('anonymise le compte — le motif n’est jamais écrit sur la ligne User, seul AuditLogInterceptor le capture (voir /architect journal d’audit)', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        supabaseId: null,
+        email: 'test@warah.test',
+      });
+
+      await service.deleteUser('u1', 'nettoyage de compte de test');
+
+      const [callArgs] = prisma.user.update.mock.calls[0] as [
+        { where: { id: string }; data: Record<string, unknown> },
+      ];
+      expect(callArgs.where).toEqual({ id: 'u1' });
+      expect(callArgs.data).not.toHaveProperty('reason');
+      expect(callArgs.data['anonymizedAt']).toBeInstanceOf(Date);
+    });
+  });
+
   describe('listTransactions', () => {
     it('filtre par source/status/paymentMethod/période', async () => {
       await service.listTransactions({

@@ -12,6 +12,7 @@ import { SuspendUserDto } from './dto/suspend-user.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
+import { DeleteUserDto } from './dto/delete-user.dto';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 
 @ApiTags('Admin')
@@ -95,8 +96,8 @@ export class AdminController {
 
   @Delete('users/:id')
   @ApiOperation({ summary: 'Supprimer (anonymiser) un compte (super admin)' })
-  deleteUser(@Param('id') id: string) {
-    return this.adminService.deleteUser(id);
+  deleteUser(@Param('id') id: string, @Body() dto: DeleteUserDto) {
+    return this.adminService.deleteUser(id, dto.reason);
   }
 
   @Patch('reviews/:id/moderate')
