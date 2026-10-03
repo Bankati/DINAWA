@@ -47,8 +47,10 @@ export class SubscriptionsService {
   async getQuotaStatus(user: AuthenticatedUser): Promise<QuotaStatus> {
     const subscription = await this.getSubscriptionOrThrow(this.prisma, user.id);
     const billablePropertiesCount = await this.countBillableProperties(user.id);
-    const suspended = await this.platformSettings.quotasSuspended();
-    const quota = suspended ? null : SUBSCRIPTION_TIERS[subscription.tier].managedPropertiesQuota;
+    const platformSettings = await this.platformSettings.get();
+    const quota = platformSettings.subscriptionQuotasSuspended
+      ? null
+      : SUBSCRIPTION_TIERS[subscription.tier].managedPropertiesQuota;
     const pendingInvoice = await this.prisma.subscriptionInvoice.findFirst({
       where: { subscriptionId: subscription.id, status: 'PENDING' },
       orderBy: { periodStart: 'asc' },
@@ -68,6 +70,7 @@ export class SubscriptionsService {
             periodLabel: formatPeriodLabel(pendingInvoice.periodStart),
           }
         : null,
+      freePromotionEndsAt: platformSettings.freePromotionEndsAt,
     };
   }
 

@@ -87,8 +87,8 @@ export const adminApi = {
       `/admin/users${toQueryString(params)}`,
     ),
   getUser: (id: string) => api.get<AdminUserDetail>(`/admin/users/${id}`),
-  deleteUser: (id: string) =>
-    api.delete<{ message: string }>(`/admin/users/${id}`),
+  deleteUser: (id: string, reason: string) =>
+    api.delete<{ message: string }>(`/admin/users/${id}`, { reason }),
   suspendUser: (id: string, reason: string) =>
     api.post<{ message: string }>(`/admin/users/${id}/suspend`, { reason }),
   reactivateUser: (id: string) =>

@@ -16,7 +16,7 @@ describe('SubscriptionsService', () => {
     property: { count: jest.Mock };
     $executeRaw: jest.Mock;
   };
-  let platformSettings: { quotasSuspended: jest.Mock };
+  let platformSettings: { quotasSuspended: jest.Mock; get: jest.Mock };
   let paydunya: { createInvoice: jest.Mock; confirmInvoiceStatus: jest.Mock };
   let config: { getOrThrow: jest.Mock };
   let notify: { notifyUser: jest.Mock };
@@ -49,7 +49,14 @@ describe('SubscriptionsService', () => {
       property: { count: jest.fn() },
       $executeRaw: jest.fn().mockResolvedValue(undefined),
     };
-    platformSettings = { quotasSuspended: jest.fn().mockResolvedValue(false) };
+    platformSettings = {
+      quotasSuspended: jest.fn().mockResolvedValue(false),
+      get: jest.fn().mockResolvedValue({
+        subscriptionQuotasSuspended: false,
+        subscriptionBillingEnabled: false,
+        freePromotionEndsAt: null,
+      }),
+    };
     paydunya = { createInvoice: jest.fn(), confirmInvoiceStatus: jest.fn() };
     config = {
       getOrThrow: jest.fn((key: string) =>
@@ -123,7 +130,11 @@ describe('SubscriptionsService', () => {
     });
 
     it('renvoie un quota illimité si le super-admin a suspendu les quotas (voir /architect abonnements)', async () => {
-      platformSettings.quotasSuspended.mockResolvedValueOnce(true);
+      platformSettings.get.mockResolvedValueOnce({
+        subscriptionQuotasSuspended: true,
+        subscriptionBillingEnabled: false,
+        freePromotionEndsAt: null,
+      });
       prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription({ tier: 'STARTER' }));
       prisma.property.count.mockResolvedValueOnce(9);
 
@@ -131,6 +142,21 @@ describe('SubscriptionsService', () => {
 
       expect(result.managedPropertiesQuota).toBeNull();
       expect(result.remaining).toBeNull();
+    });
+
+    it('renvoie freePromotionEndsAt tel que renvoyé par PlatformSettings (voir /architect bandeau promotionnel)', async () => {
+      const endsAt = new Date('2027-04-01');
+      platformSettings.get.mockResolvedValueOnce({
+        subscriptionQuotasSuspended: true,
+        subscriptionBillingEnabled: false,
+        freePromotionEndsAt: endsAt,
+      });
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription());
+      prisma.property.count.mockResolvedValueOnce(1);
+
+      const result = await service.getQuotaStatus(owner);
+
+      expect(result.freePromotionEndsAt).toBe(endsAt);
     });
 
     it('renvoie pendingInvoice=null si aucune facture en attente', async () => {

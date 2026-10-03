@@ -51,7 +51,6 @@ enum NotificationConsent {
   DECLINED
 }
 
-
 enum PropertyType {
   VILLA
   APARTMENT
@@ -240,21 +239,21 @@ model User {
   managerProfile ManagerProfile?
   adminProfile   AdminProfile?
 
-  tenantsInvited         TenantProfile[]        @relation("TenantInvitedBy")
-  ownedProperties        Property[]             @relation("PropertyOwner")
+  tenantsInvited         TenantProfile[]       @relation("TenantInvitedBy")
+  ownedProperties        Property[]            @relation("PropertyOwner")
   listingsPublished      Listing[]
-  leasesAsOwner          Lease[]                @relation("LeaseOwner")
-  leasesAsTenant         Lease[]                @relation("LeaseTenant")
-  tenantBlocksReceived   TenantPropertyBlock[]  @relation("TenantPropertyBlockTenant")
-  tenantBlocksAuthored   TenantPropertyBlock[]  @relation("TenantPropertyBlockAuthor")
-  mandatesAsOwner        Mandate[]              @relation("MandateOwner")
-  mandatesAsManager      Mandate[]              @relation("MandateManager")
-  paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
-  paymentsConfirmed      Payment[]              @relation("PaymentConfirmedBy")
-  paymentsAsBeneficiary  Payment[]              @relation("PaymentBeneficiary")
-  payouts                Payout[]               @relation("PayoutBeneficiary")
-  managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
-  managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
+  leasesAsOwner          Lease[]               @relation("LeaseOwner")
+  leasesAsTenant         Lease[]               @relation("LeaseTenant")
+  tenantBlocksReceived   TenantPropertyBlock[] @relation("TenantPropertyBlockTenant")
+  tenantBlocksAuthored   TenantPropertyBlock[] @relation("TenantPropertyBlockAuthor")
+  mandatesAsOwner        Mandate[]             @relation("MandateOwner")
+  mandatesAsManager      Mandate[]             @relation("MandateManager")
+  paymentsRecorded       Payment[]             @relation("PaymentRecordedBy")
+  paymentsConfirmed      Payment[]             @relation("PaymentConfirmedBy")
+  paymentsAsBeneficiary  Payment[]             @relation("PaymentBeneficiary")
+  payouts                Payout[]              @relation("PayoutBeneficiary")
+  managerReviewsGiven    ManagerReview[]       @relation("ManagerReviewOwner")
+  managerReviewsReceived ManagerReview[]       @relation("ManagerReviewManager")
   subscription           Subscription?
   pushSubscriptions      PushSubscription[]
   passwordResetOtps      PasswordResetOtp[]
@@ -300,13 +299,13 @@ model OwnerProfile {
 // existe donc avant même que le locataire n'ait terminé son inscription
 // via le lien d'invitation (voir unité 09).
 model TenantProfile {
-  id              String    @id @default(cuid())
-  userId          String    @unique
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   invitedByUserId String?
-  invitedBy       User?     @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
-  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  invitedBy       User?    @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("tenant_profiles")
 }
@@ -347,7 +346,6 @@ model PasswordResetOtp {
   @@index([userId])
   @@map("password_reset_otps")
 }
-
 
 // ────────────────────────────────────────────────────────────────
 // Patrimoine immobilier
@@ -731,21 +729,21 @@ model Subscription {
 }
 
 model SubscriptionInvoice {
-  id             String        @id @default(cuid())
-  subscriptionId String
-  subscription   Subscription  @relation(fields: [subscriptionId], references: [id])
-  amount         Int
-  status         InvoiceStatus @default(PENDING)
-  transactionId  String?       @unique
-  checkoutUrl    String?
-  attemptCount   Int           @default(0)
-  paidAt         DateTime?     @db.Timestamptz(6)
-  periodStart    DateTime      @db.Timestamptz(6)
-  periodEnd      DateTime      @db.Timestamptz(6)
-  reminder3SentAt DateTime?    @db.Timestamptz(6)
-  reminder7SentAt DateTime?    @db.Timestamptz(6)
-  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+  id              String        @id @default(cuid())
+  subscriptionId  String
+  subscription    Subscription  @relation(fields: [subscriptionId], references: [id])
+  amount          Int
+  status          InvoiceStatus @default(PENDING)
+  transactionId   String?       @unique
+  checkoutUrl     String?
+  attemptCount    Int           @default(0)
+  paidAt          DateTime?     @db.Timestamptz(6)
+  periodStart     DateTime      @db.Timestamptz(6)
+  periodEnd       DateTime      @db.Timestamptz(6)
+  reminder3SentAt DateTime?     @db.Timestamptz(6)
+  reminder7SentAt DateTime?     @db.Timestamptz(6)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
 
   @@index([subscriptionId])
   @@map("subscription_invoices")
@@ -756,10 +754,16 @@ model SubscriptionInvoice {
 // clé-valeur générique : seuls ces deux interrupteurs existent aujourd'hui,
 // pas besoin d'une table ouverte à n'importe quelle clé pour deux booléens.
 model PlatformSettings {
-  id                          String   @id @default("singleton")
-  subscriptionQuotasSuspended Boolean  @default(false)
-  subscriptionBillingEnabled  Boolean  @default(false)
-  updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
+  id                          String    @id @default("singleton")
+  subscriptionQuotasSuspended Boolean   @default(false)
+  subscriptionBillingEnabled  Boolean   @default(false)
+  // Calculée automatiquement (+6 mois) quand subscriptionQuotasSuspended
+  // passe à true, effacée quand il repasse à false — voir /architect
+  // bandeau promotionnel, 2026-10-02. Jamais un champ libre côté admin :
+  // un seul bouton active les deux à la fois, pour que le bandeau ne
+  // puisse jamais afficher une promesse que le quota réel ne tient pas.
+  freePromotionEndsAt         DateTime? @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @db.Timestamptz(6)
 
   @@map("platform_settings")
 }
