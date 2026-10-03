@@ -76,6 +76,7 @@ describe('AuthService', () => {
     phone: '91445566',
     payoutOperator: 'FLOOZ',
     city: 'Kara',
+    companyName: 'Immo Kara SARL',
   };
   const createdUser = { id: 'user-1', email: ownerDto.email, role: 'OWNER' };
   const createdLease = { id: 'lease-1', propertyId: 'property-1', tenantUserId: 'tenant-1' };
@@ -374,9 +375,18 @@ describe('AuthService', () => {
         },
       });
       expect(tx.managerProfile.create).toHaveBeenCalledWith({
-        data: { userId: createdUser.id },
+        data: { userId: createdUser.id, companyName: managerDto.companyName },
       });
       expect(result).toEqual({ user: createdUser });
+    });
+
+    it('crée le ManagerProfile sans companyName quand il est omis (champ facultatif)', async () => {
+      const dtoWithoutCompany: SignupManagerDto = { ...managerDto, companyName: undefined };
+      await service.signupManager(dtoWithoutCompany);
+
+      expect(tx.managerProfile.create).toHaveBeenCalledWith({
+        data: { userId: createdUser.id, companyName: undefined },
+      });
     });
   });
 
