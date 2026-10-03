@@ -63,7 +63,7 @@ export default function GestionnairePaiementManualPage() {
   const [scheduleEntryId, setScheduleEntryId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH'>('CASH');
   const [note, setNote] = useState('');
   const [proof, setProof] = useState<File | null>(null);
 
@@ -149,7 +149,7 @@ export default function GestionnairePaiementManualPage() {
         <ArrowLeft className="w-3.5 h-3.5" /> Paiements
       </Link>
 
-      <PageHeader title="Enregistrer un paiement" subtitle="Paiement hors-plateforme reçu en espèces ou par virement" />
+      <PageHeader title="Enregistrer un paiement" subtitle="Paiement hors-plateforme reçu en espèces" />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm flex items-center justify-between">
@@ -234,12 +234,12 @@ export default function GestionnairePaiementManualPage() {
                   <div>
                     <Label>Mode de paiement <span className="text-destructive">*</span></Label>
                     <div className="flex gap-3 mt-1.5">
-                      {[{ value: 'CASH', label: 'Espèces' }, { value: 'BANK_TRANSFER', label: 'Virement bancaire' }].map((m) => (
+                      {[{ value: 'CASH', label: 'Espèces' }].map((m) => (
                         <label
                           key={m.value}
                           className={`flex items-center gap-2 cursor-pointer text-sm px-4 py-2.5 rounded-lg border ${paymentMethod === m.value ? 'border-primary bg-primary-50 dark:bg-ds-secondary text-primary font-semibold' : 'border-ds-border text-foreground'}`}
                         >
-                          <input type="radio" name="method" value={m.value} checked={paymentMethod === m.value} onChange={() => setPaymentMethod(m.value as 'CASH' | 'BANK_TRANSFER')} className="hidden" />
+                          <input type="radio" name="method" value={m.value} checked={paymentMethod === m.value} onChange={() => setPaymentMethod(m.value as 'CASH')} className="hidden" />
                           {m.label}
                         </label>
                       ))}

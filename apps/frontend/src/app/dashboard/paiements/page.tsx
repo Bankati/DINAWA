@@ -26,7 +26,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'info' | 'ne
   PARTIAL: 'warning', LATE: 'warning', OVERDUE: 'error', REJECTED: 'error',
 };
 const METHOD_LABELS: Record<string, string> = {
-  TMONEY: 'T-Money', FLOOZ: 'Flooz', CASH: 'Espèces', BANK_TRANSFER: 'Virement',
+  TMONEY: 'T-Money', FLOOZ: 'Flooz', CASH: 'Espèces',
 };
 
 // Gestionnaire du mandat actif du bien, s'il y en a un : le propriétaire voit
@@ -250,7 +250,7 @@ export default function PaiementsPage() {
                       <TableCell className="text-muted-foreground">{p.paymentMethod ? (METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod) : '—'}</TableCell>
                       <TableCell><Badge tone={STATUS_TONE[p.status] ?? 'neutral'}>{STATUS_LABELS[p.status] ?? p.status}</Badge></TableCell>
                       <TableCell>
-                        {/* Seuls les paiements PayDunya sont reversés (espèces/virement ne transitent pas par WARAH). */}
+                        {/* Seuls les paiements PayDunya sont reversés (les paiements en espèces ne transitent pas par WARAH). */}
                         {p.payout ? (
                           <Badge tone={PAYOUT_STATUS_TONE[p.payout.status]}>{PAYOUT_STATUS_LABELS[p.payout.status]}</Badge>
                         ) : (
