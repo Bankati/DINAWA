@@ -107,10 +107,16 @@ function AnnoncesPublicView() {
                   </label>
                   <select className="fg-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as PropertyType | '')}>
                     <option value="">Tous les types</option>
-                    <option value="VILLA">Villa</option>
-                    <option value="APARTMENT">Appartement</option>
+                    <option value="CHAMBRE_SIMPLE">Chambre simple</option>
+                    <option value="CHAMBRE_SALON">Chambre-salon</option>
+                    <option value="DEUX_CHAMBRES_SALON">2 chambres-salon</option>
+                    <option value="TROIS_CHAMBRES_SALON">3 chambres-salon</option>
                     <option value="STUDIO">Studio</option>
-                    <option value="COMMERCIAL">Bureau / Commerce</option>
+                    <option value="APARTMENT">Appartement</option>
+                    <option value="VILLA">Villa</option>
+                    <option value="VILLA_DUPLEX">Villa duplex</option>
+                    <option value="APPARTEMENT_MEUBLE">Appartement meublé</option>
+                    <option value="COMMERCIAL">Professionnel</option>
                   </select>
                 </div>
                 <div className="fg-divider" />

@@ -39,7 +39,10 @@ interface ScheduleEntry {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  VILLA: 'Villa', APARTMENT: 'Appartement', STUDIO: 'Studio', COMMERCIAL: 'Local commercial',
+  CHAMBRE_SIMPLE: 'Chambre simple', CHAMBRE_SALON: 'Chambre-salon',
+  DEUX_CHAMBRES_SALON: '2 chambres-salon', TROIS_CHAMBRES_SALON: '3 chambres-salon',
+  STUDIO: 'Studio', APARTMENT: 'Appartement', VILLA: 'Villa', VILLA_DUPLEX: 'Villa duplex',
+  APPARTEMENT_MEUBLE: 'Appartement meublé', COMMERCIAL: 'Professionnel',
 };
 
 const BACK_ROUTE = '/dashboard/paiements';
