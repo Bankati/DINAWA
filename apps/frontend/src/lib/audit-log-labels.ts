@@ -63,7 +63,9 @@ const SETTINGS_FIELD_LABELS: Record<string, string> = {
   subscriptionBillingEnabled: "Facturation des abonnements",
 };
 
-const ACTION_LABELS: Record<string, ActionLabel> = {
+// Exporté uniquement pour audit-log-labels.spec.ts (validation de format) —
+// pas d'autre consommateur hors de ce fichier.
+export const ACTION_LABELS: Record<string, ActionLabel> = {
   "POST /api/admin/users/:id/suspend": {
     verb: "a suspendu un compte utilisateur",
     tone: "warning",

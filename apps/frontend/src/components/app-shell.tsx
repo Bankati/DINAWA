@@ -266,10 +266,13 @@ function FreePromoBanner({ enabled }: { enabled: boolean }) {
   return (
     <div
       ref={bannerRef}
-      role="status"
+      aria-label="WARAH est gratuite pour tous les propriétaires et gestionnaires pendant 6 mois"
       className="relative w-full px-12 py-2.5 text-center text-sm text-white"
       style={{ background: 'linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%)' }}
     >
+      {/* Pas de role="status" : le compte à rebours change toutes les minutes
+          (forceTick) et une région live réannoncerait le bandeau en continu
+          aux lecteurs d'écran — voir /review, 2026-10-03. */}
       <p className="m-0 leading-snug">
         🎉 WARAH est <strong>gratuite</strong> pour tous les propriétaires et gestionnaires — gérez tous vos biens sans limite.{' '}
         <strong style={{ color: 'var(--color-accent)' }}>Fin dans {formatPromoCountdown(remainingMs)}</strong>

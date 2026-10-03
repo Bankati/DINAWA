@@ -49,12 +49,21 @@ export class PlatformSettingsService {
     subscriptionQuotasSuspended?: boolean;
     subscriptionBillingEnabled?: boolean;
   }): Promise<PlatformSettings> {
-    await this.get(); // garantit que la ligne singleton existe avant l'update
+    const current = await this.get(); // garantit que la ligne singleton existe avant l'update
 
     const patch: Prisma.PlatformSettingsUpdateInput = { ...data };
-    if (data.subscriptionQuotasSuspended === true) {
+    // Ne recalculer/effacer la date que sur une vraie transition — sinon un
+    // second appel avec `true` (déjà actif) repousserait silencieusement la
+    // fin de promo de 6 mois à chaque fois (voir /review, 2026-10-03).
+    if (
+      data.subscriptionQuotasSuspended === true &&
+      current.subscriptionQuotasSuspended === false
+    ) {
       patch.freePromotionEndsAt = addMonths(new Date(), FREE_PROMOTION_MONTHS);
-    } else if (data.subscriptionQuotasSuspended === false) {
+    } else if (
+      data.subscriptionQuotasSuspended === false &&
+      current.subscriptionQuotasSuspended === true
+    ) {
       patch.freePromotionEndsAt = null;
     }
 

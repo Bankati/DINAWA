@@ -116,5 +116,37 @@ describe('PlatformSettingsService', () => {
         data: { subscriptionQuotasSuspended: false, freePromotionEndsAt: null },
       });
     });
+
+    it('ne touche pas freePromotionEndsAt si subscriptionQuotasSuspended est déjà true (pas de vraie transition — voir /review bandeau promotionnel)', async () => {
+      prisma.platformSettings.findUnique.mockResolvedValueOnce({
+        id: 'singleton',
+        subscriptionQuotasSuspended: true,
+        subscriptionBillingEnabled: false,
+      });
+      prisma.platformSettings.update.mockResolvedValueOnce({});
+
+      await service.update({ subscriptionQuotasSuspended: true });
+
+      expect(prisma.platformSettings.update).toHaveBeenCalledWith({
+        where: { id: 'singleton' },
+        data: { subscriptionQuotasSuspended: true },
+      });
+    });
+
+    it('ne touche pas freePromotionEndsAt si subscriptionQuotasSuspended est déjà false', async () => {
+      prisma.platformSettings.findUnique.mockResolvedValueOnce({
+        id: 'singleton',
+        subscriptionQuotasSuspended: false,
+        subscriptionBillingEnabled: false,
+      });
+      prisma.platformSettings.update.mockResolvedValueOnce({});
+
+      await service.update({ subscriptionQuotasSuspended: false });
+
+      expect(prisma.platformSettings.update).toHaveBeenCalledWith({
+        where: { id: 'singleton' },
+        data: { subscriptionQuotasSuspended: false },
+      });
+    });
   });
 });
