@@ -1,0 +1,120 @@
+/* ── Page légale (Politique de confidentialité / CGU) ──
+   Mise en page texte-dense : une colonne lisible, sommaire ancré sur
+   desktop, typographie héritée des variables de marque (globals.css).
+   Dupliqué depuis confidentialite/page.css (convention du projet : un
+   page.css autonome par route, jamais d'import inter-routes). */
+
+.legal-page { background: #fff; }
+
+.legal-hero {
+  padding: 56px 24px 32px;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(10,38,80,1) 0%, rgba(15,76,129,1) 60%, rgba(8,30,65,1) 100%);
+  color: #fff;
+}
+.legal-eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 10px;
+}
+.legal-title { font-size: clamp(26px, 4vw, 38px); font-weight: 800; margin: 0 0 10px; }
+.legal-updated { font-size: 13.5px; opacity: 0.8; margin: 0; }
+
+.legal-wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 48px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .legal-wrap { grid-template-columns: 1fr; }
+}
+
+.legal-toc {
+  position: sticky;
+  top: 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (max-width: 860px) {
+  .legal-toc { position: static; border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; }
+}
+.legal-toc-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 8px; }
+.legal-toc a {
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: 6px 0;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  line-height: 1.4;
+}
+.legal-toc a:hover { color: var(--color-primary); border-left-color: var(--color-primary-50); }
+
+.legal-body { min-width: 0; max-width: 720px; }
+.legal-intro { font-size: 15px; color: var(--color-text-muted); line-height: 1.7; margin-bottom: 36px; }
+.legal-intro strong { color: var(--color-text); }
+
+.legal-section { margin-bottom: 36px; scroll-margin-top: 90px; }
+.legal-section h2 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--color-primary-dark);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.legal-section h2 .legal-num { color: var(--color-accent); font-variant-numeric: tabular-nums; }
+.legal-section h3 { font-size: 15px; font-weight: 700; color: var(--color-text); margin: 18px 0 8px; }
+.legal-section p { font-size: 14.5px; line-height: 1.75; color: var(--color-text); margin: 0 0 12px; }
+.legal-section ul { margin: 0 0 14px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.legal-section li { font-size: 14.5px; line-height: 1.65; color: var(--color-text); }
+.legal-section a { color: var(--color-primary); font-weight: 600; text-decoration: none; }
+.legal-section a:hover { text-decoration: underline; }
+
+.legal-note {
+  background: var(--color-primary-50);
+  border: 1px solid rgba(15,76,129,0.15);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-text);
+  margin-bottom: 14px;
+}
+.legal-note strong { color: var(--color-primary-dark); }
+
+.legal-note-strong {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #7F1D1D;
+  margin-bottom: 14px;
+}
+.legal-note-strong strong { color: #991B1B; }
+
+.legal-placeholder {
+  background: #FFF7ED;
+  border: 1px solid #FDBA74;
+  color: #9A3412;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.legal-table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13.5px; }
+.legal-table th, .legal-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.legal-table th { color: var(--color-text-muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }

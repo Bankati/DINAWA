@@ -65,8 +65,16 @@
 
 /* ── BARRE DU BAS ── */
 .pf-bottom { border-top: 1px solid rgba(255,255,255,0.06); padding: 20px 0; }
-.pf-bottom-inner { max-width: 1200px; margin: 0 auto; padding: 0 32px; display: flex; align-items: center; justify-content: center; }
+.pf-bottom-inner {
+  max-width: 1200px; margin: 0 auto; padding: 0 32px;
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 6px 16px;
+}
 .pf-copy { font-size: .8rem; color: rgba(255,255,255,0.3); }
+.pf-legal { display: flex; align-items: center; gap: 8px; }
+.pf-legal-link { font-size: .8rem; color: rgba(255,255,255,0.3); text-decoration: none; transition: color .18s; }
+.pf-legal-link:hover { color: white; }
+.pf-legal-sep { font-size: .8rem; color: rgba(255,255,255,0.2); }
 
 /* ── BOUTON RETOUR EN HAUT ── */
 .pf-scrolltop {

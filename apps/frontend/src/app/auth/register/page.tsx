@@ -41,6 +41,7 @@ export default function RegisterPage() {
   const [info, setInfo] = useState<InfoForm>(EMPTY_INFO);
   const [touched, setTouched] = useState<Partial<Record<keyof InfoForm, boolean>>>({});
 
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [detectedCountry, setDetectedCountry] = useState<PhonePrefix | null>(null);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -89,7 +90,8 @@ export default function RegisterPage() {
     info.password.length >= 6 &&
     phoneIsValid(info.phone) &&
     !!info.payoutOperator &&
-    !!info.city.trim();
+    !!info.city.trim() &&
+    acceptedTerms;
 
   const filteredPrefixes = (() => {
     const q = countrySearch.trim().toLowerCase();
@@ -327,6 +329,20 @@ export default function RegisterPage() {
                   <input type="text" placeholder="Lomé" value={info.city} onChange={(e) => setField('city', e.target.value)} onBlur={() => markTouched('city')} />
                   {cityInvalid && <span className="error">Ville requise</span>}
                 </div>
+
+                <label className="lf-remember">
+                  <input
+                    type="checkbox"
+                    className="lf-check"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  />
+                  <span className="lf-check-box" />
+                  <span>
+                    J&apos;accepte les <Link href="/cgu" target="_blank" rel="noopener noreferrer">Conditions Générales d&apos;Utilisation</Link>{' '}
+                    et la <Link href="/confidentialite" target="_blank" rel="noopener noreferrer">Politique de confidentialité</Link>
+                  </span>
+                </label>
 
                 <button type="submit" className="btn-primary" disabled={!infoFormValid || isLoading}>
                   {isLoading ? (

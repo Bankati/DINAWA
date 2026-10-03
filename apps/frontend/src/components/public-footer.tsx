@@ -95,6 +95,11 @@ export default function PublicFooter() {
       <div className="pf-bottom">
         <div className="pf-bottom-inner">
           <p className="pf-copy">© 2026 WARAH — Tous droits réservés</p>
+          <nav className="pf-legal">
+            <Link href="/cgu" className="pf-legal-link">CGU</Link>
+            <span className="pf-legal-sep" aria-hidden="true">·</span>
+            <Link href="/confidentialite" className="pf-legal-link">Confidentialité</Link>
+          </nav>
         </div>
       </div>
 
