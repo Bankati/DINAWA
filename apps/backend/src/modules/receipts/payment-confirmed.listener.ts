@@ -51,20 +51,19 @@ export class PaymentConfirmedListener {
       const variables = { period, amount: payment.paidAmount };
       const emailAttachments = [{ filename: 'quittance-warah.pdf', content: pdf }];
 
-      await Promise.all([
-        this.notify.notifyUser({
-          userId: payment.lease.ownerId,
-          event: 'receipt',
-          variables,
-          emailAttachments,
-        }),
-        this.notify.notifyUser({
-          userId: payment.lease.tenantUserId,
-          event: 'receipt',
-          variables,
-          emailAttachments,
-        }),
-      ]);
+      // Bien sous mandat actif : le gestionnaire reçoit aussi la quittance —
+      // c'est lui qui encaisse réellement le loyer (voir resolveResponsibleUserId,
+      // common/permissions/property-access.ts), le propriétaire ne doit jamais
+      // être le seul à ne pas savoir qu'un paiement vient d'être confirmé.
+      const activeMandate = payment.lease.property.mandates[0] ?? null;
+      const recipientUserIds = [payment.lease.ownerId, payment.lease.tenantUserId];
+      if (activeMandate) recipientUserIds.push(activeMandate.managerId);
+
+      await Promise.all(
+        recipientUserIds.map((userId) =>
+          this.notify.notifyUser({ userId, event: 'receipt', variables, emailAttachments }),
+        ),
+      );
     } catch (error) {
       this.logger.error(`[payment-confirmed] échec pour paiement=${event.paymentId}`, error);
     }
