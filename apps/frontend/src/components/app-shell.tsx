@@ -202,7 +202,9 @@ function formatPromoCountdown(remainingMs: number): string {
 function FreePromoBanner({ enabled }: { enabled: boolean }) {
   const [endsAt, setEndsAt] = useState<Date | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const [, forceTick] = useState(0);
+  // L'heure courante vient d'un effet, jamais d'un Date.now() lu pendant le
+  // rendu (impur — risque de désync avec l'hydratation SSR, voir CI).
+  const [now, setNow] = useState<number | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -222,12 +224,13 @@ function FreePromoBanner({ enabled }: { enabled: boolean }) {
   // pour un bandeau, jamais un minuteur à la seconde qui distrairait inutilement.
   useEffect(() => {
     if (!endsAt) return;
-    const interval = setInterval(() => forceTick((v) => v + 1), 60_000);
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(interval);
   }, [endsAt]);
 
-  const remainingMs = endsAt ? endsAt.getTime() - Date.now() : 0;
-  const visible = enabled && !dismissed && !!endsAt && remainingMs > 0;
+  const remainingMs = endsAt && now ? endsAt.getTime() - now : 0;
+  const visible = enabled && !dismissed && !!endsAt && !!now && remainingMs > 0;
 
   // Hauteur réelle posée en variable CSS (--promo-banner-height), lue par
   // .app-frame/.mobile-btn (app-shell.css) — sans ça, un bandeau en flux
