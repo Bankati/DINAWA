@@ -6,6 +6,8 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
+**Prochaine phase — Phase 12 WhatsApp et chatbot locataire (planifiée le 2026-10-07)** : du 2026-10-12 au 2026-10-23, 2 développeurs à temps plein (backend + frontend). Unités 42 à 49 + réactivation de l'unité 39 (signalements), détaillées dans `build-plan.md`. Prérequis avant le 2026-10-12 : compte Meta Business + numéro de test, session `/architect` globale le 2026-10-09 (vocabulaire commun, questions ouvertes listées plus bas), contrats d'API des unités 43 et 45 fixés pour le frontend. Rien n'est encore construit.
+
 **Audit de cohérence code ↔ tracker (2026-08-06)** — ce fichier n'avait pas été mis à jour depuis le 2026-07-28 alors que du code backend réel a changé depuis (commit `9064988`, 2026-08-04, auteur différent de cette session). Écarts trouvés et corrigés ci-dessous :
 
 - **Unité 07 (vérification CNI) intégralement retirée le 2026-08-04**, alors que ce fichier la documentait encore comme terminée et testée. Le module `src/modules/identity/` (service, controller, listener OCR), le modèle Prisma `IdentityVerification`, l'énum `IdVerificationStatus`, le helper `assertIdentityVerified()` et ses tests ont tous été supprimés. Les dépendances `tesseract.js`/`mrz` ont été retirées de `package.json`. Voir la case décochée plus bas et la section Decisions mise à jour.
@@ -412,6 +414,7 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
       21 tests unitaires ajoutés (`admin.service.spec.ts` étendu, `audit-log.interceptor.spec.ts` nouveau) — **404 tests au total**. `tsc`/`eslint` propres (warnings pré-existants sur les retours de fonction non typés, non corrigés — hors périmètre de cette passe). **Frontend** : `admin/comptes/[id]` (suspendre/réactiver avec motif), `admin/transactions` (table réelle remplace le placeholder), nouvelle page `admin/audit-logs` (+ entrée de nav), `admin/page.tsx` (MRR, comptes suspendus, top propriétaires/gestionnaires). `admin/litiges` reste inchangé (placeholder "disponible prochainement", décision explicite de report).
 - [~] 38 Tableau de bord administrateur — voir détail ci-dessus (périmètre réduit intégré à l'unité 37 plutôt que traité séparément)
 - [ ] 39 Gestion des litiges et signalements — **explicitement mis de côté le 2026-08-12**, voir décisions ci-dessus. Aucune source d'entrée réelle (signalement d'annonce jamais construit ; avis signalés déjà couverts par `ManagerReview.isHidden`, unité 34). À retraiter via une session `/architect` dédiée pour définir un périmètre concret avant tout code.
+      **Réactivée le 2026-10-07** avec un périmètre redéfini (signalements locataire via le chatbot WhatsApp, qui fournissent enfin une source d'entrée réelle) — planifiée en Phase 12, voir ci-dessous.
 
 ### Phase 11 — Sécurité, conformité et observabilité
 
@@ -419,6 +422,18 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
       **Décisions prises avec le développeur (`/architect`)** : quotas ajoutés via `@Throttle({ default: {...} })` (surcharge du throttler `default` existant, pas de nouveau throttler nommé) — `POST /auth/login` (10/min/IP), `POST /auth/signup/{owner,manager,tenant}` (5/heure/IP), `POST /auth/password-reset/request` (5/heure/IP), `POST /contact` (5/heure/IP). Constantes centralisées dans `src/common/constants.ts` (`THROTTLE_LOGIN`/`THROTTLE_SIGNUP`/`THROTTLE_PASSWORD_RESET_REQUEST`/`THROTTLE_CONTACT`). Déclaration de paiement locataire et futur webhook Cashpay volontairement exclus (authentifié + peu exposé, ou n'existe pas encore — Cashpay toujours reporté).
       5 tests unitaires ajoutés (`auth.controller.spec.ts`, `contact.controller.spec.ts`, nouveaux — vérifient la métadonnée `@Throttle()` via `Reflect.getMetadata()`, pas de test d'intégration réel du `429`). `tsc`/`eslint` propres. **Testé en conditions réelles** : dépassement du quota `/auth/login` déclenché volontairement (11 requêtes en moins d'une minute depuis la même IP), `429 Too Many Requests` confirmé à la 11ᵉ tentative, quota qui se réinitialise après la fenêtre de 60s confirmé également.
 - [x] 41 Sauvegardes, export RGPD et conformité — **périmètre réduit assumé, 2026-08-13**. **Export RGPD abandonné** — décision explicite du développeur, pas de besoin identifié pour l'instant. **Sauvegardes entièrement déléguées à Supabase** — aucun mécanisme applicatif construit ; décision documentée dans `docs/DEPLOYMENT.md` (nouvelle section 3d) : plan Free actuel sans garantie automatique, migration vers le plan Pro prévue (sauvegardes quotidiennes automatiques), vérification réelle de la politique de rétention à refaire au moment du changement de plan.
+
+### Phase 12 — WhatsApp et chatbot locataire (planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23)
+
+- [ ] 42 Fondations WhatsApp — prévu lun. 12 (backend)
+- [ ] 43 Lien de paiement public — backend mer. 14, frontend lun. 12 → mer. 14
+- [ ] 44 Webhook Meta — prévu mar. 13 (backend)
+- [ ] 45 Consentement WhatsApp et code locataire — backend mer. 14, frontend mer. 14 → jeu. 15
+- [ ] 46 Canal WhatsApp dans NotifyService — ven. 16 (rappel, quittance) et mer. 21 (relance retard, retry)
+- [ ] 47 Robot à menu — prévu jeu. 15 (backend) ; démo « payer depuis le robot » ven. 16
+- [ ] 48 Messagerie de l'agence — backend lun. 19, frontend jeu. 15 → mer. 21
+- [ ] 39 Signalements locataire (réactivée) — prévu mar. 20 ; photo reportable en semaine 3 si retard constaté le 19
+- [ ] 49 Recette et documentation WhatsApp — jeu. 22 et ven. 23
 
 ### Performance — signalement client (2026-08-13, hors numérotation build-plan)
 
@@ -520,6 +535,8 @@ Le développeur a transmis 3 problèmes signalés par son client (lenteur, liens
 ## Open Questions
 
 Questions techniques en suspens, à résoudre avant l'implémentation des étapes concernées.
+
+- **Phase 12 WhatsApp — à trancher à la session `/architect` globale du 2026-10-09** : (1) quelle société porte le compte Meta Business (RCCM, adresse identique au site) ; (2) nouvelle puce dédiée ou numéro WhatsApp Business existant en coexistence ; (3) chatbot inclus dès la formule Starter à 2 000 FCFA ou réservé à une formule supérieure (impact `subscriptions`) ; (4) sur un bien sans mandat, le propriétaire répond-il lui-même aux messages ; (5) délai de réponse annoncé par le robot au nom de l'agence ; (6) validité du lien de paiement public (échéance + 30 jours ?). Hors code mais bloquant pour la production : validation juridique de la case de consentement et déclaration du traitement à l'IPDCP.
 
 - **~~La vérification CNI (unité 07) doit-elle être reconstruite ?~~** — résolu 2026-08-06 : **non, décision définitive du développeur**. Le retrait du 2026-08-04 est assumé, pas un oubli. Aucune vérification d'identité prévue en V1 ; le risque déjà assumé sur l'unité 28 (adresse publique d'un logement vacant) reste donc sans garde-fou identité supplémentaire, en connaissance de cause.
 - **Le périmètre définitif de l'`AdminModule` (unité 37)** — construit de façon minimale (2 endpoints de lecture) sans passer par `/architect`, découvert lors de l'audit du 2026-08-06. À aligner explicitement sur le build-plan (suspend/reactivate/transactions) ou à documenter comme un choix de périmètre réduit assumé, comme cela a été fait pour les unités 23/29/30.
