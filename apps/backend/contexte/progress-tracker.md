@@ -6,7 +6,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Prochaine phase — Phase 12 WhatsApp et chatbot locataire (planifiée le 2026-10-07)** : du 2026-10-12 au 2026-10-23, 2 développeurs à temps plein (backend + frontend). Unités 42 à 49 + réactivation de l'unité 39 (signalements), détaillées dans `build-plan.md`. Prérequis avant le 2026-10-12 : compte Meta Business + numéro de test, session `/architect` globale le 2026-10-09 (vocabulaire commun, questions ouvertes listées plus bas), contrats d'API des unités 43 et 45 fixés pour le frontend. Rien n'est encore construit.
+**Prochaine phase — Phase 12 WhatsApp et chatbot locataire (planifiée le 2026-10-07)** : du 2026-10-12 au 2026-10-23, 2 développeurs à temps plein (backend + frontend). Unités 42 à 49 + réactivation de l'unité 39 (signalements), détaillées dans `build-plan.md`. Questions de cadrage tranchées le 2026-10-07 (voir Open Questions). Prérequis restants : compte développeur Meta + numéro de test, contrats d'API des unités 43 et 45 fixés pour le frontend. Rien n'est encore construit.
 
 **Audit de cohérence code ↔ tracker (2026-08-06)** — ce fichier n'avait pas été mis à jour depuis le 2026-07-28 alors que du code backend réel a changé depuis (commit `9064988`, 2026-08-04, auteur différent de cette session). Écarts trouvés et corrigés ci-dessous :
 
@@ -536,7 +536,14 @@ Le développeur a transmis 3 problèmes signalés par son client (lenteur, liens
 
 Questions techniques en suspens, à résoudre avant l'implémentation des étapes concernées.
 
-- **Phase 12 WhatsApp — à trancher à la session `/architect` globale du 2026-10-09** : (1) quelle société porte le compte Meta Business (RCCM, adresse identique au site) ; (2) nouvelle puce dédiée ou numéro WhatsApp Business existant en coexistence ; (3) chatbot inclus dès la formule Starter à 2 000 FCFA ou réservé à une formule supérieure (impact `subscriptions`) ; (4) sur un bien sans mandat, le propriétaire répond-il lui-même aux messages ; (5) délai de réponse annoncé par le robot au nom de l'agence ; (6) validité du lien de paiement public (échéance + 30 jours ?). Hors code mais bloquant pour la production : validation juridique de la case de consentement et déclaration du traitement à l'IPDCP.
+- **Phase 12 WhatsApp — questions tranchées avec le développeur le 2026-10-07** (session de décision avancée, initialement prévue le 2026-10-09) :
+      1. **Société qui porte le compte Meta** — elle n'est pas encore créée ; c'est la future société éditrice de WARAH qui le portera. **Conséquence** : la vérification d'entreprise Meta (RCCM) est impossible tant qu'elle n'existe pas → la mise en production est bloquée sur ce point, mais **le développement ne l'est pas** (le numéro de test gratuit de Meta ne demande aucune vérification).
+      2. **Numéro** — nouvelle puce Togo dédiée à WARAH (pas de coexistence avec un numéro existant).
+      3. **Formules incluant WhatsApp** — **reste à définir plus tard**. Conséquence technique : l'accès au canal et au robot doit être réglable par forfait sans changement de code (drapeau dans `SUBSCRIPTION_TIERS` ou `PlatformSettings`, ouvert à tous par défaut tant que rien n'est décidé) — à préciser au `/architect` de l'unité 42.
+      4. **Biens sans gestionnaire** — la fonctionnalité concerne **tous les locataires**, avec ou sans gestionnaire : sans mandat actif, c'est le propriétaire qui reçoit et répond aux messages (règle `resolveResponsibleUserId()`).
+      5. **Délai annoncé par le robot** — « Votre agence vous répond sous 24 h ».
+      6. **Validité du lien de paiement public** — jusqu'à la date d'échéance + 30 jours ; au-delà, le locataire redemande un lien au robot.
+      Toujours ouvert, hors code mais bloquant pour la production : validation juridique de la case de consentement et déclaration du traitement à l'IPDCP.
 
 - **~~La vérification CNI (unité 07) doit-elle être reconstruite ?~~** — résolu 2026-08-06 : **non, décision définitive du développeur**. Le retrait du 2026-08-04 est assumé, pas un oubli. Aucune vérification d'identité prévue en V1 ; le risque déjà assumé sur l'unité 28 (adresse publique d'un logement vacant) reste donc sans garde-fou identité supplémentaire, en connaissance de cause.
 - **Le périmètre définitif de l'`AdminModule` (unité 37)** — construit de façon minimale (2 endpoints de lecture) sans passer par `/architect`, découvert lors de l'audit du 2026-08-06. À aligner explicitement sur le build-plan (suspend/reactivate/transactions) ou à documenter comme un choix de périmètre réduit assumé, comme cela a été fait pour les unités 23/29/30.
