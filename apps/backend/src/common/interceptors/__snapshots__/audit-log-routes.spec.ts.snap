@@ -8,6 +8,7 @@ exports[`Routes mutantes réelles du backend (réflexion Nest) liste toutes les 
   "DELETE /api/properties/:id",
   "DELETE /api/properties/:id/documents/:documentId",
   "DELETE /api/properties/:id/photos/:photoId",
+  "PATCH /api/admin/contact-messages/:id",
   "PATCH /api/admin/reviews/:id/moderate",
   "PATCH /api/admin/settings",
   "PATCH /api/managers/:id/reviews/:reviewId",

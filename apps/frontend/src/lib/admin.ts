@@ -61,6 +61,19 @@ export interface AdminAuditLogEntry {
   actor: { firstName: string; lastName: string; role: string } | null;
 }
 
+export interface AdminContactMessage {
+  id: string;
+  name: string;
+  role: string | null;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  subject: string;
+  message: string;
+  status: "NEW" | "HANDLED";
+  createdAt: string;
+}
+
 export interface AdminTopOwner {
   id: string;
   firstName: string;
@@ -123,6 +136,21 @@ export const adminApi = {
       page: number;
       limit: number;
     }>(`/admin/audit-logs${toQueryString(params)}`),
+  listContactMessages: (params?: {
+    status?: "NEW" | "HANDLED";
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get<{
+      data: AdminContactMessage[];
+      total: number;
+      page: number;
+      limit: number;
+    }>(`/admin/contact-messages${toQueryString(params)}`),
+  setContactMessageHandled: (id: string, handled: boolean) =>
+    api.patch<AdminContactMessage>(`/admin/contact-messages/${id}`, {
+      handled,
+    }),
   topOwners: (limit?: number) =>
     api.get<AdminTopOwner[]>(`/admin/top-owners${toQueryString({ limit })}`),
   topManagers: (limit?: number) =>
