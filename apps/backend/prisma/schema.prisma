@@ -189,6 +189,11 @@ enum NotificationDispatchStatus {
   FAILED
 }
 
+enum ContactMessageStatus {
+  NEW
+  HANDLED
+}
+
 // ────────────────────────────────────────────────────────────────
 // Comptes utilisateurs
 // ────────────────────────────────────────────────────────────────
@@ -838,4 +843,26 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// Enregistré en base en plus de l'email envoyé au CONTACT_RECIPIENT_EMAIL
+// (voir ContactService.submit()) — l'email seul se perdait déjà une fois
+// (voir incident 2026-10-03, boîte mail non surveillée), le super-admin a
+// besoin d'un endroit fiable sur la plateforme elle-même pour consulter et
+// traiter ces messages (voir demande développeur, 2026-10-07).
+model ContactMessage {
+  id        String               @id @default(cuid())
+  name      String
+  role      String?
+  email     String
+  phone     String?
+  city      String?
+  subject   String
+  message   String
+  status    ContactMessageStatus @default(NEW)
+  createdAt DateTime             @default(now()) @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("contact_messages")
 }

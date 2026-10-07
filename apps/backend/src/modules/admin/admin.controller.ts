@@ -11,6 +11,8 @@ import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { SuspendUserDto } from './dto/suspend-user.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
+import { ListContactMessagesQueryDto } from './dto/list-contact-messages-query.dto';
+import { UpdateContactMessageDto } from './dto/update-contact-message.dto';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
 import { DeleteUserDto } from './dto/delete-user.dto';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
@@ -104,6 +106,20 @@ export class AdminController {
   @ApiOperation({ summary: 'Masque ou réaffiche un avis signalé (super admin)' })
   moderateReview(@Param('id') id: string, @Body() dto: ModerateReviewDto): Promise<ManagerReview> {
     return this.managerReviews.moderate(id, dto);
+  }
+
+  @Get('contact-messages')
+  @ApiOperation({
+    summary: 'Liste les messages envoyés via le formulaire de contact public (super admin)',
+  })
+  listContactMessages(@Query() query: ListContactMessagesQueryDto) {
+    return this.adminService.listContactMessages(query);
+  }
+
+  @Patch('contact-messages/:id')
+  @ApiOperation({ summary: 'Marque un message de contact comme traité ou non (super admin)' })
+  updateContactMessage(@Param('id') id: string, @Body() dto: UpdateContactMessageDto) {
+    return this.adminService.setContactMessageHandled(id, dto.handled);
   }
 
   @Get('settings')

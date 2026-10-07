@@ -8,6 +8,7 @@ import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { SuspendUserDto } from './dto/suspend-user.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
+import { ListContactMessagesQueryDto } from './dto/list-contact-messages-query.dto';
 
 @Injectable()
 export class AdminService {
@@ -319,6 +320,43 @@ export class AdminService {
     ]);
 
     return { data, total, page, limit };
+  }
+
+  // GET /api/admin/contact-messages — voir ContactService.submit() :
+  // enregistré en base en plus de l'email envoyé, c'est cette liste qui fait
+  // foi pour le super-admin (voir demande développeur, 2026-10-07).
+  async listContactMessages(query: ListContactMessagesQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+
+    const where: Prisma.ContactMessageWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.contactMessage.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.contactMessage.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  // Bascule NEW -> HANDLED (ou l'inverse, pour pouvoir rouvrir un message
+  // marqué par erreur) — pas de DTO dédié, un simple toggle suffit pour ce
+  // premier usage (voir demande développeur, 2026-10-07).
+  async setContactMessageHandled(id: string, handled: boolean) {
+    const message = await this.prisma.contactMessage.findUnique({ where: { id } });
+    if (!message) throw new NotFoundException('Message introuvable');
+
+    return this.prisma.contactMessage.update({
+      where: { id },
+      data: { status: handled ? 'HANDLED' : 'NEW' },
+    });
   }
 
   async suspendUser(id: string, dto: SuspendUserDto): Promise<{ message: string }> {
