@@ -108,6 +108,14 @@ export const ACTION_LABELS: Record<string, ActionLabel> = {
       return changes.length ? changes.join(" · ") : null;
     },
   },
+  "PATCH /api/admin/contact-messages/:id": {
+    verb: "a mis à jour un message de contact",
+    tone: "routine",
+    detail: (e) =>
+      e.metadata?.["handled"] === true
+        ? "Marqué comme traité."
+        : "Remis en nouveau.",
+  },
   "POST /api/auth/signup/owner": {
     verb: "a créé un compte propriétaire",
     tone: "success",
