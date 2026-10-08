@@ -501,6 +501,8 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 ### 39 Gestion des litiges et signalements
 
+> **Réactivée le 2026-10-07 avec un périmètre redéfini** — voir « 39 Signalements locataire (réactivée) » en Phase 12. Les signalements envoyés par les locataires via le chatbot WhatsApp fournissent enfin la source d'entrée réelle qui manquait. Le périmètre d'origine ci-dessous (file de modération admin) reste non construit.
+
 **Logique :**
 
 - File d'attente unifiée : annonces signalées, avis signalés, comptes signalés, cas litigieux remontés par les utilisateurs (incluant les déclarations de paiement contestées)
@@ -535,6 +537,96 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 
 ---
 
+## Phase 12 — WhatsApp et chatbot locataire
+
+Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 développeurs à temps plein). Documents de référence : « WARAH — Plan d'implémentation WhatsApp et chatbot », « WARAH — Architecture : intégration WhatsApp et chatbot » et « WARAH — Plan de travail WhatsApp et chatbot » (Claude Docs). Chaque unité passe par `/architect` avant tout code ; le plan validé remplace la section **Logique** ci-dessous. Une session `/architect` globale (vocabulaire commun, questions ouvertes) précède l'unité 42.
+
+### 42 Fondations WhatsApp
+
+**Plan validé (`/architect` 2026-10-08, plan v2.1 après relecture) — remplace la section Logique d'origine :**
+
+- **Une migration par unité** (`add_whatsapp_foundations`) : `WHATSAPP` dans `NotificationChannel` ; enums `WhatsappConsent`, `WhatsappConsentSource` (`AGENCY`/`BOT`/`TENANT_PORTAL`/`SYSTEM`), `WhatsappDirection`, `WhatsappMessageType`, `WhatsappMessageStatus` (`QUEUED`/`SENT`/`FAILED`/`UNKNOWN`) ; `User.whatsappPhone` (facultatif, **unique**, 8 chiffres — vide = `phone`), `whatsappConsent`, `whatsappConsentAt`, `whatsappConsentById`, `whatsappStoppedAt` ; `TenantProfile.whatsappPinHash`, `pinFailedAttempts`, `pinLockedUntil` ; tables `WhatsappMessage` et `WhatsappConsentEvent` ; `PlatformSettings.whatsappEnabledTiers` (les trois forfaits par défaut). Conversations (47), signalements (39) et `tenantOverdueSentAt` (46) viennent dans leurs unités.
+- `common/utils/phone.ts` — `toWhatsappNumber()` (s'appuie sur `normalizeTogoPhone`, renvoie null hors 8 chiffres).
+- `common/utils/signed-token.ts` (générique, usage dans la charge signée) et `common/utils/meta-signature.ts` (temps constant) ; `TokenService.generatePin()/hashPin()/verifyPin()` (bcrypt). Invariant #8 précisé dans `architecture.md`.
+- Variables : `PAY_LINK_SECRET` (facultatif dans la 42 — aucun code ne s'en sert encore ; obligatoire à l'unité 43, décision /review 2026-10-08), `WHATSAPP_ENABLED` (faux par défaut), `WHATSAPP_*` obligatoires seulement si allumé ; masquage Pino étendu (`pin`, numéros, texte des messages, jeton).
+- Route admin existante `PATCH /api/admin/settings` : `whatsappEnabledTiers`.
+- Module `whatsapp-channel` : `WhatsappCloudClient` (non exporté, un seul essai, erreurs normalisées en `MetaApiError`), `classifyMetaError()` + grille déclarée `meta-error-grid.ts`, `WhatsappAccessService.canUseWhatsapp()` (interrupteur, consentement, numéro, forfait du responsable via `resolveResponsibleUserId()`), `WhatsappService.send()` / `sendDocument()` (au plus 1 / 2 appels Meta, ligne `QUEUED` avant l'appel, `biz_opaque_callback_data` = id de la ligne, aucune ligne si refus).
+- Règles détaillées : `architecture.md`, section « WhatsApp Cloud API (Meta) ».
+
+### 43 Lien de paiement public
+
+**Logique :**
+
+- `PAY_LINK_SECRET` devient **obligatoire** dans `env.validation.ts` (facultatif depuis l'unité 42) — le créer sur Railway (staging + production) et chez le binôme AVANT la fusion de l'unité 43, sinon le démarrage échoue
+- Extraction de `PaymentsService.initiateForEntry(entryId, tenantUserId)` depuis `initiate()` — mêmes règles (solde restant, frais, index unique partiel, 409)
+- Module `pay-links` : `GET /api/pay-links/:token` (montant dû, frais, période, nom du bien) et `POST /api/pay-links/:token/initiate` → `checkoutUrl` ; `@Public()`, rate limit strict
+- Frontend : pages publiques `/payer/[token]` et `/payer/[token]/merci`, hors `RequireRole`/`AppShell`, `disallow` dans `robots.ts`
+
+### 44 Webhook Meta
+
+**Logique :**
+
+- `GET /api/webhooks/whatsapp` (poignée de main `hub.challenge`) et `POST /api/webhooks/whatsapp` (`@Public()`, `@SkipThrottle()`)
+- `main.ts` : corps brut conservé pour cette route (`bodyParser.json({ verify })`)
+- Statuts envoyé/livré/lu/échec idempotents par `wamid` unique ; `STOP`/`ARRET` → `whatsappConsent = STOPPED`
+- Messages entrants enregistrés puis émis en événement `whatsapp.inbound` (réponse 200 immédiate, invariant #15)
+- `AuditLogInterceptor` et redaction Pino : jamais le texte des messages ni le numéro en clair
+
+### 45 Consentement WhatsApp et code locataire
+
+**Logique :**
+
+- `PATCH /api/tenants/:id/whatsapp-consent` (`OWNER`/`MANAGER`, `canActOnProperty()`), preuve date + auteur
+- Génération du code à 6 chiffres (hashé) à l'acceptation, régénérable ; envoi du modèle `bienvenue_locataire`
+- Frontend : case de consentement, badge d'état, affichage et régénération du code dans la fiche locataire et l'invitation
+
+### 46 Canal WhatsApp dans NotifyService
+
+**Logique :**
+
+- `NotifyService.notifyUser()` ajoute WhatsApp après push/email si l'événement a un modèle Meta et que le consentement est `ACCEPTED` — WhatsApp s'ajoute, ne remplace pas l'email
+- `reminders.task.ts` : variable `payToken` pour le bouton « Payer mon loyer »
+- `PaymentConfirmedListener` : quittance PDF envoyée en document (téléversée chez Meta, jamais stockée — invariant #5)
+- `overdue.task.ts` : relance du locataire une seule fois (`tenantOverdueSentAt`) + nouveau modèle email `tenant-overdue`
+- `whatsapp-retry.task.ts` (toutes les 10 min, verrou Postgres) : 3 essais au plus sur échec temporaire
+
+### 47 Robot à menu
+
+**Logique :**
+
+- Écouteur `whatsapp.inbound` → `BotService` : conversation par numéro, retour au menu après 30 min, aiguillage par état
+- `bot-identity.service.ts` : numéro d'un locataire avec bail actif + code à 6 chiffres (redemandé tous les 30 jours, blocage 1 h après 5 erreurs)
+- Menu interactif (liste WhatsApp) et handlers « Payer mon loyer » (lien `/payer`), « Ma dernière quittance » (PDF), « Mon relevé » (6 derniers mois)
+- Tous les textes du robot dans `bot-messages.ts`
+
+### 48 Messagerie de l'agence
+
+**Logique :**
+
+- Handler « Parler à l'agence » : état `HUMAN`, notification au responsable (`resolveResponsibleUserId()`) via nouvel événement `whatsapp-message`
+- `GET /api/whatsapp/conversations`, `GET /api/whatsapp/conversations/:id/messages`, `POST .../reply` (409 si fenêtre de 24 h fermée), `POST .../close` — `OWNER`/`MANAGER`, `canActOnProperty()`, pagination ≤ 100
+- Frontend : pages Messages (propriétaire et gestionnaire), entrée de menu avec compteur de non lus
+
+### 39 Signalements locataire (réactivée)
+
+**Logique :**
+
+- Modèle `SupportRequest` (référence `SR-xxxx`), bucket privé `support-photos`
+- Handler « Signaler un problème » : description puis photo (ou « Passer »), photo téléchargée chez Meta et recopiée dans Storage
+- `GET /api/support-requests` (filtres bien/statut), `PATCH /api/support-requests/:id` (statut) — `canActOnProperty()` ; locataire prévenu sur WhatsApp à la résolution
+- Frontend : pages Signalements (liste, détail avec photos, changement de statut)
+
+### 49 Recette et documentation WhatsApp
+
+**Logique :**
+
+- Test de bout en bout avec les 5 numéros de test Meta et PayDunya sandbox : rappel → paiement → quittance, relevé, signalement, échange avec l'agence, STOP
+- `/review` de toute la phase
+- `architecture.md` : section WhatsApp Cloud API, précisions des invariants #2 et #6, nuance #5, tableaux Stack / Endpoints publics / Storage / Background Jobs
+- Déploiement staging, webhook déclaré sur l'URL Railway de staging
+
+---
+
 ## Récapitulatif des fonctionnalités
 
 | Phase                                                | Fonctionnalités |
@@ -550,4 +642,5 @@ Stack : NestJS 10+ (TypeScript strict), Prisma comme ORM, PostgreSQL via Supabas
 | Phase 9 — Abonnements                                | 2               |
 | Phase 10 — Administration                            | 3               |
 | Phase 11 — Sécurité, conformité et observabilité     | 2               |
-| **Total**                                            | **41**          |
+| Phase 12 — WhatsApp et chatbot locataire             | 8 (+ 39 réactivée) |
+| **Total**                                            | **49**          |

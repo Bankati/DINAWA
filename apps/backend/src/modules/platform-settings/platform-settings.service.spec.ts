@@ -149,4 +149,29 @@ describe('PlatformSettingsService', () => {
       });
     });
   });
+
+  describe('whatsappEnabledTiers (unité 42)', () => {
+    it('reflète la liste courante en base, sans cache', async () => {
+      prisma.platformSettings.findUnique.mockResolvedValueOnce({
+        id: 'singleton',
+        whatsappEnabledTiers: ['PRO', 'PREMIUM'],
+      });
+      await expect(service.whatsappEnabledTiers()).resolves.toEqual(['PRO', 'PREMIUM']);
+    });
+
+    it('enregistre la liste choisie par l’admin, liste vide comprise', async () => {
+      prisma.platformSettings.findUnique.mockResolvedValueOnce({
+        id: 'singleton',
+        subscriptionQuotasSuspended: false,
+      });
+      prisma.platformSettings.update.mockResolvedValueOnce({});
+
+      await service.update({ whatsappEnabledTiers: [] });
+
+      expect(prisma.platformSettings.update).toHaveBeenCalledWith({
+        where: { id: 'singleton' },
+        data: { whatsappEnabledTiers: [] },
+      });
+    });
+  });
 });

@@ -9,6 +9,9 @@ import {
   IsEmail,
   Min,
   Max,
+  IsBoolean,
+  Matches,
+  ValidateIf,
   validateSync,
 } from 'class-validator';
 import { plainToInstance, Transform } from 'class-transformer';
@@ -168,6 +171,57 @@ class EnvironmentVariables {
   // node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   @IsString()
   INVITATION_TOKEN_SECRET!: string;
+
+  // Secret HMAC des liens de paiement publics /payer/<jeton> (voir
+  // src/common/utils/signed-token.ts, phase 12) — distinct
+  // d'INVITATION_TOKEN_SECRET : la fuite de l'un ne compromet pas l'autre.
+  // Générer comme ci-dessus. FACULTATIF tant qu'aucun code ne s'en sert
+  // (unité 42) : le rendre obligatoire maintenant ferait tomber staging,
+  // production et les postes sans apporter quoi que ce soit (/review unité
+  // 42). Devient obligatoire à l'unité 43, avec le lien de paiement public.
+  @IsString()
+  @IsOptional()
+  PAY_LINK_SECRET?: string;
+
+  // Canal WhatsApp (phase 12, unité 42) — interrupteur général : false coupe
+  // tout le canal pour tout le monde sans redéployer (Meta en panne, numéro
+  // bloqué...). Lu sur la valeur BRUTE (`obj[key]`) et non sur `value` :
+  // avec enableImplicitConversion, `value` arrive déjà converti et la chaîne
+  // "false" y vaut `true` (bug attrapé par env.validation.spec.ts).
+  @Transform(({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+    const raw = obj[key];
+    return raw === true || raw === 'true';
+  })
+  @IsBoolean()
+  @IsOptional()
+  WHATSAPP_ENABLED?: boolean = false;
+
+  // Les WHATSAPP_* ci-dessous ne sont obligatoires que si le canal est allumé
+  // — un environnement sans compte Meta (dev, CI) démarre normalement.
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @IsString()
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+
+  // Jeton permanent d'un utilisateur système Meta, droits WhatsApp seulement.
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @IsString()
+  WHATSAPP_ACCESS_TOKEN?: string;
+
+  // Clé secrète de l'application Meta — vérifie X-Hub-Signature-256 (unité 44).
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @IsString()
+  WHATSAPP_APP_SECRET?: string;
+
+  // Jeton choisi par l'équipe pour la poignée de main du webhook (unité 44).
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @IsString()
+  WHATSAPP_VERIFY_TOKEN?: string;
+
+  // Version de l'API Graph figée (ex. v23.0) — jamais « la dernière » :
+  // une montée de version Meta peut changer le format des réponses.
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @Matches(/^v\d+\.\d+$/, { message: 'WHATSAPP_GRAPH_VERSION doit avoir la forme v23.0' })
+  WHATSAPP_GRAPH_VERSION?: string;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {

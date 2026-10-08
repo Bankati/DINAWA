@@ -35,6 +35,7 @@ import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContactModule } from './modules/contact/contact.module';
+import { WhatsappChannelModule } from './modules/whatsapp-channel/whatsapp-channel.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
@@ -156,6 +157,11 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Formulaire de contact public — endpoint minimal appelant EmailService,
     // aucune persistance en base
     ContactModule,
+
+    // Canal WhatsApp (phase 12, unité 42) — fondations seules : aucun service
+    // ne l'appelle encore (branchement dans NotifyModule à l'unité 46).
+    // Importé dès maintenant pour que le démarrage valide son câblage.
+    WhatsappChannelModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout
