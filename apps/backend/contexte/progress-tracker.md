@@ -425,7 +425,11 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
 
 ### Phase 12 — WhatsApp et chatbot locataire (planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23)
 
-- [ ] 42 Fondations WhatsApp — prévu lun. 12 (backend)
+- [ ] 42 Fondations WhatsApp — **construite le 2026-10-08** (`/architect` le même jour, plan v2.1 après deux relectures ; `/review` puis corrections), branche `feat/whatsapp-42-fondations`, en attente de la `/review` ciblée finale et de la PR. Voir `build-plan.md` unité 42 et `architecture.md` section « WhatsApp Cloud API (Meta) ».
+      **Corrections issues de `/review`** : (1) `markSent()` sorti du `try` de l'appel Meta — une erreur de base après un succès Meta n'est plus reclassée `UNKNOWN` (le `wamid` était perdu) : `SENT` est renvoyé, alerte Sentry avec le `wamid`, ligne laissée `QUEUED` (jamais renvoyée, rattachée plus tard par le webhook via `biz_opaque_callback_data`) ; (2) tout HTTP 5xx = `UNKNOWN` avant la grille, même pour les codes « indisponible » (un doublon WhatsApp est pire qu'un message manqué) ; (3) `PAY_LINK_SECRET` facultatif jusqu'à l'unité 43 (aucun code ne s'en sert, l'exiger aurait fait tomber staging/production) ; (4) `messageType` reste `TEMPLATE` pour une quittance (type envoyé à Meta), la pièce jointe se lit dans `payload.filename`.
+      **⚠️ Migration gelée** : `20261008090000_add_whatsapp_foundations` est déjà appliquée sur la base Supabase partagée (avant fusion). **Ne jamais modifier ce fichier** — toute correction du schéma passe par une NOUVELLE migration, sinon `prisma migrate deploy` échoue (somme de contrôle) chez tout le monde et sur Railway.
+      **Reporté** : test d'envoi réel du modèle `hello_world` vers un numéro de test — compte développeur Meta pas encore créé (démarche direction). Tests Jest : Meta simulé.
+      Testé : suite complète verte (64 fichiers, 693 tests avant corrections), `tsc`/`eslint` propres, démarrage de l'application vérifié par script jetable (module câblé, `canUseWhatsapp` refuse `CHANNEL_DISABLED` interrupteur éteint).
 - [ ] 43 Lien de paiement public — backend mer. 14, frontend lun. 12 → mer. 14
 - [ ] 44 Webhook Meta — prévu mar. 13 (backend)
 - [ ] 45 Consentement WhatsApp et code locataire — backend mer. 14, frontend mer. 14 → jeu. 15
@@ -544,6 +548,10 @@ Questions techniques en suspens, à résoudre avant l'implémentation des étape
       5. **Délai annoncé par le robot** — « Votre agence vous répond sous 24 h ».
       6. **Validité du lien de paiement public** — jusqu'à la date d'échéance + 30 jours ; au-delà, le locataire redemande un lien au robot.
       Toujours ouvert, hors code mais bloquant pour la production : validation juridique de la case de consentement et déclaration du traitement à l'IPDCP.
+- **Phase 12 — questions nées de l'unité 42 (2026-10-08)** :
+      - **Durée de conservation de `WhatsappMessage`** (contient le numéro utilisé et les paramètres des messages, données personnelles) — à décider par la direction ; aucune purge n'est construite.
+      - **Bail actif exigé par `canUseWhatsapp`** — la quittance du dernier loyer payé après une résiliation, ou une relance sur un bail terminé, ne partiraient que par email. Règle métier à trancher au `/architect` de l'unité 46, avant de brancher quittances et relances.
+      - **Coût en requêtes de `canUseWhatsapp`** (5 lectures par appel) — à garder en tête au branchement des crons de l'unité 46 (invariant #12, boucles jusqu'à 100 échéances).
 
 - **~~La vérification CNI (unité 07) doit-elle être reconstruite ?~~** — résolu 2026-08-06 : **non, décision définitive du développeur**. Le retrait du 2026-08-04 est assumé, pas un oubli. Aucune vérification d'identité prévue en V1 ; le risque déjà assumé sur l'unité 28 (adresse publique d'un logement vacant) reste donc sans garde-fou identité supplémentaire, en connaissance de cause.
 - **Le périmètre définitif de l'`AdminModule` (unité 37)** — construit de façon minimale (2 endpoints de lecture) sans passer par `/architect`, découvert lors de l'audit du 2026-08-06. À aligner explicitement sur le build-plan (suspend/reactivate/transactions) ou à documenter comme un choix de périmètre réduit assumé, comme cela a été fait pour les unités 23/29/30.

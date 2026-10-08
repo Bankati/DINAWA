@@ -182,6 +182,51 @@ enum InvoiceStatus {
 enum NotificationChannel {
   PUSH
   EMAIL
+  WHATSAPP
+}
+
+// Consentement aux messages WhatsApp (unité 42, /architect 2026-10-08).
+// STOPPED = le locataire a refusé (STOP) : seul le locataire lui-même peut
+// revenir à ACCEPTED, jamais l'agence (voir WhatsappConsentEvent).
+enum WhatsappConsent {
+  NOT_ASKED
+  ACCEPTED
+  STOPPED
+}
+
+// Moyen par lequel le consentement a changé. SYSTEM = changement fait par
+// WARAH sans personne derrière (ex. suppression de compte) — seul cas où
+// WhatsappConsentEvent.actorUserId est null.
+enum WhatsappConsentSource {
+  AGENCY
+  BOT
+  TENANT_PORTAL
+  SYSTEM
+}
+
+enum WhatsappDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum WhatsappMessageType {
+  TEMPLATE
+  TEXT
+  DOCUMENT
+}
+
+// Classé selon ce que l'on SAIT du message, jamais selon ce qu'on espère
+// (voir architecture.md, section WhatsApp) :
+// - QUEUED  : intention enregistrée, appel Meta pas encore terminé
+// - SENT    : Meta a répondu 2xx avec un wamid
+// - FAILED  : Meta a refusé de façon déterministe (rien n'est parti)
+// - UNKNOWN : timeout, coupure, 5xx ou réponse sans wamid — on ne sait pas
+//   si Meta a pris le message. Jamais renvoyé automatiquement (doublon).
+enum WhatsappMessageStatus {
+  QUEUED
+  SENT
+  FAILED
+  UNKNOWN
 }
 
 enum NotificationDispatchStatus {
@@ -246,6 +291,15 @@ model User {
   inactivityWarning7SentAt  DateTime?           @db.Timestamptz(6)
   inactivityWarning1SentAt  DateTime?           @db.Timestamptz(6)
   anonymizedAt              DateTime?           @db.Timestamptz(6)
+  // Canal WhatsApp (unité 42). whatsappPhone : 8 chiffres comme `phone`, null
+  // = utiliser `phone`. Unique : le robot doit retrouver sans ambiguïté le
+  // locataire à partir du numéro qui lui écrit. Le format Meta (228XXXXXXXX)
+  // n'est jamais stocké — voir common/utils/phone.ts.
+  whatsappPhone             String?             @unique
+  whatsappConsent           WhatsappConsent     @default(NOT_ASKED)
+  whatsappConsentAt         DateTime?           @db.Timestamptz(6)
+  whatsappConsentById       String?
+  whatsappStoppedAt         DateTime?           @db.Timestamptz(6)
   createdAt                 DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt                 DateTime            @updatedAt @db.Timestamptz(6)
 
@@ -254,27 +308,30 @@ model User {
   managerProfile ManagerProfile?
   adminProfile   AdminProfile?
 
-  tenantsInvited         TenantProfile[]       @relation("TenantInvitedBy")
-  ownedProperties        Property[]            @relation("PropertyOwner")
+  tenantsInvited         TenantProfile[]        @relation("TenantInvitedBy")
+  ownedProperties        Property[]             @relation("PropertyOwner")
   listingsPublished      Listing[]
-  leasesAsOwner          Lease[]               @relation("LeaseOwner")
-  leasesAsTenant         Lease[]               @relation("LeaseTenant")
-  tenantBlocksReceived   TenantPropertyBlock[] @relation("TenantPropertyBlockTenant")
-  tenantBlocksAuthored   TenantPropertyBlock[] @relation("TenantPropertyBlockAuthor")
-  mandatesAsOwner        Mandate[]             @relation("MandateOwner")
-  mandatesAsManager      Mandate[]             @relation("MandateManager")
-  paymentsRecorded       Payment[]             @relation("PaymentRecordedBy")
-  paymentsConfirmed      Payment[]             @relation("PaymentConfirmedBy")
-  paymentsAsBeneficiary  Payment[]             @relation("PaymentBeneficiary")
-  payouts                Payout[]              @relation("PayoutBeneficiary")
-  managerReviewsGiven    ManagerReview[]       @relation("ManagerReviewOwner")
-  managerReviewsReceived ManagerReview[]       @relation("ManagerReviewManager")
+  leasesAsOwner          Lease[]                @relation("LeaseOwner")
+  leasesAsTenant         Lease[]                @relation("LeaseTenant")
+  tenantBlocksReceived   TenantPropertyBlock[]  @relation("TenantPropertyBlockTenant")
+  tenantBlocksAuthored   TenantPropertyBlock[]  @relation("TenantPropertyBlockAuthor")
+  mandatesAsOwner        Mandate[]              @relation("MandateOwner")
+  mandatesAsManager      Mandate[]              @relation("MandateManager")
+  paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
+  paymentsConfirmed      Payment[]              @relation("PaymentConfirmedBy")
+  paymentsAsBeneficiary  Payment[]              @relation("PaymentBeneficiary")
+  payouts                Payout[]               @relation("PayoutBeneficiary")
+  managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
+  managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
   subscription           Subscription?
   pushSubscriptions      PushSubscription[]
   passwordResetOtps      PasswordResetOtp[]
   sessions               Session[]
   notifications          Notification[]
   auditLogs              AuditLog[]
+  whatsappMessages       WhatsappMessage[]
+  whatsappConsentEvents  WhatsappConsentEvent[] @relation("WhatsappConsentSubject")
+  whatsappConsentActions WhatsappConsentEvent[] @relation("WhatsappConsentActor")
 
   @@map("users")
 }
@@ -314,13 +371,21 @@ model OwnerProfile {
 // existe donc avant même que le locataire n'ait terminé son inscription
 // via le lien d'invitation (voir unité 09).
 model TenantProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invitedByUserId String?
-  invitedBy       User?    @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedByUserId   String?
+  invitedBy         User?     @relation("TenantInvitedBy", fields: [invitedByUserId], references: [id])
+  // Code locataire à 6 chiffres réservé au robot WhatsApp (unité 42) — haché
+  // bcrypt via TokenService, jamais en clair ni dans les logs. 1 000 000 de
+  // possibilités seulement : bcrypt ne protège pas de la force brute, d'où le
+  // compteur + blocage (5 essais puis 1 h, appliqués par le robot, unité 47),
+  // comptés par locataire et jamais par IP (tout arrive des serveurs Meta).
+  whatsappPinHash   String?
+  pinFailedAttempts Int       @default(0)
+  pinLockedUntil    DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
 
   @@map("tenant_profiles")
 }
@@ -517,7 +582,8 @@ model PaymentScheduleEntry {
   createdAt          DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime            @updatedAt @db.Timestamptz(6)
 
-  payments Payment[]
+  payments         Payment[]
+  whatsappMessages WhatsappMessage[]
 
   @@index([leaseId])
   @@index([dueDate])
@@ -575,8 +641,9 @@ model Payment {
   createdAt           DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
 
-  declaration PaymentDeclaration?
-  payout      Payout?
+  declaration      PaymentDeclaration?
+  payout           Payout?
+  whatsappMessages WhatsappMessage[]
 
   @@index([leaseId])
   @@index([scheduleEntryId])
@@ -773,16 +840,22 @@ model SubscriptionInvoice {
 // clé-valeur générique : seuls ces deux interrupteurs existent aujourd'hui,
 // pas besoin d'une table ouverte à n'importe quelle clé pour deux booléens.
 model PlatformSettings {
-  id                          String    @id @default("singleton")
-  subscriptionQuotasSuspended Boolean   @default(false)
-  subscriptionBillingEnabled  Boolean   @default(false)
+  id                          String             @id @default("singleton")
+  subscriptionQuotasSuspended Boolean            @default(false)
+  subscriptionBillingEnabled  Boolean            @default(false)
   // Calculée automatiquement (+6 mois) quand subscriptionQuotasSuspended
   // passe à true, effacée quand il repasse à false — voir /architect
   // bandeau promotionnel, 2026-10-02. Jamais un champ libre côté admin :
   // un seul bouton active les deux à la fois, pour que le bandeau ne
   // puisse jamais afficher une promesse que le quota réel ne tient pas.
-  freePromotionEndsAt         DateTime? @db.Timestamptz(6)
-  updatedAt                   DateTime  @updatedAt @db.Timestamptz(6)
+  freePromotionEndsAt         DateTime?          @db.Timestamptz(6)
+  // Forfaits dont les locataires ont accès à WhatsApp (unité 42) — réglable
+  // par le super-admin sans changement de code ; les trois par défaut tant
+  // que la direction n'a pas défini les formules (décision 2026-10-07). Le
+  // forfait regardé est celui du responsable du bien
+  // (resolveResponsibleUserId), jamais celui du locataire.
+  whatsappEnabledTiers        SubscriptionTier[] @default([STARTER, PRO, PREMIUM])
+  updatedAt                   DateTime           @updatedAt @db.Timestamptz(6)
 
   @@map("platform_settings")
 }
@@ -826,6 +899,67 @@ model Notification {
   @@index([userId])
   @@index([event])
   @@map("notifications")
+}
+
+// Une tentative d'envoi WhatsApp = une ligne (unité 42, /architect
+// 2026-10-08). Aucune ligne n'est créée quand l'envoi est refusé par
+// WhatsappAccessService (pas de consentement, forfait non inclus...).
+// `payload` ne contient que les paramètres de rendu du modèle — jamais de
+// secret, jeton ou code locataire ; ses données personnelles suivent la même
+// conservation que la ligne. `recipientPhone` (8 chiffres) garde le numéro
+// réellement utilisé, le numéro du locataire pouvant changer ensuite.
+model WhatsappMessage {
+  id              String                @id @default(cuid())
+  userId          String?
+  user            User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  recipientPhone  String
+  direction       WhatsappDirection
+  // Type du message tel qu'envoyé à Meta : une quittance part en TEMPLATE
+  // (document en en-tête d'un modèle) — la pièce jointe se lit dans
+  // payload.filename (convention /review unité 42).
+  messageType     WhatsappMessageType
+  templateName    String?
+  // Événement déclencheur : 'payment-reminder', 'receipt', 'bot'...
+  source          String
+  status          WhatsappMessageStatus @default(QUEUED)
+  // Distinct du statut : un FAILED de limite de débit est réessayable, un
+  // FAILED de numéro invalide ne l'est pas ; un UNKNOWN ne l'est jamais.
+  retryable       Boolean               @default(false)
+  wamid           String?               @unique
+  errorCode       String?
+  errorMessage    String?
+  payload         Json?
+  scheduleEntryId String?
+  scheduleEntry   PaymentScheduleEntry? @relation(fields: [scheduleEntryId], references: [id], onDelete: SetNull)
+  paymentId       String?
+  payment         Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  sentAt          DateTime?             @db.Timestamptz(6)
+  failedAt        DateTime?             @db.Timestamptz(6)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+// Historique du consentement WhatsApp — preuve exigée (politique WhatsApp,
+// loi togolaise n° 2019-014) : les colonnes User.whatsappConsent* ne gardent
+// que le dernier état. actorUserId = qui a concrètement agi (agent pour
+// AGENCY, locataire pour BOT/TENANT_PORTAL), null uniquement pour SYSTEM.
+model WhatsappConsentEvent {
+  id              String                @id @default(cuid())
+  userId          String
+  user            User                  @relation("WhatsappConsentSubject", fields: [userId], references: [id], onDelete: Cascade)
+  previousConsent WhatsappConsent
+  newConsent      WhatsappConsent
+  source          WhatsappConsentSource
+  actorUserId     String?
+  actor           User?                 @relation("WhatsappConsentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, createdAt])
+  @@map("whatsapp_consent_events")
 }
 
 model AuditLog {

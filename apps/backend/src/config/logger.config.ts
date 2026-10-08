@@ -24,6 +24,15 @@ export const pinoConfig: Params = {
         '*.apiKey',
         '*.webhookSecret',
         '*.vapidPrivateKey',
+        // Canal WhatsApp (unité 42) — le code locataire ne doit jamais
+        // apparaître, même en debug ; numéros et texte des messages sont des
+        // données personnelles.
+        'req.body.pin',
+        '*.pin',
+        '*.whatsappPhone',
+        '*.recipientPhone',
+        '*.messageBody',
+        '*.accessToken',
       ],
       censor: '[REDACTED]',
     },

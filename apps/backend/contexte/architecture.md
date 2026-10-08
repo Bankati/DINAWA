@@ -243,6 +243,19 @@ L'événement `payment.confirmed` est émis après mise à jour réussie et déc
 
 Pas de prélèvement automatique (unité 36 explicitement abandonnée, décision du développeur) — seuls des rappels email sont envoyés, le locataire paie de son propre chef via `POST /api/payments/initiate`.
 
+### WhatsApp Cloud API (Meta) — fondations depuis 2026-10-08 (phase 12)
+
+Canal de notification et futur chatbot locataire. **Seul le module `whatsapp-channel` appelle l'API Graph** (`WhatsappCloudClient`, axios, non exporté) ; les services métier passent par `WhatsappService`.
+
+- **Invariant d'appels** : `send()` fait au plus **un** appel à Meta, `sendDocument()` au plus **deux** (téléversement puis envoi). Aucun appel Meta n'est répété automatiquement dans la même requête — Meta n'offre pas de clé d'idempotence, un second appel après une réponse perdue enverrait le message deux fois.
+- **Droit d'envoyer** : `WhatsappAccessService.canUseWhatsapp()` est la seule autorité — interrupteur `WHATSAPP_ENABLED`, consentement `ACCEPTED`, numéro exploitable (`whatsappPhone` sinon `phone`), forfait du responsable du bien (`resolveResponsibleUserId()`) présent dans `PlatformSettings.whatsappEnabledTiers`. Un refus ne crée aucune ligne `WhatsappMessage` et ne bloque jamais l'email/push.
+- **Statuts** (`WhatsappMessageStatus`), classés selon ce que l'on sait du message : `QUEUED` (intention enregistrée, appel en cours), `SENT` (2xx + `wamid`), `FAILED` (refus déterministe de Meta, rien n'est parti), `UNKNOWN` (timeout, coupure, erreur générique, 2xx sans `wamid` : on ne sait pas). Le caractère réessayable est une colonne distincte (`retryable`). **Un `UNKNOWN`, ou un `QUEUED` de plus de 10 minutes, n'est jamais renvoyé automatiquement.**
+- **Classification** : `classifyMetaError({ httpStatus, errorCode, errorSubcode })` d'après la grille déclarée en données `meta-error-grid.ts` (source : grille officielle Meta) — tout code absent de la grille donne `UNKNOWN` non réessayable + alerte Sentry.
+- **Document** : un téléversement incertain donne `FAILED` réessayable (`errorCode = MEDIA_UPLOAD_UNCERTAIN`) — le locataire n'a rien reçu ; un envoi incertain après téléversement donne `UNKNOWN`. Les PDF ne sont jamais stockés chez WARAH (invariant #5) ; Meta garde le média téléversé 30 jours.
+- **`biz_opaque_callback_data`** = id de la ligne `WhatsappMessage`, renvoyé par Meta dans les webhooks de statut (permettra de rattacher un statut « livré » à un `UNKNOWN`, unité 44).
+- **Données** : `payload` ne contient que les paramètres de rendu du modèle (champs choisis un par un, jamais un objet libre) — aucun secret, jeton ni code locataire. `recipientPhone` garde le numéro réellement utilisé (8 chiffres). Consentement historisé dans `WhatsappConsentEvent` ; après un STOP, seul le locataire peut réactiver.
+- **Code locataire** : haché sur `TenantProfile`, 5 essais puis blocage 1 h comptés par locataire (jamais par IP : tout arrive des serveurs Meta), jamais journalisé (masquage Pino `pin`).
+
 ### Sentry
 
 Monitoring d'erreurs en production. Capture les exceptions non gérées et les promesses rejetées. `tracesSampleRate: 0.1` maximum. Les exceptions 4xx attendues (`UnauthorizedException`, `BadRequestException`) sont filtrées dans `beforeSend`.
@@ -322,7 +335,7 @@ Règles que le codebase ne doit **jamais** violer. Une violation est un bug crit
 
 7. **Les emails d'authentification ne passent jamais par `NotifyService`.** Confirmation d'inscription et OTP de réinitialisation appellent directement `EmailService` — ils doivent fonctionner même sans abonnement push.
 
-8. **Authentification entièrement interne depuis le 2026-08-11 (revirement assumé de l'invariant précédent).** Mots de passe hashés en bcrypt (`User.passwordHash`), jamais en clair ni ailleurs. Sessions via access token JWT (15 min) + refresh token opaque stocké hashé (SHA-256) dans `Session`, avec rotation à chaque `/auth/refresh`. Tout ce cycle vit exclusivement dans `modules/auth/token.service.ts` — jamais de `bcrypt`/`jwt`/`crypto` utilisé directement ailleurs. Supabase ne sert plus que Postgres + Storage (voir `SupabaseAdminService`, conservé uniquement pour le nettoyage best-effort d'éventuels comptes legacy et l'API Storage).
+8. **Authentification entièrement interne depuis le 2026-08-11 (revirement assumé de l'invariant précédent).** Mots de passe hashés en bcrypt (`User.passwordHash`), jamais en clair ni ailleurs. Sessions via access token JWT (15 min) + refresh token opaque stocké hashé (SHA-256) dans `Session`, avec rotation à chaque `/auth/refresh`. Tout ce cycle vit exclusivement dans `modules/auth/token.service.ts` — jamais de `bcrypt`/`jwt` utilisé directement ailleurs ; le code locataire à 6 chiffres du robot WhatsApp (bcrypt, `generatePin`/`hashPin`/`verifyPin`) y vit aussi. **Précision du 2026-10-08 (unité 42)** : les jetons HMAC autoporteurs (signature + expiration, vérifiés sans base) vivent dans `src/common/utils/` — `invitation-token.ts` (déjà en place depuis l'unité 09), `signed-token.ts` (générique, usage obligatoire dans la charge signée, sert au lien de paiement public) et `meta-signature.ts` (vérification `X-Hub-Signature-256` des webhooks Meta). Toute comparaison de signature s'y fait en temps constant (`timingSafeEqual`). Aucune autre primitive `crypto` hors de ces fichiers et de `token.service.ts`. Supabase ne sert plus que Postgres + Storage (voir `SupabaseAdminService`, conservé uniquement pour le nettoyage best-effort d'éventuels comptes legacy et l'API Storage).
 
 9. **Connexion par email + mot de passe directe, sans 2FA.** Aucun code OTP envoyé lors d'une connexion réussie.
 

@@ -543,18 +543,21 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 42 Fondations WhatsApp
 
-**Logique :**
+**Plan validé (`/architect` 2026-10-08, plan v2.1 après relecture) — remplace la section Logique d'origine :**
 
-- Migration Prisma additive unique `add_whatsapp_channel` : valeur `WHATSAPP` dans `NotificationChannel`, enums `WhatsappConsent`, `ConversationState`, `SupportRequestStatus`, modèles `WhatsappMessage`, `WhatsappConversation`, `SupportRequest`, colonnes `User.whatsapp*` et `PaymentScheduleEntry.tenantOverdueSentAt`
-- `src/common/utils/phone.ts` — `toWhatsappNumber()` (8 chiffres → `228XXXXXXXX`)
-- `TokenService` : `signPayLink()`/`verifyPayLink()`, `hashPin()`/`verifyPin()`, `verifyMetaSignature()` (HMAC-SHA256 du corps brut, temps constant) — invariant #8
-- Variables `WHATSAPP_ENABLED`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_GRAPH_VERSION`, `PAY_LINK_SECRET` — les `WHATSAPP_*` obligatoires seulement si `WHATSAPP_ENABLED=true`
-- Module `whatsapp-channel` : `WhatsappCloudClient` (axios, timeout, un seul essai — envoi non idempotent) et `WhatsappService.send()` ; seul point de contact avec l'API Graph de Meta
+- **Une migration par unité** (`add_whatsapp_foundations`) : `WHATSAPP` dans `NotificationChannel` ; enums `WhatsappConsent`, `WhatsappConsentSource` (`AGENCY`/`BOT`/`TENANT_PORTAL`/`SYSTEM`), `WhatsappDirection`, `WhatsappMessageType`, `WhatsappMessageStatus` (`QUEUED`/`SENT`/`FAILED`/`UNKNOWN`) ; `User.whatsappPhone` (facultatif, **unique**, 8 chiffres — vide = `phone`), `whatsappConsent`, `whatsappConsentAt`, `whatsappConsentById`, `whatsappStoppedAt` ; `TenantProfile.whatsappPinHash`, `pinFailedAttempts`, `pinLockedUntil` ; tables `WhatsappMessage` et `WhatsappConsentEvent` ; `PlatformSettings.whatsappEnabledTiers` (les trois forfaits par défaut). Conversations (47), signalements (39) et `tenantOverdueSentAt` (46) viennent dans leurs unités.
+- `common/utils/phone.ts` — `toWhatsappNumber()` (s'appuie sur `normalizeTogoPhone`, renvoie null hors 8 chiffres).
+- `common/utils/signed-token.ts` (générique, usage dans la charge signée) et `common/utils/meta-signature.ts` (temps constant) ; `TokenService.generatePin()/hashPin()/verifyPin()` (bcrypt). Invariant #8 précisé dans `architecture.md`.
+- Variables : `PAY_LINK_SECRET` (facultatif dans la 42 — aucun code ne s'en sert encore ; obligatoire à l'unité 43, décision /review 2026-10-08), `WHATSAPP_ENABLED` (faux par défaut), `WHATSAPP_*` obligatoires seulement si allumé ; masquage Pino étendu (`pin`, numéros, texte des messages, jeton).
+- Route admin existante `PATCH /api/admin/settings` : `whatsappEnabledTiers`.
+- Module `whatsapp-channel` : `WhatsappCloudClient` (non exporté, un seul essai, erreurs normalisées en `MetaApiError`), `classifyMetaError()` + grille déclarée `meta-error-grid.ts`, `WhatsappAccessService.canUseWhatsapp()` (interrupteur, consentement, numéro, forfait du responsable via `resolveResponsibleUserId()`), `WhatsappService.send()` / `sendDocument()` (au plus 1 / 2 appels Meta, ligne `QUEUED` avant l'appel, `biz_opaque_callback_data` = id de la ligne, aucune ligne si refus).
+- Règles détaillées : `architecture.md`, section « WhatsApp Cloud API (Meta) ».
 
 ### 43 Lien de paiement public
 
 **Logique :**
 
+- `PAY_LINK_SECRET` devient **obligatoire** dans `env.validation.ts` (facultatif depuis l'unité 42) — le créer sur Railway (staging + production) et chez le binôme AVANT la fusion de l'unité 43, sinon le démarrage échoue
 - Extraction de `PaymentsService.initiateForEntry(entryId, tenantUserId)` depuis `initiate()` — mêmes règles (solde restant, frais, index unique partiel, 409)
 - Module `pay-links` : `GET /api/pay-links/:token` (montant dû, frais, période, nom du bien) et `POST /api/pay-links/:token/initiate` → `checkoutUrl` ; `@Public()`, rate limit strict
 - Frontend : pages publiques `/payer/[token]` et `/payer/[token]/merci`, hors `RequireRole`/`AppShell`, `disallow` dans `robots.ts`
