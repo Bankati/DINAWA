@@ -36,6 +36,8 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { WhatsappChannelModule } from './modules/whatsapp-channel/whatsapp-channel.module';
+import { PayLinksModule } from './modules/pay-links/pay-links.module';
+import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
@@ -63,6 +65,9 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
         ttl: 60_000,
         limit: 100,
       },
+      // Portier du lien de paiement public (unité 43) — ignoré hors de ses
+      // routes, voir common/throttle/pay-link-throttlers.ts.
+      ...PAY_LINK_THROTTLERS,
     ]),
 
     // Cron jobs (fuseau Africa/Lomé = UTC+0, pas de DST)
@@ -162,6 +167,10 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // ne l'appelle encore (branchement dans NotifyModule à l'unité 46).
     // Importé dès maintenant pour que le démarrage valide son câblage.
     WhatsappChannelModule,
+
+    // Lien de paiement public sans connexion (phase 12, unité 43) —
+    // GET/POST /api/pay-links/:token, @Public() + limites de débit strictes.
+    PayLinksModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout

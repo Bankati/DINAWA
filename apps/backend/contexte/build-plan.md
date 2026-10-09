@@ -555,12 +555,15 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 43 Lien de paiement public
 
-**Logique :**
+**Plan validé (`/architect` 2026-10-09) puis durcissement après `/review` et revue technique du même jour — remplace la section Logique d'origine :**
 
-- `PAY_LINK_SECRET` devient **obligatoire** dans `env.validation.ts` (facultatif depuis l'unité 42) — le créer sur Railway (staging + production) et chez le binôme AVANT la fusion de l'unité 43, sinon le démarrage échoue
-- Extraction de `PaymentsService.initiateForEntry(entryId, tenantUserId)` depuis `initiate()` — mêmes règles (solde restant, frais, index unique partiel, 409)
-- Module `pay-links` : `GET /api/pay-links/:token` (montant dû, frais, période, nom du bien) et `POST /api/pay-links/:token/initiate` → `checkoutUrl` ; `@Public()`, rate limit strict
-- Frontend : pages publiques `/payer/[token]` et `/payer/[token]/merci`, hors `RequireRole`/`AppShell`, `disallow` dans `robots.ts`
+- **Pas de bouton « Copier le lien » côté agence** (plan d'origine conservé, travail en local) ; les liens seront distribués par les rappels (46) et le robot (47). Serveur ET pages construits dans l'unité.
+- `PaymentsService.initiateForEntry(entryId, options)` et `quoteEntry(entry)` extraits de `initiate()` / `getQuote()` — paiement de l'espace locataire inchangé (56 tests existants verts).
+- Module `pay-links` : `PayLinksService.createPayLink()` (jeton `signed-token.ts` usage `pay-link`, échéance + 30 j), `GET /api/pay-links/:token` (vue minimale : prénom, type/immeuble, quartier/ville, période, montants, état `PAYABLE`/`PAID`/`UNAVAILABLE`, paiement en cours), `POST /api/pay-links/:token/initiate` (opérateur indicatif → `checkoutUrl`, retour vers `/payer/<jeton>/merci`). Notification « numéro de reversement manquant » existante réutilisée (déjà limitée à une par jour).
+- `PAY_LINK_SECRET` obligatoire.
+- Durcissement : portier à deux niveaux (60/10 par minute pour l'ouverture, 20/5 pour le lancement, par adresse puis par adresse + empreinte du lien) ; `TRUST_PROXY_HOPS` (0 par défaut) + diagnostic temporaire `TRUST_PROXY_DIAGNOSTIC` ; jetons masqués dans Pino et Sentry (backend et frontend) ; `Referrer-Policy: no-referrer` sur `/payer/*`.
+- Frontend : `app/payer/[token]/page.tsx`, `app/payer/[token]/merci/page.tsx`, `app/payer/pay-link-ui.tsx`, `app/payer/payer.css`, `lib/pay-links.ts`, `lib/mask-sensitive-url.ts`, `robots.ts`.
+- Règles détaillées : `architecture.md`, section « Lien de paiement public ».
 
 ### 44 Webhook Meta
 

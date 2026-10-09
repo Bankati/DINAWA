@@ -19,6 +19,9 @@ export default function robots(): MetadataRoute.Robots {
         "/auth/",
         "/profil",
         "/paiements",
+        // Lien de paiement public (unité 43) : une URL par loyer, propre à
+        // un locataire — jamais à indexer.
+        "/payer/",
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

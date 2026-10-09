@@ -18,10 +18,13 @@ describe('TokenService — code locataire', () => {
     }
   });
 
+  // bcrypt au coût réel de production (12 tours, voir BCRYPT_ROUNDS) : un
+  // hachage + deux vérifications dépassent les 5 s par défaut de Jest sur une
+  // machine chargée — délai explicite plutôt qu'un coût artificiellement bas.
   it('vérifie le bon code et refuse un code faux', async () => {
     const hash = await service.hashPin('048213');
     expect(hash).not.toContain('048213');
     await expect(service.verifyPin('048213', hash)).resolves.toBe(true);
     await expect(service.verifyPin('048214', hash)).resolves.toBe(false);
-  });
+  }, 30_000);
 });

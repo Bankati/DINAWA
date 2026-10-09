@@ -105,7 +105,7 @@ describe('validate (canal WhatsApp, phase 12)', () => {
     ).toThrow(/WHATSAPP_GRAPH_VERSION/);
   });
 
-  it('démarre sans PAY_LINK_SECRET tant que le lien de paiement n’existe pas (obligatoire à l’unité 43)', () => {
-    expect(() => validate({ ...BASE_ENV, PAY_LINK_SECRET: undefined })).not.toThrow();
+  it('refuse de démarrer sans PAY_LINK_SECRET (obligatoire depuis l’unité 43)', () => {
+    expect(() => validate({ ...BASE_ENV, PAY_LINK_SECRET: undefined })).toThrow(/PAY_LINK_SECRET/);
   });
 });

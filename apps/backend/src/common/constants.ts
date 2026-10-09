@@ -78,6 +78,21 @@ export const THROTTLE_LOGIN = { default: { limit: 10, ttl: 60_000 } };
 export const THROTTLE_SIGNUP = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_PASSWORD_RESET_REQUEST = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
+// Lien de paiement public (unité 43) : portier à deux niveaux, voir
+// common/throttle/pay-link-throttlers.ts. Les valeurs « ouverture de page »
+// sont les limites par défaut des throttlers nommés ; le lancement du
+// paiement les resserre route par route. À confirmer en staging (CGNAT).
+export const PAY_LINK_VIEW_LIMIT_PER_IP = 60;
+export const PAY_LINK_VIEW_LIMIT_PER_LINK = 10;
+export const THROTTLE_PAY_LINK_INITIATE = {
+  payLinkIp: { limit: 20, ttl: 60_000 },
+  payLinkToken: { limit: 5, ttl: 60_000 },
+};
+
+// Un lien de paiement reste valable jusqu'à la date d'échéance + 30 jours
+// (décision de cadrage phase 12, 2026-10-07) ; au-delà le locataire en
+// redemande un (robot WhatsApp, unité 47).
+export const PAY_LINK_VALID_DAYS_AFTER_DUE = 30;
 
 // Cache serveur des pages de consultation (voir CacheInterceptor,
 // diagnostic de lenteur, 2026-08-13) — en millisecondes. Volontairement

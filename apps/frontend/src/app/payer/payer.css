@@ -1,0 +1,221 @@
+/* Pages publiques du lien de paiement (/payer/[token] et /merci) — unité 43.
+   Mobile d'abord : on y arrive depuis WhatsApp ou un SMS. Couleurs de marque
+   uniquement via les variables de globals.css. */
+
+.payer-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: linear-gradient(135deg, rgba(10, 38, 80, 1) 0%, rgba(15, 76, 129, 1) 60%, rgba(8, 30, 65, 1) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  gap: 16px;
+}
+
+.payer-card {
+  width: 100%;
+  max-width: 440px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 24px 20px;
+  box-shadow: 0 20px 50px rgba(8, 30, 65, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.payer-brand {
+  display: flex;
+  justify-content: center;
+}
+
+.payer-logo {
+  height: 40px;
+  width: auto;
+}
+
+.payer-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin: 0 0 4px;
+}
+
+.payer-property {
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.payer-text {
+  color: var(--color-text-muted);
+  margin: 2px 0;
+  line-height: 1.5;
+}
+
+.payer-amounts {
+  margin: 16px 0 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payer-amount-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text);
+}
+
+.payer-amount-row dt,
+.payer-amount-row dd {
+  margin: 0;
+}
+
+.payer-amount-row--total {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 8px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-primary-dark);
+}
+
+.payer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.payer-btn {
+  min-height: 52px;
+  width: 100%;
+  border-radius: 14px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 16px;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.payer-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.payer-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.payer-btn:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.payer-btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.payer-btn--secondary {
+  background: var(--color-primary-50);
+  color: var(--color-primary-dark);
+}
+
+.payer-operator-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #fff;
+}
+
+.payer-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--color-primary-50);
+  color: var(--color-primary-dark);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.payer-notice--warning {
+  background: color-mix(in srgb, var(--color-warning) 14%, #fff);
+  color: var(--color-accent-dark);
+}
+
+.payer-error {
+  color: var(--color-error);
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.payer-footnote {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.payer-legal {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.8rem;
+  text-align: center;
+  margin: 0;
+}
+
+.payer-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.payer-state-icon {
+  width: 52px;
+  height: 52px;
+  color: var(--color-primary);
+}
+
+.payer-state-icon--success {
+  color: var(--color-success);
+}
+
+.payer-state-icon--error {
+  color: var(--color-error);
+}
+
+.payer-spin {
+  animation: payer-spin 1s linear infinite;
+}
+
+@keyframes payer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .payer-spin {
+    animation: none;
+  }
+  .payer-btn {
+    transition: none;
+  }
+}

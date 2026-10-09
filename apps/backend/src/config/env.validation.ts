@@ -175,13 +175,36 @@ class EnvironmentVariables {
   // Secret HMAC des liens de paiement publics /payer/<jeton> (voir
   // src/common/utils/signed-token.ts, phase 12) — distinct
   // d'INVITATION_TOKEN_SECRET : la fuite de l'un ne compromet pas l'autre.
-  // Générer comme ci-dessus. FACULTATIF tant qu'aucun code ne s'en sert
-  // (unité 42) : le rendre obligatoire maintenant ferait tomber staging,
-  // production et les postes sans apporter quoi que ce soit (/review unité
-  // 42). Devient obligatoire à l'unité 43, avec le lien de paiement public.
+  // Générer comme ci-dessus. Obligatoire depuis l'unité 43 (lien de paiement
+  // public, PayLinksService) — facultatif à l'unité 42 tant qu'aucun code ne
+  // s'en servait. À créer sur Railway (staging + production) AVANT de
+  // déployer, sinon le démarrage échoue.
   @IsString()
+  PAY_LINK_SECRET!: string;
+
+  // Nombre de proxys de confiance devant le backend (Express `trust proxy`) —
+  // détermine l'adresse IP cliente utilisée par les limites de débit. 0 par
+  // défaut (sûr : aucun en-tête X-Forwarded-For n'est cru). Sur Railway, mettre
+  // le nombre exact de proxys vérifié en staging (normalement 1) : une valeur
+  // trop haute laisserait un client forger son adresse et contourner le
+  // portier ; trop basse, tous les clients partageraient l'adresse du proxy.
+  @Transform(({ value }: { value: unknown }) => (value === undefined ? 0 : Number(value)))
+  @IsInt()
+  @Min(0)
+  @Max(5)
   @IsOptional()
-  PAY_LINK_SECRET?: string;
+  TRUST_PROXY_HOPS?: number = 0;
+
+  // Diagnostic TEMPORAIRE de staging : journalise, pour les premières
+  // requêtes, le NOMBRE d'adresses reçues dans X-Forwarded-For (jamais les
+  // adresses elles-mêmes) pour fixer TRUST_PROXY_HOPS. À retirer après usage.
+  @Transform(({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+    const raw = obj[key];
+    return raw === true || raw === 'true';
+  })
+  @IsBoolean()
+  @IsOptional()
+  TRUST_PROXY_DIAGNOSTIC?: boolean = false;
 
   // Canal WhatsApp (phase 12, unité 42) — interrupteur général : false coupe
   // tout le canal pour tout le monde sans redéployer (Meta en panne, numéro
@@ -217,7 +240,7 @@ class EnvironmentVariables {
   @IsString()
   WHATSAPP_VERIFY_TOKEN?: string;
 
-  // Version de l'API Graph figée (ex. v23.0) — jamais « la dernière » :
+  // Version de l'API Graph figée (ex. v25.0) — jamais « la dernière » :
   // une montée de version Meta peut changer le format des réponses.
   @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
   @Matches(/^v\d+\.\d+$/, { message: 'WHATSAPP_GRAPH_VERSION doit avoir la forme v23.0' })

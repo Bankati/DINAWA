@@ -10,6 +10,7 @@ dotenv.config();
 
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import { scrubSentryEvent } from './common/utils/scrub-sentry-event';
 
 // Optionnel — ne s'active que si SENTRY_DSN est présent (voir docs/DEPLOYMENT.md).
 if (process.env['SENTRY_DSN']) {
@@ -23,5 +24,9 @@ if (process.env['SENTRY_DSN']) {
     tracesSampleRate: 0.1,
     profileSessionSampleRate: 0.1,
     profileLifecycle: 'trace',
+    // Jetons de lien de paiement / d'invitation jamais envoyés à Sentry
+    // (unité 43) — erreurs ET traces.
+    beforeSend: (event) => scrubSentryEvent(event),
+    beforeSendTransaction: (event) => scrubSentryEvent(event),
   });
 }
