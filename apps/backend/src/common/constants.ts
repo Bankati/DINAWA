@@ -79,6 +79,14 @@ export const THROTTLE_SIGNUP = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_PASSWORD_RESET_REQUEST = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
 
+// Annonces publiques (public/listings) : route anonyme, donc forcément
+// suivie par IP (AppThrottlerGuard ne peut pas attribuer de clé par
+// utilisateur sans authentification). Un audit de charge k6 (oct. 2026) a
+// montré que le défaut global (300/min/IP) bloque à tort des visiteurs
+// anonymes légitimes partageant une même IP (NAT mobile, courant au Togo) —
+// lecture seule et bon marché, donc limite nettement plus généreuse ici.
+export const THROTTLE_PUBLIC_LISTINGS = { default: { limit: 1000, ttl: 60_000 } };
+
 // Cache serveur des pages de consultation (voir CacheInterceptor,
 // diagnostic de lenteur, 2026-08-13) — en millisecondes. Volontairement
 // courts : l'invalidation automatique couvre les mutations de l'acteur
