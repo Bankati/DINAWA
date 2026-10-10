@@ -580,10 +580,10 @@ export default function LandingPage() {
                 <div className="price-top">
                   <span className="price-label">Premium Gestionnaire</span>
                   <div className="price-amount"><span className="price-n">10 000</span><span className="price-unit"> FCFA</span></div>
-                  <p className="price-period">par mois · propriétés illimitées</p>
+                  <p className="price-period">par mois · jusqu&apos;à 50 propriétés</p>
                 </div>
                 <ul className="price-feats">
-                  <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Propriétés illimitées</li>
+                  <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Jusqu&apos;à 50 propriétés</li>
                   <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Tout ce qu&apos;inclut Pro</li>
                   <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Espace gestionnaire immobilier pro</li>
                   <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Portefeuille de mandats</li>
@@ -591,6 +591,21 @@ export default function LandingPage() {
                   <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Profil vérifié &amp; support prioritaire</li>
                 </ul>
                 <Link href="/auth/register" className="price-btn price-btn-ghost">Démarrer Premium</Link>
+              </div>
+
+              {/* Agence */}
+              <div className="pc-card" data-aos="fade-down" data-aos-delay="360">
+                <div className="price-top">
+                  <span className="price-label">Agence</span>
+                  <div className="price-amount"><span className="price-n">20 000</span><span className="price-unit"> FCFA</span></div>
+                  <p className="price-period">par mois · propriétés illimitées</p>
+                </div>
+                <ul className="price-feats">
+                  <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Propriétés illimitées</li>
+                  <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Tout ce qu&apos;inclut Premium</li>
+                  <li className="feat-ok"><svg viewBox="0 0 16 16" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"><path d="M3 8l4 4 6-6"/></svg>Pensé pour les agences immobilières établies</li>
+                </ul>
+                <Link href="/auth/register" className="price-btn price-btn-ghost">Démarrer Agence</Link>
               </div>
             </div>
           </div>

@@ -484,7 +484,7 @@
 
 /* Grille tarifs statique */
 .pc-wrap { margin-top: 48px; }
-.pc-stage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; }
+.pc-stage { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; align-items: start; }
 
 /* Carte générique */
 .pc-card {
@@ -542,6 +542,7 @@
 
 /* ── RESPONSIVE ── */
 @media (max-width: 1024px) {
+  .pc-stage { grid-template-columns: repeat(2, 1fr); }
   .temo-layout { grid-template-columns: 1fr; }
   .why-layout { grid-template-columns: 1fr; gap: 48px; }
   .why-devices { order: -1; height: 340px; }
