@@ -22,6 +22,7 @@ const TIER_LABELS: Record<keyof typeof SUBSCRIPTION_TIERS, string> = {
   STARTER: 'Starter',
   PRO: 'Pro',
   PREMIUM: 'Premium',
+  AGENCE: 'Agence',
 };
 
 // Facturation d'abonnement (unité 36, ressuscitée — voir /architect

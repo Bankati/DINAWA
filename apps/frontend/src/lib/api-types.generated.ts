@@ -604,6 +604,77 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/subscription/quota": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** État actuel du quota de biens facturables vs limite du forfait courant */
+    get: operations["SubscriptionsController_getQuota"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/subscription/upgrade": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Migration instantanée vers un forfait supérieur, sans frais ni pénalité */
+    post: operations["SubscriptionsController_upgrade"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/subscription/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Annulation — effective à la fin de la période payée */
+    post: operations["SubscriptionsController_cancel"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/subscription/invoices/pay": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Crée (ou réutilise) la facture PayDunya de la facture d’abonnement en attente
+     * @description Le propriétaire/gestionnaire est redirigé vers checkoutUrl pour compléter le paiement — jamais de lien pré-généré par le cron de facturation, créé ici à la demande.
+     */
+    post: operations["SubscriptionsController_payCurrentInvoice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/admin/payouts": {
     parameters: {
       query?: never;
@@ -756,57 +827,6 @@ export interface paths {
     post?: never;
     /** Supprime un document (Storage puis Prisma) */
     delete: operations["PropertiesController_removeDocument"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/subscription/quota": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** État actuel du quota de biens facturables vs limite du forfait courant */
-    get: operations["SubscriptionsController_getQuota"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/subscription/upgrade": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Migration instantanée vers un forfait supérieur, sans frais ni pénalité */
-    post: operations["SubscriptionsController_upgrade"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/subscription/cancel": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Annulation — effective à la fin de la période payée */
-    post: operations["SubscriptionsController_cancel"];
-    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -1158,6 +1178,58 @@ export interface paths {
     head?: never;
     /** Masque ou réaffiche un avis signalé (super admin) */
     patch: operations["AdminController_moderateReview"];
+    trace?: never;
+  };
+  "/admin/contact-messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Liste les messages envoyés via le formulaire de contact public (super admin) */
+    get: operations["AdminController_listContactMessages"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/contact-messages/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Marque un message de contact comme traité ou non (super admin) */
+    patch: operations["AdminController_updateContactMessage"];
+    trace?: never;
+  };
+  "/admin/settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Réglages plateforme (super admin) — suspension des quotas, facturation abonnements */
+    get: operations["AdminController_getSettings"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Modifie les réglages plateforme (super admin) */
+    patch: operations["AdminController_updateSettings"];
     trace?: never;
   };
   "/managers/{id}/reviews": {
@@ -1552,6 +1624,8 @@ export interface components {
       payoutOperator: "TMONEY" | "FLOOZ";
       /** @example Lomé */
       city: string;
+      /** @example Immo Togo SARL */
+      companyName?: string;
     };
     InviteTenantDto: {
       propertyId: string;
@@ -1638,9 +1712,26 @@ export interface components {
       /** @description Motif obligatoire — communiqué au locataire */
       rejectionReason: string;
     };
+    UpgradeSubscriptionDto: {
+      /**
+       * @description Forfait cible — doit être strictement supérieur au forfait courant
+       * @enum {string}
+       */
+      tier: "STARTER" | "PRO" | "PREMIUM" | "AGENCE";
+    };
     CreatePropertyDto: {
       /** @enum {string} */
-      type: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
+      type:
+        | "CHAMBRE_SIMPLE"
+        | "CHAMBRE_SALON"
+        | "DEUX_CHAMBRES_SALON"
+        | "TROIS_CHAMBRES_SALON"
+        | "STUDIO"
+        | "APARTMENT"
+        | "VILLA"
+        | "VILLA_DUPLEX"
+        | "APPARTEMENT_MEUBLE"
+        | "COMMERCIAL";
       address?: Record<string, never>;
       neighborhood: string;
       city: string;
@@ -1653,7 +1744,17 @@ export interface components {
     };
     UpdatePropertyDto: {
       /** @enum {string} */
-      type?: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
+      type?:
+        | "CHAMBRE_SIMPLE"
+        | "CHAMBRE_SALON"
+        | "DEUX_CHAMBRES_SALON"
+        | "TROIS_CHAMBRES_SALON"
+        | "STUDIO"
+        | "APARTMENT"
+        | "VILLA"
+        | "VILLA_DUPLEX"
+        | "APPARTEMENT_MEUBLE"
+        | "COMMERCIAL";
       /** @enum {string} */
       status?: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
       address?: Record<string, never>;
@@ -1669,13 +1770,6 @@ export interface components {
     UploadPropertyDocumentDto: {
       /** @enum {string} */
       type: "STATE_OF_PLAY" | "PROPERTY_TITLE" | "INSURANCE" | "OTHER";
-    };
-    UpgradeSubscriptionDto: {
-      /**
-       * @description Forfait cible — doit être strictement supérieur au forfait courant
-       * @enum {string}
-       */
-      tier: "STARTER" | "PRO" | "PREMIUM";
     };
     BlockTenantDto: {
       /** @description Justification obligatoire du blocage */
@@ -1705,9 +1799,23 @@ export interface components {
       /** @description Motif de la suspension, communiqué à l'utilisateur par email */
       reason: string;
     };
+    DeleteUserDto: {
+      /** @description Motif de la suppression — tracé dans le journal d’audit */
+      reason: string;
+    };
     ModerateReviewDto: {
       /** @description true = masque l’avis de l’annuaire public, false = le réaffiche */
       isHidden: boolean;
+    };
+    UpdateContactMessageDto: {
+      /** @description true = marqué comme traité, false = remis en nouveau */
+      handled: boolean;
+    };
+    UpdatePlatformSettingsDto: {
+      /** @description Suspend le blocage par quota de biens facturables sur toute la plateforme */
+      subscriptionQuotasSuspended?: boolean;
+      /** @description Active la facturation mensuelle automatique des abonnements */
+      subscriptionBillingEnabled?: boolean;
     };
     CreateManagerReviewDto: {
       /** @description Note sur 5 étoiles */
@@ -1734,7 +1842,17 @@ export interface components {
       id: string;
       ownerId: string;
       /** @enum {string} */
-      type: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
+      type:
+        | "CHAMBRE_SIMPLE"
+        | "CHAMBRE_SALON"
+        | "DEUX_CHAMBRES_SALON"
+        | "TROIS_CHAMBRES_SALON"
+        | "STUDIO"
+        | "APARTMENT"
+        | "VILLA"
+        | "VILLA_DUPLEX"
+        | "APPARTEMENT_MEUBLE"
+        | "COMMERCIAL";
       /** @enum {string} */
       status: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
       address?: string | null;
@@ -2259,7 +2377,17 @@ export interface operations {
       query?: {
         page?: number;
         limit?: number;
-        type?: "VILLA" | "APARTMENT" | "STUDIO" | "COMMERCIAL";
+        type?:
+          | "CHAMBRE_SIMPLE"
+          | "CHAMBRE_SALON"
+          | "DEUX_CHAMBRES_SALON"
+          | "TROIS_CHAMBRES_SALON"
+          | "STUDIO"
+          | "APARTMENT"
+          | "VILLA"
+          | "VILLA_DUPLEX"
+          | "APPARTEMENT_MEUBLE"
+          | "COMMERCIAL";
         city?: string;
         neighborhood?: string;
         minRent?: number;
@@ -2591,6 +2719,78 @@ export interface operations {
       };
     };
   };
+  SubscriptionsController_getQuota: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SubscriptionsController_upgrade: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpgradeSubscriptionDto"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SubscriptionsController_cancel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SubscriptionsController_payCurrentInvoice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PayoutsController_list: {
     parameters: {
       query?: {
@@ -2846,61 +3046,6 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  SubscriptionsController_getQuota: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  SubscriptionsController_upgrade: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpgradeSubscriptionDto"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  SubscriptionsController_cancel: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -3314,7 +3459,11 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeleteUserDto"];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -3378,6 +3527,88 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["ModerateReviewDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_listContactMessages: {
+    parameters: {
+      query?: {
+        status?: "NEW" | "HANDLED";
+        page?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_updateContactMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateContactMessageDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_getSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AdminController_updateSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdatePlatformSettingsDto"];
       };
     };
     responses: {

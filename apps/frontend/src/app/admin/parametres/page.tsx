@@ -59,7 +59,7 @@ export default function ParametresPage() {
 
           <SettingRow
             title="Suspendre les quotas de biens"
-            description="Désactive le blocage par quota sur toute la plateforme — tout propriétaire ou gestionnaire peut ajouter des biens sans limite, quel que soit son forfait (Starter/Pro/Premium). Affiche aussi automatiquement un bandeau « gratuit pendant 6 mois » à tous les propriétaires/gestionnaires, avec compte à rebours. Rien n'est supprimé, réactivable à tout moment (le bandeau disparaît immédiatement si vous désactivez)."
+            description="Désactive le blocage par quota sur toute la plateforme — tout propriétaire ou gestionnaire peut ajouter des biens sans limite, quel que soit son forfait (Starter/Pro/Premium/Agence). Affiche aussi automatiquement un bandeau « gratuit pendant 6 mois » à tous les propriétaires/gestionnaires, avec compte à rebours. Rien n'est supprimé, réactivable à tout moment (le bandeau disparaît immédiatement si vous désactivez)."
             active={settings.subscriptionQuotasSuspended}
             saving={savingKey === 'subscriptionQuotasSuspended'}
             onToggle={() =>
@@ -69,7 +69,7 @@ export default function ParametresPage() {
 
           <SettingRow
             title="Facturation des abonnements"
-            description="Active la facturation mensuelle automatique des forfaits Starter/Pro/Premium — une facture est générée le 1er de chaque mois, avec relances à J+3/J+7, puis suspension du compte (lecture seule) en cas d'impayé prolongé."
+            description="Active la facturation mensuelle automatique des forfaits Starter/Pro/Premium/Agence — une facture est générée le 1er de chaque mois, avec relances à J+3/J+7, puis suspension du compte (lecture seule) en cas d'impayé prolongé."
             active={settings.subscriptionBillingEnabled}
             saving={savingKey === 'subscriptionBillingEnabled'}
             onToggle={() =>

@@ -46,7 +46,8 @@ export const CRON_MONTHLY_REPORTS = '0 8 1 * *';
 export const SUBSCRIPTION_TIERS = {
   STARTER: { priceFcfa: 2_000, managedPropertiesQuota: 5 },
   PRO: { priceFcfa: 5_000, managedPropertiesQuota: 15 },
-  PREMIUM: { priceFcfa: 10_000, managedPropertiesQuota: null },
+  PREMIUM: { priceFcfa: 10_000, managedPropertiesQuota: 50 },
+  AGENCE: { priceFcfa: 20_000, managedPropertiesQuota: null },
 } as const;
 
 // Période bêta — 3 mois gratuits à l'inscription (voir /architect unité 35),
