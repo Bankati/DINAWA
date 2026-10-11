@@ -517,7 +517,7 @@ export default function LandingPage() {
             </div>
             <div className="faq-footer">
               <p>Vous ne trouvez pas la réponse ?</p>
-              <Link href="/auth/register" className="faq-cta">Contactez-nous →</Link>
+              <Link href="/contact" className="faq-cta">Contactez-nous →</Link>
             </div>
           </div>
         </div>
