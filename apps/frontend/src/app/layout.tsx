@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { GlobalProgressBar } from "@/components/global-progress-bar";
 import { Toaster } from "@/components/ui/toast";
 import { Providers } from "@/components/providers";
+import { SiteAnalytics } from "@/components/site-analytics";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({
           <Toaster />
           <AuthProvider>{children}</AuthProvider>
         </Providers>
+        <SiteAnalytics />
       </body>
     </html>
   );
