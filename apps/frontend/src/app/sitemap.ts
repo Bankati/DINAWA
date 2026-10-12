@@ -10,14 +10,18 @@ export const revalidate = 3600;
 const STATIC_PAGES: MetadataRoute.Sitemap = [
   { url: SITE_URL, changeFrequency: "weekly", priority: 1 },
   { url: `${SITE_URL}/annonces`, changeFrequency: "daily", priority: 0.9 },
-  {
-    url: `${SITE_URL}/gestionnaires`,
-    changeFrequency: "weekly",
-    priority: 0.7,
-  },
   { url: `${SITE_URL}/a-propos`, changeFrequency: "monthly", priority: 0.5 },
   { url: `${SITE_URL}/contact`, changeFrequency: "monthly", priority: 0.5 },
+  { url: `${SITE_URL}/cgu`, changeFrequency: "yearly", priority: 0.2 },
+  {
+    url: `${SITE_URL}/confidentialite`,
+    changeFrequency: "yearly",
+    priority: 0.2,
+  },
 ];
+// /gestionnaires n'y figure pas : l'annuaire exige une connexion (voir
+// gestionnaires/layout.tsx) — un robot n'y verrait que la redirection vers
+// la page de connexion, signalée comme doublon par la Search Console.
 
 // Une ligne par annonce publiée — le reste du site (tableaux de bord,
 // espaces connectés) n'a rien à faire dans un sitemap, voir robots.ts.
