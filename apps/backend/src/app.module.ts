@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
@@ -38,6 +38,7 @@ import { ContactModule } from './modules/contact/contact.module';
 import { WhatsappChannelModule } from './modules/whatsapp-channel/whatsapp-channel.module';
 import { PayLinksModule } from './modules/pay-links/pay-links.module';
 import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
+import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
@@ -58,12 +59,19 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Logging structuré avec redaction des champs sensibles
     LoggerModule.forRoot(pinoConfig),
 
-    // Rate limiting global (sauf routes décorées @SkipThrottle)
+    // Rate limiting global (sauf routes décorées @SkipThrottle). Suivi par
+    // utilisateur authentifié (AppThrottlerGuard, voir APP_GUARD plus bas) —
+    // l'IP ne sert de clé que pour le trafic anonyme. Limite relevée à
+    // 300/60s : au-delà du seuil initial de 100, un audit de charge k6 a
+    // montré que plusieurs utilisateurs légitimes partageant une même IP
+    // (NAT mobile, courant au Togo) ou un simple usage normal (plusieurs
+    // onglets, polling du tableau de bord) dépassaient le seuil et étaient
+    // bloqués à tort.
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60_000,
-        limit: 100,
+        limit: 300,
       },
       // Portier du lien de paiement public (unité 43) — ignoré hors de ses
       // routes, voir common/throttle/pay-link-throttlers.ts.
@@ -181,7 +189,7 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     },
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: AppThrottlerGuard,
     },
     // Authentifie chaque requête (sauf @Public()) et injecte request.user
     {

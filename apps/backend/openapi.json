@@ -566,7 +566,18 @@
             "required": false,
             "in": "query",
             "schema": {
-              "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"],
+              "enum": [
+                "CHAMBRE_SIMPLE",
+                "CHAMBRE_SALON",
+                "DEUX_CHAMBRES_SALON",
+                "TROIS_CHAMBRES_SALON",
+                "STUDIO",
+                "APARTMENT",
+                "VILLA",
+                "VILLA_DUPLEX",
+                "APPARTEMENT_MEUBLE",
+                "COMMERCIAL"
+              ],
               "type": "string"
             }
           },
@@ -1092,6 +1103,89 @@
         "tags": ["Payments"]
       }
     },
+    "/subscription/quota": {
+      "get": {
+        "operationId": "SubscriptionsController_getQuota",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "État actuel du quota de biens facturables vs limite du forfait courant",
+        "tags": ["Subscriptions"]
+      }
+    },
+    "/subscription/upgrade": {
+      "post": {
+        "operationId": "SubscriptionsController_upgrade",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Migration instantanée vers un forfait supérieur, sans frais ni pénalité",
+        "tags": ["Subscriptions"]
+      }
+    },
+    "/subscription/cancel": {
+      "post": {
+        "operationId": "SubscriptionsController_cancel",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annulation — effective à la fin de la période payée",
+        "tags": ["Subscriptions"]
+      }
+    },
+    "/subscription/invoices/pay": {
+      "post": {
+        "description": "Le propriétaire/gestionnaire est redirigé vers checkoutUrl pour compléter le paiement — jamais de lien pré-généré par le cron de facturation, créé ici à la demande.",
+        "operationId": "SubscriptionsController_payCurrentInvoice",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crée (ou réutilise) la facture PayDunya de la facture d’abonnement en attente",
+        "tags": ["Subscriptions"]
+      }
+    },
     "/admin/payouts": {
       "get": {
         "operationId": "PayoutsController_list",
@@ -1507,70 +1601,6 @@
         ],
         "summary": "Supprime un document (Storage puis Prisma)",
         "tags": ["Properties"]
-      }
-    },
-    "/subscription/quota": {
-      "get": {
-        "operationId": "SubscriptionsController_getQuota",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "État actuel du quota de biens facturables vs limite du forfait courant",
-        "tags": ["Subscriptions"]
-      }
-    },
-    "/subscription/upgrade": {
-      "post": {
-        "operationId": "SubscriptionsController_upgrade",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpgradeSubscriptionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Migration instantanée vers un forfait supérieur, sans frais ni pénalité",
-        "tags": ["Subscriptions"]
-      }
-    },
-    "/subscription/cancel": {
-      "post": {
-        "operationId": "SubscriptionsController_cancel",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Annulation — effective à la fin de la période payée",
-        "tags": ["Subscriptions"]
       }
     },
     "/properties/{propertyId}/tenants/{tenantUserId}/block": {
@@ -2313,6 +2343,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteUserDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": ""
@@ -2425,6 +2465,133 @@
           }
         ],
         "summary": "Masque ou réaffiche un avis signalé (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/contact-messages": {
+      "get": {
+        "operationId": "AdminController_listContactMessages",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": ["NEW", "HANDLED"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liste les messages envoyés via le formulaire de contact public (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/contact-messages/{id}": {
+      "patch": {
+        "operationId": "AdminController_updateContactMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateContactMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marque un message de contact comme traité ou non (super admin)",
+        "tags": ["Admin"]
+      }
+    },
+    "/admin/settings": {
+      "get": {
+        "operationId": "AdminController_getSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Réglages plateforme (super admin) — suspension des quotas, facturation abonnements",
+        "tags": ["Admin"]
+      },
+      "patch": {
+        "operationId": "AdminController_updateSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modifie les réglages plateforme (super admin)",
         "tags": ["Admin"]
       }
     },
@@ -3269,6 +3436,10 @@
           "city": {
             "type": "string",
             "example": "Lomé"
+          },
+          "companyName": {
+            "type": "string",
+            "example": "Immo Togo SARL"
           }
         },
         "required": [
@@ -3496,12 +3667,34 @@
         },
         "required": ["rejectionReason"]
       },
+      "UpgradeSubscriptionDto": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": ["STARTER", "PRO", "PREMIUM", "AGENCE"],
+            "description": "Forfait cible — doit être strictement supérieur au forfait courant"
+          }
+        },
+        "required": ["tier"]
+      },
       "CreatePropertyDto": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
+            "enum": [
+              "CHAMBRE_SIMPLE",
+              "CHAMBRE_SALON",
+              "DEUX_CHAMBRES_SALON",
+              "TROIS_CHAMBRES_SALON",
+              "STUDIO",
+              "APARTMENT",
+              "VILLA",
+              "VILLA_DUPLEX",
+              "APPARTEMENT_MEUBLE",
+              "COMMERCIAL"
+            ]
           },
           "address": {
             "type": "object"
@@ -3538,7 +3731,18 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
+            "enum": [
+              "CHAMBRE_SIMPLE",
+              "CHAMBRE_SALON",
+              "DEUX_CHAMBRES_SALON",
+              "TROIS_CHAMBRES_SALON",
+              "STUDIO",
+              "APARTMENT",
+              "VILLA",
+              "VILLA_DUPLEX",
+              "APPARTEMENT_MEUBLE",
+              "COMMERCIAL"
+            ]
           },
           "status": {
             "type": "string",
@@ -3582,17 +3786,6 @@
           }
         },
         "required": ["type"]
-      },
-      "UpgradeSubscriptionDto": {
-        "type": "object",
-        "properties": {
-          "tier": {
-            "type": "string",
-            "enum": ["STARTER", "PRO", "PREMIUM"],
-            "description": "Forfait cible — doit être strictement supérieur au forfait courant"
-          }
-        },
-        "required": ["tier"]
       },
       "BlockTenantDto": {
         "type": "object",
@@ -3664,6 +3857,16 @@
         },
         "required": ["reason"]
       },
+      "DeleteUserDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Motif de la suppression — tracé dans le journal d’audit"
+          }
+        },
+        "required": ["reason"]
+      },
       "ModerateReviewDto": {
         "type": "object",
         "properties": {
@@ -3673,6 +3876,29 @@
           }
         },
         "required": ["isHidden"]
+      },
+      "UpdateContactMessageDto": {
+        "type": "object",
+        "properties": {
+          "handled": {
+            "type": "boolean",
+            "description": "true = marqué comme traité, false = remis en nouveau"
+          }
+        },
+        "required": ["handled"]
+      },
+      "UpdatePlatformSettingsDto": {
+        "type": "object",
+        "properties": {
+          "subscriptionQuotasSuspended": {
+            "type": "boolean",
+            "description": "Suspend le blocage par quota de biens facturables sur toute la plateforme"
+          },
+          "subscriptionBillingEnabled": {
+            "type": "boolean",
+            "description": "Active la facturation mensuelle automatique des abonnements"
+          }
+        }
       },
       "CreateManagerReviewDto": {
         "type": "object",
@@ -3744,7 +3970,18 @@
           },
           "type": {
             "type": "string",
-            "enum": ["VILLA", "APARTMENT", "STUDIO", "COMMERCIAL"]
+            "enum": [
+              "CHAMBRE_SIMPLE",
+              "CHAMBRE_SALON",
+              "DEUX_CHAMBRES_SALON",
+              "TROIS_CHAMBRES_SALON",
+              "STUDIO",
+              "APARTMENT",
+              "VILLA",
+              "VILLA_DUPLEX",
+              "APPARTEMENT_MEUBLE",
+              "COMMERCIAL"
+            ]
           },
           "status": {
             "type": "string",

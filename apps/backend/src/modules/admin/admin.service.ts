@@ -167,18 +167,19 @@ export class AdminService {
   // exprimable en un seul groupBy Prisma (limité aux colonnes propres au
   // modèle agrégé). Agrégation en mémoire, cohérente avec l'échelle actuelle
   // de la plateforme (même choix déjà fait par bucketByMonth ci-dessus).
+  // Fenêtre par défaut de 12 mois quand ni from ni to ne sont fournis —
+  // sans ça, ce findMany croît sans borne avec l'historique de paiements
+  // de toute la plateforme (audit de charge k6, oct. 2026).
   async topOwners(limit = 10, from?: string, to?: string) {
+    const defaultFrom = new Date();
+    defaultFrom.setMonth(defaultFrom.getMonth() - 12);
     const payments = await this.prisma.payment.findMany({
       where: {
         status: 'PAID',
-        ...(from || to
-          ? {
-              paidAt: {
-                ...(from ? { gte: new Date(from) } : {}),
-                ...(to ? { lte: new Date(to) } : {}),
-              },
-            }
-          : {}),
+        paidAt: {
+          gte: from ? new Date(from) : defaultFrom,
+          ...(to ? { lte: new Date(to) } : {}),
+        },
       },
       select: {
         paidAmount: true,

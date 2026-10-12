@@ -6,7 +6,7 @@ import { api } from "./api";
 // pas de bouton "changer de forfait gratuitement" tant qu'aucun vrai paiement
 // n'existe derrière /subscription/upgrade. "Payer maintenant" est différent
 // — une vraie facture PayDunya, jamais gratuite.
-export type SubscriptionTier = "STARTER" | "PRO" | "PREMIUM";
+export type SubscriptionTier = "STARTER" | "PRO" | "PREMIUM" | "AGENCE";
 export type SubscriptionStatus =
   "ACTIVE" | "PENDING_CANCELLATION" | "CANCELLED";
 
@@ -25,6 +25,7 @@ export const SUBSCRIPTION_TIER_LABELS: Record<SubscriptionTier, string> = {
   STARTER: "Starter",
   PRO: "Pro",
   PREMIUM: "Premium",
+  AGENCE: "Agence",
 };
 
 export const SUBSCRIPTION_TIER_TONE: Record<
@@ -34,6 +35,7 @@ export const SUBSCRIPTION_TIER_TONE: Record<
   STARTER: "neutral",
   PRO: "info",
   PREMIUM: "accent",
+  AGENCE: "accent",
 };
 
 export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {

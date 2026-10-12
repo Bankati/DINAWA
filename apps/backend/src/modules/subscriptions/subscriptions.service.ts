@@ -21,7 +21,7 @@ import { formatPeriodLabel } from './format-period-label';
 // Ordre des forfaits pour valider qu'un upgrade va bien vers un forfait
 // strictement supérieur — jamais de downgrade via POST /subscription/upgrade
 // (voir /architect unité 35).
-const TIER_ORDER: Record<SubscriptionTier, number> = { STARTER: 0, PRO: 1, PREMIUM: 2 };
+const TIER_ORDER: Record<SubscriptionTier, number> = { STARTER: 0, PRO: 1, PREMIUM: 2, AGENCE: 3 };
 
 // « Bien facturable » (voir /architect unité 35 — renommé pour éviter toute
 // collision avec « bien géré » de l'unité 32, qui désigne autre chose : un
