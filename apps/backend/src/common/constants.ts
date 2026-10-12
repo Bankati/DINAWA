@@ -46,7 +46,8 @@ export const CRON_MONTHLY_REPORTS = '0 8 1 * *';
 export const SUBSCRIPTION_TIERS = {
   STARTER: { priceFcfa: 2_000, managedPropertiesQuota: 5 },
   PRO: { priceFcfa: 5_000, managedPropertiesQuota: 15 },
-  PREMIUM: { priceFcfa: 10_000, managedPropertiesQuota: null },
+  PREMIUM: { priceFcfa: 10_000, managedPropertiesQuota: 50 },
+  AGENCE: { priceFcfa: 20_000, managedPropertiesQuota: null },
 } as const;
 
 // Période bêta — 3 mois gratuits à l'inscription (voir /architect unité 35),
@@ -78,6 +79,14 @@ export const THROTTLE_LOGIN = { default: { limit: 10, ttl: 60_000 } };
 export const THROTTLE_SIGNUP = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_PASSWORD_RESET_REQUEST = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
+
+// Annonces publiques (public/listings) : route anonyme, donc forcément
+// suivie par IP (AppThrottlerGuard ne peut pas attribuer de clé par
+// utilisateur sans authentification). Un audit de charge k6 (oct. 2026) a
+// montré que le défaut global (300/min/IP) bloque à tort des visiteurs
+// anonymes légitimes partageant une même IP (NAT mobile, courant au Togo) —
+// lecture seule et bon marché, donc limite nettement plus généreuse ici.
+export const THROTTLE_PUBLIC_LISTINGS = { default: { limit: 1000, ttl: 60_000 } };
 
 // Cache serveur des pages de consultation (voir CacheInterceptor,
 // diagnostic de lenteur, 2026-08-13) — en millisecondes. Volontairement

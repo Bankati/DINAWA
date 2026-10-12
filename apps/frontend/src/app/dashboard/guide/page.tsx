@@ -13,7 +13,7 @@ const SECTIONS: GuideSection[] = [
       'Utilisez les filtres de statut et le filtre « Immeuble » en haut de la liste pour retrouver rapidement un bien.',
       "Un bien vacant est automatiquement publié en annonce ; il repasse indisponible dès qu'un bail actif lui est associé.",
     ],
-    tip: 'Le nombre de biens facturables que vous pouvez créer dépend de votre palier d’abonnement (Starter, Pro, Premium) — visible dans votre profil.',
+    tip: 'Le nombre de biens facturables que vous pouvez créer dépend de votre palier d’abonnement (Starter, Pro, Premium, Agence) — visible dans votre profil.',
   },
   {
     icon: Users,
@@ -80,7 +80,7 @@ const SECTIONS: GuideSection[] = [
     title: 'Abonnement & quotas',
     summary: 'Comprendre votre palier et vos quotas de biens',
     steps: [
-      'Chaque compte a un abonnement (Starter, Pro ou Premium) avec un quota de biens facturables.',
+      'Chaque compte a un abonnement (Starter, Pro, Premium ou Agence) avec un quota de biens facturables.',
       'Un bien facturable est un bien loué, en travaux, ou publié en annonce active — jamais un bien archivé.',
       'Changez de palier à tout moment depuis votre profil si votre quota est atteint.',
     ],

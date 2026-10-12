@@ -1,12 +1,15 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
+import { THROTTLE_PUBLIC_LISTINGS } from '../../common/constants';
 import { ListingsService, PaginatedPublicListings, PublicListingDetail } from './listings.service';
 import { ListPublicListingsQueryDto } from './dto/list-public-listings-query.dto';
 
 @ApiTags('Listings publiques')
 @Controller('public/listings')
 @Public()
+@Throttle(THROTTLE_PUBLIC_LISTINGS)
 export class ListingsController {
   constructor(private readonly listingsService: ListingsService) {}
 

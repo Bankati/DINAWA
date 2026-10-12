@@ -110,8 +110,8 @@ describe('SubscriptionsService', () => {
       expect(result.remaining).toBe(2);
     });
 
-    it('renvoie null (illimité) pour Premium, jamais un nombre négatif au-delà du quota', async () => {
-      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription({ tier: 'PREMIUM' }));
+    it('renvoie null (illimité) pour Agence, jamais un nombre négatif au-delà du quota', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription({ tier: 'AGENCE' }));
       prisma.property.count.mockResolvedValueOnce(999);
 
       const result = await service.getQuotaStatus(owner);
@@ -193,8 +193,8 @@ describe('SubscriptionsService', () => {
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
     });
 
-    it('ne lève rien pour un forfait Premium (illimité)', async () => {
-      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription({ tier: 'PREMIUM' }));
+    it('ne lève rien pour un forfait Agence (illimité)', async () => {
+      prisma.subscription.findUnique.mockResolvedValueOnce(makeSubscription({ tier: 'AGENCE' }));
       await expect(
         service.assertQuotaAvailable(prisma as never, 'owner-1'),
       ).resolves.toBeUndefined();

@@ -165,6 +165,7 @@ enum SubscriptionTier {
   STARTER
   PRO
   PREMIUM
+  AGENCE
 }
 
 enum SubscriptionStatus {
