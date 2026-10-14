@@ -10,8 +10,11 @@ export type PropertyType =
   | "APARTMENT"
   | "VILLA"
   | "VILLA_DUPLEX"
+  | "VILLA_MEUBLEE"
   | "APPARTEMENT_MEUBLE"
-  | "COMMERCIAL";
+  | "COMMERCIAL"
+  | "MAGASIN"
+  | "BOUTIQUE";
 export type PropertyStatus = "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
 export type PaymentStatus =
   | "PENDING"
@@ -31,8 +34,11 @@ export const PROPERTY_TYPE_LABELS: Record<string, string> = {
   APARTMENT: "Appartement",
   VILLA: "Villa",
   VILLA_DUPLEX: "Villa duplex",
+  VILLA_MEUBLEE: "Villa meublée",
   APPARTEMENT_MEUBLE: "Appartement meublé",
   COMMERCIAL: "Professionnel",
+  MAGASIN: "Magasin",
+  BOUTIQUE: "Boutique",
 };
 
 const MOIS_COURTS = [

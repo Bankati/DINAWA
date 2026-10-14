@@ -9,8 +9,11 @@ export type PropertyType =
   | "APARTMENT"
   | "VILLA"
   | "VILLA_DUPLEX"
+  | "VILLA_MEUBLEE"
   | "APPARTEMENT_MEUBLE"
-  | "COMMERCIAL";
+  | "COMMERCIAL"
+  | "MAGASIN"
+  | "BOUTIQUE";
 
 export interface PublicListingSummary {
   id: string;
@@ -71,8 +74,11 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   APARTMENT: "Appartement",
   VILLA: "Villa",
   VILLA_DUPLEX: "Villa duplex",
+  VILLA_MEUBLEE: "Villa meublée",
   APPARTEMENT_MEUBLE: "Appartement meublé",
   COMMERCIAL: "Professionnel",
+  MAGASIN: "Magasin",
+  BOUTIQUE: "Boutique",
 };
 
 export function getPublicListings(
