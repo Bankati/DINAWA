@@ -115,8 +115,11 @@ function AnnoncesPublicView() {
                     <option value="APARTMENT">Appartement</option>
                     <option value="VILLA">Villa</option>
                     <option value="VILLA_DUPLEX">Villa duplex</option>
+                    <option value="VILLA_MEUBLEE">Villa meublée</option>
                     <option value="APPARTEMENT_MEUBLE">Appartement meublé</option>
                     <option value="COMMERCIAL">Professionnel</option>
+                    <option value="MAGASIN">Magasin</option>
+                    <option value="BOUTIQUE">Boutique</option>
                   </select>
                 </div>
                 <div className="fg-divider" />
