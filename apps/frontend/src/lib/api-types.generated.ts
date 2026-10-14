@@ -1730,8 +1730,11 @@ export interface components {
         | "APARTMENT"
         | "VILLA"
         | "VILLA_DUPLEX"
+        | "VILLA_MEUBLEE"
         | "APPARTEMENT_MEUBLE"
-        | "COMMERCIAL";
+        | "COMMERCIAL"
+        | "MAGASIN"
+        | "BOUTIQUE";
       address?: Record<string, never>;
       neighborhood: string;
       city: string;
@@ -1753,8 +1756,11 @@ export interface components {
         | "APARTMENT"
         | "VILLA"
         | "VILLA_DUPLEX"
+        | "VILLA_MEUBLEE"
         | "APPARTEMENT_MEUBLE"
-        | "COMMERCIAL";
+        | "COMMERCIAL"
+        | "MAGASIN"
+        | "BOUTIQUE";
       /** @enum {string} */
       status?: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
       address?: Record<string, never>;
@@ -1851,8 +1857,11 @@ export interface components {
         | "APARTMENT"
         | "VILLA"
         | "VILLA_DUPLEX"
+        | "VILLA_MEUBLEE"
         | "APPARTEMENT_MEUBLE"
-        | "COMMERCIAL";
+        | "COMMERCIAL"
+        | "MAGASIN"
+        | "BOUTIQUE";
       /** @enum {string} */
       status: "OCCUPIED" | "VACANT" | "RENOVATION" | "ARCHIVED";
       address?: string | null;
@@ -2386,8 +2395,11 @@ export interface operations {
           | "APARTMENT"
           | "VILLA"
           | "VILLA_DUPLEX"
+          | "VILLA_MEUBLEE"
           | "APPARTEMENT_MEUBLE"
-          | "COMMERCIAL";
+          | "COMMERCIAL"
+          | "MAGASIN"
+          | "BOUTIQUE";
         city?: string;
         neighborhood?: string;
         minRent?: number;
