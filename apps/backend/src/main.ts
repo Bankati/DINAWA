@@ -2,6 +2,9 @@ import './instrument';
 
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { forwardedForDiagnostic } from './common/middleware/forwarded-for-diagnostic';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule } from '@nestjs/swagger';
 import { Logger as PinoLogger } from 'nestjs-pino';
@@ -13,10 +16,23 @@ import { parseAllowedOrigins } from './common/utils/parse-allowed-origins';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     bodyParser: false, // On gère le body parser manuellement pour contrôler les limites
   });
+
+  // Adresse IP cliente derrière le proxy Railway (limites de débit, unité 43) :
+  // nombre EXACT de proxys de confiance, jamais `true` — Express retient alors
+  // l'adresse ajoutée par le dernier proxy de confiance, et un X-Forwarded-For
+  // forgé par le client reste ignoré. 0 par défaut (local, sûr).
+  const config = app.get(ConfigService);
+  const trustProxyHops = config.get<number>('TRUST_PROXY_HOPS') ?? 0;
+  if (trustProxyHops > 0) {
+    app.set('trust proxy', trustProxyHops);
+  }
+  if (config.get<boolean>('TRUST_PROXY_DIAGNOSTIC') === true) {
+    app.use(forwardedForDiagnostic(trustProxyHops));
+  }
 
   // Graceful shutdown — gère le SIGTERM Railway proprement
   app.enableShutdownHooks();
