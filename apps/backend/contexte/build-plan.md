@@ -567,13 +567,17 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 44 Webhook Meta
 
-**Logique :**
+**Plan validé (`/architect` 2026-10-13, 6 décisions relues par un tiers) — remplace la section Logique d'origine :**
 
-- `GET /api/webhooks/whatsapp` (poignée de main `hub.challenge`) et `POST /api/webhooks/whatsapp` (`@Public()`, `@SkipThrottle()`)
-- `main.ts` : corps brut conservé pour cette route (`bodyParser.json({ verify })`)
-- Statuts envoyé/livré/lu/échec idempotents par `wamid` unique ; `STOP`/`ARRET` → `whatsappConsent = STOPPED`
-- Messages entrants enregistrés puis émis en événement `whatsapp.inbound` (réponse 200 immédiate, invariant #15)
-- `AuditLogInterceptor` et redaction Pino : jamais le texte des messages ni le numéro en clair
+- Migration additive `add_whatsapp_webhook` : `deliveredAt`, `readAt`, `body` (texte effaçable), `inboundAction`, `processedAt`, `processingStartedAt`, `processingAttempts` sur `WhatsappMessage` ; types `INTERACTIVE`/`IMAGE`/`AUDIO`/`VIDEO`/`OTHER` ; statut `RECEIVED` ; index de la liste de travail. La migration de l'unité 42 n'est jamais modifiée.
+- Module `whatsapp-webhook` : `GET/POST /api/webhooks/whatsapp` (`@Public()`, `@SkipThrottle()`, `@SkipAuditLog()`, exclu de Swagger) ; corps brut gardé pour cette seule route (`common/middleware/raw-body.ts`) ; signature → enregistrement → 200 → traitement en arrière-plan ; 401 / 503 / 500 / 200 selon le cas ; webhook ouvert même interrupteur éteint.
+- Accusés : `applyStatusEvent()` (règles centralisées, aucune régression, « lu » ⇒ « livré », sortie des `UNKNOWN`, échec après « envoyé » enregistré, incohérences ignorées) + écriture conditionnelle unique (compare-and-swap).
+- Messages reçus : contenu gardé selon le type pour un locataire connu, rien pour un numéro inconnu ; jamais dans journaux / Sentry / `AuditLog`.
+- STOP (message entier `stop`/`arret`/`arreter`) : arrêt dans la transaction du message, confirmation unique au passage à `STOPPED` via `sendStopConfirmation()` / `canSendStopConfirmation()` ; réactivation à l'unité 45.
+- Liste de travail durable : `inboundAction` + signal `whatsapp.inbound` + `whatsapp-inbound-recovery.task.ts` (chaque minute, verrou Postgres, 3 essais puis mise de côté).
+- Anonymisation : textes WhatsApp effacés, `whatsappPhone` retiré, canal arrêté (source `SYSTEM`).
+- Masquage : `hub.verify_token` dans les URL journalisées, corps du webhook dans Sentry.
+- Règles détaillées : `architecture.md`, section « WhatsApp Cloud API (Meta) ».
 
 ### 45 Consentement WhatsApp et code locataire
 

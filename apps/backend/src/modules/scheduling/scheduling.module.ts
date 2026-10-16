@@ -5,6 +5,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { PlatformSettingsModule } from '../platform-settings/platform-settings.module';
+import { WhatsappWebhookModule } from '../whatsapp-webhook/whatsapp-webhook.module';
 import { InactivityTask } from './inactivity.task';
 import { SupabaseKeepaliveTask } from './supabase-keepalive.task';
 import { RemindersTask } from './reminders.task';
@@ -13,6 +14,7 @@ import { MonthlyReportsTask } from './monthly-reports.task';
 import { PaydunyaReconciliationTask } from './paydunya-reconciliation.task';
 import { PayoutsTask } from './payouts.task';
 import { SubscriptionBillingTask } from './subscription-billing.task';
+import { WhatsappInboundRecoveryTask } from './whatsapp-inbound-recovery.task';
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { SubscriptionBillingTask } from './subscription-billing.task';
     PayoutsModule,
     SubscriptionsModule,
     PlatformSettingsModule,
+    WhatsappWebhookModule,
   ],
   providers: [
     InactivityTask,
@@ -32,6 +35,7 @@ import { SubscriptionBillingTask } from './subscription-billing.task';
     PaydunyaReconciliationTask,
     PayoutsTask,
     SubscriptionBillingTask,
+    WhatsappInboundRecoveryTask,
   ],
 })
 export class SchedulingModule {}

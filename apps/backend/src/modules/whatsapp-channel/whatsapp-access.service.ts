@@ -76,6 +76,29 @@ export class WhatsappAccessService {
 
     return { allowed: true, recipientPhone, metaNumber };
   }
+
+  // Seule exception à canUseWhatsapp (unité 44, /architect 2026-10-13) : la
+  // confirmation d'un STOP part alors que le consentement vient justement de
+  // passer à STOPPED. Ni consentement, ni bail, ni forfait ne sont vérifiés
+  // — la personne vient d'écrire, la réponse est gratuite et légitime — mais
+  // l'interrupteur général et un numéro exploitable restent exigés. À
+  // n'utiliser QUE pour cette confirmation (WhatsappService.sendStopConfirmation).
+  async canSendStopConfirmation(userId: string): Promise<WhatsappAccess> {
+    if (this.config.get<boolean>('WHATSAPP_ENABLED') !== true) {
+      return refuse('CHANNEL_DISABLED');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, whatsappPhone: true, whatsappConsent: true },
+    });
+    if (!user) return refuse('USER_NOT_FOUND');
+    // Garde-fou : jamais pour quelqu'un dont l'arrêt n'est pas enregistré.
+    if (user.whatsappConsent !== 'STOPPED') return refuse('NO_CONSENT');
+
+    const metaNumber = toWhatsappNumber(user.whatsappPhone ?? user.phone);
+    if (!metaNumber) return refuse('NO_VALID_NUMBER');
+    return { allowed: true, recipientPhone: metaNumber.slice(3), metaNumber };
+  }
 }
 
 function refuse(reason: WhatsappAccessRefusal): WhatsappAccess {

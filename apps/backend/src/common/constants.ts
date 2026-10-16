@@ -118,6 +118,17 @@ export const CACHE_TTL_LIST = 15_000;
 // au webhook normal d'arriver en premier). Au-delà de
 // PAYDUNYA_ABANDON_AFTER_MS sans confirmation, le paiement est basculé en
 // REJECTED pour permettre au locataire de relancer proprement.
+// Liste de travail durable des messages WhatsApp reçus (unité 44,
+// /architect 2026-10-13) : le traitement normal part dès l'enregistrement ;
+// cette tâche reprend chaque minute ce qu'un redémarrage a interrompu. Un
+// message n'est repris qu'après WHATSAPP_INBOUND_RETRY_AFTER_MS (laisse le
+// traitement normal finir), et mis de côté après
+// WHATSAPP_INBOUND_MAX_ATTEMPTS échecs pour ne pas bloquer les suivants.
+export const CRON_WHATSAPP_INBOUND_RECOVERY = '* * * * *';
+export const WHATSAPP_INBOUND_RETRY_AFTER_MS = 2 * 60 * 1000;
+export const WHATSAPP_INBOUND_MAX_ATTEMPTS = 3;
+export const WHATSAPP_INBOUND_RECOVERY_BATCH = 50;
+
 export const CRON_PAYDUNYA_RECONCILIATION = '*/15 * * * *';
 export const PAYDUNYA_RECONCILE_AFTER_MS = 15 * 60 * 1000;
 export const PAYDUNYA_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;

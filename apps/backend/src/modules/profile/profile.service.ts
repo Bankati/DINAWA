@@ -20,6 +20,10 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationConsentDto } from './dto/update-notification-consent.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+// Valeur neutre de WhatsappMessage.recipientPhone (colonne obligatoire) après
+// anonymisation du compte : le numéro réel n'est plus conservé nulle part.
+const ANONYMIZED_PHONE = '[anonymisé]';
+
 @Injectable()
 export class ProfileService {
   private readonly logger = new Logger(ProfileService.name);
@@ -205,18 +209,50 @@ export class ProfileService {
       );
     }
 
-    await this.prisma.user.update({
+    // Canal WhatsApp (unité 44, /architect 2026-10-13, décision 1) : textes
+    // reçus effacés, numéro et contenu des messages envoyés retirés (les
+    // lignes restent, sans donnée personnelle, pour l'historique des envois —
+    // /review unité 44), numéro WhatsApp retiré et consentement arrêté par WARAH
+    // (source SYSTEM, sans acteur) — plus aucun message ne peut partir. Les
+    // sauvegardes Supabase, en rotation sur 30 jours, n'en gardent plus
+    // trace au-delà (voir architecture.md).
+    const current = await this.prisma.user.findUnique({
       where: { id: user.id },
-      data: {
-        email: null,
-        phone: null,
-        firstName: 'Utilisateur',
-        lastName: 'Anonymisé',
-        profilePhotoPath: null,
-        supabaseId: null,
-        anonymizedAt: new Date(),
-      },
+      select: { whatsappConsent: true },
     });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          email: null,
+          phone: null,
+          firstName: 'Utilisateur',
+          lastName: 'Anonymisé',
+          profilePhotoPath: null,
+          supabaseId: null,
+          anonymizedAt: new Date(),
+          whatsappPhone: null,
+          whatsappConsent: 'STOPPED',
+          whatsappStoppedAt: new Date(),
+        },
+      }),
+      this.prisma.whatsappMessage.updateMany({
+        where: { userId: user.id },
+        data: { body: null, payload: Prisma.DbNull, recipientPhone: ANONYMIZED_PHONE },
+      }),
+      ...(current && current.whatsappConsent !== 'STOPPED'
+        ? [
+            this.prisma.whatsappConsentEvent.create({
+              data: {
+                userId: user.id,
+                previousConsent: current.whatsappConsent,
+                newConsent: 'STOPPED',
+                source: 'SYSTEM',
+              },
+            }),
+          ]
+        : []),
+    ]);
 
     // Supprimée seulement après confirmation de l'update — une photo de
     // visage reste une donnée personnelle, l'anonymisation doit la
