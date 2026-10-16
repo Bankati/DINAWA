@@ -18,6 +18,20 @@ describe('maskSensitiveUrl', () => {
     expect(masked).not.toContain(TOKEN);
   });
 
+  it('masque le jeton de vérification du webhook Meta (unité 44)', () => {
+    const masked = maskSensitiveUrl(
+      '/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=secret-equipe&hub.challenge=123',
+    );
+    expect(masked).toBe('/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=[masqué]&hub.challenge=123');
+  });
+
+  it('masque aussi la copie hub_verify_token envoyée par Meta', () => {
+    const masked = maskSensitiveUrl(
+      '/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=secret-equipe&hub_mode=subscribe&hub_verify_token=secret-equipe',
+    );
+    expect(masked).not.toContain('secret-equipe');
+  });
+
   it('laisse intactes les URL sans jeton', () => {
     expect(maskSensitiveUrl('/api/payments?page=2')).toBe('/api/payments?page=2');
   });

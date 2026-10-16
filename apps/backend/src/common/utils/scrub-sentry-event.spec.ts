@@ -23,6 +23,22 @@ describe('scrubSentryEvent', () => {
     expect(event.request?.query_string).toBe('[masqué]');
   });
 
+  it('retire le corps de la requête du webhook WhatsApp (unité 44)', () => {
+    const event = scrubSentryEvent({
+      request: {
+        url: 'https://api.warah.test/api/webhooks/whatsapp',
+        data: { entry: [{ changes: [{ value: { messages: [{ from: '22890000000', text: { body: 'ma fenêtre' } }] } }] }] },
+      },
+    });
+    expect(event.request?.data).toBe('[masqué]');
+    expect(JSON.stringify(event)).not.toContain('ma fenêtre');
+  });
+
+  it('garde le corps des autres requêtes', () => {
+    const event = scrubSentryEvent({ request: { url: '/api/properties', data: { address: 'Bè' } } });
+    expect(event.request?.data).toEqual({ address: 'Bè' });
+  });
+
   it('accepte un événement sans requête ni fil d’Ariane', () => {
     expect(scrubSentryEvent({ transaction: 'GET /api/health' })).toEqual({ transaction: 'GET /api/health' });
   });

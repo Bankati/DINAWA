@@ -1,10 +1,29 @@
 import { CallHandler, ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { of } from 'rxjs';
 import { AuditLogInterceptor } from './audit-log.interceptor';
+import { SkipAuditLog } from '../decorators/skip-audit-log.decorator';
 
-function makeContext(req: Record<string, unknown>): ExecutionContext {
+class AnyController {
+  handler(): void {}
+}
+
+class WebhookController {
+  @SkipAuditLog()
+  handle(): void {}
+}
+
+function makeContext(
+  req: Record<string, unknown>,
+  target: { handler: object; controller: object } = {
+    handler: Object.getOwnPropertyDescriptor(AnyController.prototype, 'handler')?.value as object,
+    controller: AnyController,
+  },
+): ExecutionContext {
   return {
     switchToHttp: () => ({ getRequest: () => req }),
+    getHandler: () => target.handler,
+    getClass: () => target.controller,
   } as unknown as ExecutionContext;
 }
 
@@ -18,12 +37,28 @@ describe('AuditLogInterceptor', () => {
 
   beforeEach(() => {
     prisma = { auditLog: { create: jest.fn().mockResolvedValue({}) } };
-    interceptor = new AuditLogInterceptor(prisma as never);
+    interceptor = new AuditLogInterceptor(prisma as never, new Reflector());
   });
 
   function flush(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
   }
+
+  it('ignore une route marquée @SkipAuditLog (webhook WhatsApp, unité 44)', async () => {
+    const req = {
+      method: 'POST',
+      route: { path: '/api/webhooks/whatsapp' },
+      params: {},
+      body: { entry: [{ changes: [{ value: { messages: [{ text: { body: 'secret' } }] } }] }] },
+    };
+    const target = {
+      handler: Object.getOwnPropertyDescriptor(WebhookController.prototype, 'handle')?.value as object,
+      controller: WebhookController,
+    };
+    interceptor.intercept(makeContext(req, target), makeHandler({})).subscribe();
+    await flush();
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
 
   it('ignore les requêtes GET (non mutantes)', async () => {
     const req = { method: 'GET', route: { path: '/api/properties' }, params: {}, body: {} };

@@ -7,7 +7,7 @@ const Sentry = require('@sentry/nestjs') as { captureMessage: jest.Mock };
 
 describe('WhatsappService', () => {
   let prisma: { whatsappMessage: { create: jest.Mock; update: jest.Mock } };
-  let access: { canUseWhatsapp: jest.Mock };
+  let access: { canUseWhatsapp: jest.Mock; canSendStopConfirmation: jest.Mock };
   let client: {
     sendTemplate: jest.Mock;
     sendText: jest.Mock;
@@ -50,6 +50,11 @@ describe('WhatsappService', () => {
     };
     access = {
       canUseWhatsapp: jest.fn().mockResolvedValue({
+        allowed: true,
+        recipientPhone: '90112233',
+        metaNumber: '22890112233',
+      }),
+      canSendStopConfirmation: jest.fn().mockResolvedValue({
         allowed: true,
         recipientPhone: '90112233',
         metaNumber: '22890112233',
@@ -258,6 +263,48 @@ describe('WhatsappService', () => {
       };
       await expect(service.sendDocument(withoutTemplate)).resolves.toMatchObject({ wamid: 'wamid.3' });
       expect(client.sendTemplate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sendStopConfirmation (unité 44)', () => {
+    it('passe par canSendStopConfirmation, jamais par canUseWhatsapp', async () => {
+      await expect(service.sendStopConfirmation('tenant-1')).resolves.toEqual({
+        outcome: 'SENT',
+        messageId: 'msg-1',
+        wamid: 'wamid.2',
+      });
+      expect(access.canSendStopConfirmation).toHaveBeenCalledWith('tenant-1');
+      expect(access.canUseWhatsapp).not.toHaveBeenCalled();
+    });
+
+    it('trace l’envoi (source dédiée) et fait un seul appel Meta', async () => {
+      await service.sendStopConfirmation('tenant-1');
+      expect(createdData()).toMatchObject({
+        userId: 'tenant-1',
+        source: 'stop-confirmation',
+        messageType: 'TEXT',
+        direction: 'OUTBOUND',
+        status: 'QUEUED',
+      });
+      expect(client.sendText).toHaveBeenCalledTimes(1);
+      expect(client.sendText).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '22890112233', callbackData: 'msg-1' }),
+      );
+    });
+
+    it('refus (interrupteur éteint) : aucune ligne, aucun appel', async () => {
+      access.canSendStopConfirmation.mockResolvedValueOnce({ allowed: false, reason: 'CHANNEL_DISABLED' });
+      await expect(service.sendStopConfirmation('tenant-1')).resolves.toEqual({
+        outcome: 'REFUSED',
+        reason: 'CHANNEL_DISABLED',
+      });
+      expect(prisma.whatsappMessage.create).not.toHaveBeenCalled();
+      expect(client.sendText).not.toHaveBeenCalled();
+    });
+
+    it('erreur Meta : classée comme les autres envois, jamais levée', async () => {
+      client.sendText.mockRejectedValueOnce(new MetaApiError('timeout', null));
+      await expect(service.sendStopConfirmation('tenant-1')).resolves.toMatchObject({ outcome: 'UNKNOWN' });
     });
   });
 });

@@ -37,6 +37,7 @@ import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { WhatsappChannelModule } from './modules/whatsapp-channel/whatsapp-channel.module';
 import { PayLinksModule } from './modules/pay-links/pay-links.module';
+import { WhatsappWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
 import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -179,6 +180,10 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Lien de paiement public sans connexion (phase 12, unité 43) —
     // GET/POST /api/pay-links/:token, @Public() + limites de débit strictes.
     PayLinksModule,
+
+    // Webhook Meta WhatsApp (phase 12, unité 44) — GET/POST
+    // /api/webhooks/whatsapp : messages reçus, accusés de livraison, STOP.
+    WhatsappWebhookModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout
