@@ -6,12 +6,13 @@ jest.mock('@sentry/nestjs', () => ({ captureMessage: jest.fn() }));
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const STOP_AT = new Date('2026-10-13T09:59:30Z');
+const STOP_META_AT = new Date('2026-10-13T09:59:28Z');
 
 describe('WhatsappInboundProcessor', () => {
   let prisma: {
     whatsappMessage: { updateMany: jest.Mock; findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock; findMany: jest.Mock };
   };
-  let whatsapp: { sendStopConfirmation: jest.Mock };
+  let whatsapp: { sendStopConfirmation: jest.Mock; reply: jest.Mock };
   let processor: WhatsappInboundProcessor;
 
   beforeEach(() => {
@@ -21,13 +22,16 @@ describe('WhatsappInboundProcessor', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUnique: jest
           .fn()
-          .mockResolvedValue({ userId: 'tenant-1', inboundAction: 'STOP_CONFIRMATION', createdAt: STOP_AT, processingAttempts: 1 }),
+          .mockResolvedValue({ userId: 'tenant-1', inboundAction: 'STOP_CONFIRMATION', createdAt: STOP_AT, sentAt: STOP_META_AT, processingAttempts: 1 }),
         findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue([]),
       },
     };
-    whatsapp = { sendStopConfirmation: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'out-1', wamid: 'w' }) };
+    whatsapp = {
+      sendStopConfirmation: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'out-1', wamid: 'w' }),
+      reply: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'out-2', wamid: 'w2' }),
+    };
     processor = new WhatsappInboundProcessor(prisma as never, whatsapp as never);
   });
 
@@ -49,7 +53,50 @@ describe('WhatsappInboundProcessor', () => {
 
   it('envoie la confirmation du STOP puis marque le message traité', async () => {
     await processor.process('in-1', NOW);
-    expect(whatsapp.sendStopConfirmation).toHaveBeenCalledWith('tenant-1');
+    // Fenêtre de 24 h comptée depuis l'heure Meta du STOP (unité 45).
+    expect(whatsapp.sendStopConfirmation).toHaveBeenCalledWith('tenant-1', STOP_META_AT);
+    expect(prisma.whatsappMessage.update).toHaveBeenCalledWith({
+      where: { id: 'in-1' },
+      data: { processedAt: expect.any(Date) as unknown },
+    });
+  });
+
+  it.each([
+    ['CONSENT_WELCOME', 'consent-welcome'],
+    ['RESUME_CONFIRMATION', 'resume-confirmation'],
+  ] as const)('%s : réponse libre avec tous les contrôles refaits à l’envoi (unité 45)', async (action, source) => {
+    prisma.whatsappMessage.findUnique.mockResolvedValue({
+      userId: 'tenant-1',
+      inboundAction: action,
+      createdAt: STOP_AT,
+      sentAt: STOP_META_AT,
+      processingAttempts: 1,
+    });
+    await processor.process('in-1', NOW);
+    expect(whatsapp.reply).toHaveBeenCalledWith({
+      userId: 'tenant-1',
+      source,
+      text: expect.stringContaining('STOP') as unknown,
+      inboundReceivedAt: STOP_META_AT,
+    });
+    expect(whatsapp.sendStopConfirmation).not.toHaveBeenCalled();
+    expect(prisma.whatsappMessage.findFirst).toHaveBeenCalledWith({
+      where: { userId: 'tenant-1', direction: 'OUTBOUND', source, createdAt: { gte: STOP_AT } },
+      select: { id: true },
+    });
+    expect(prisma.whatsappMessage.update).toHaveBeenCalled();
+  });
+
+  it('bienvenue refusée (STOP ou changement de numéro depuis, fenêtre fermée) : tâche abandonnée, rien n’est relancé', async () => {
+    prisma.whatsappMessage.findUnique.mockResolvedValue({
+      userId: 'tenant-1',
+      inboundAction: 'CONSENT_WELCOME',
+      createdAt: STOP_AT,
+      sentAt: STOP_META_AT,
+      processingAttempts: 1,
+    });
+    whatsapp.reply.mockResolvedValue({ outcome: 'REFUSED', reason: 'NO_CONSENT' });
+    await processor.process('in-1', NOW);
     expect(prisma.whatsappMessage.update).toHaveBeenCalledWith({
       where: { id: 'in-1' },
       data: { processedAt: expect.any(Date) as unknown },
@@ -95,6 +142,7 @@ describe('WhatsappInboundProcessor', () => {
       userId: 'tenant-1',
       inboundAction: 'STOP_CONFIRMATION',
       createdAt: STOP_AT,
+      sentAt: STOP_META_AT,
       processingAttempts: WHATSAPP_INBOUND_MAX_ATTEMPTS,
     });
     whatsapp.sendStopConfirmation.mockRejectedValue(new Error('base indisponible'));

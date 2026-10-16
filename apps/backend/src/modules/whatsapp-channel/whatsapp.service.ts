@@ -5,22 +5,30 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappAccessRefusal, WhatsappAccessService } from './whatsapp-access.service';
 import { TemplateComponent, WhatsappCloudClient } from './whatsapp-cloud.client';
 import { MetaApiError, MetaErrorClassification, classifyMetaError } from './meta-error';
+import { isWithinReplyWindow } from './reply-window';
 
 // Modèles Meta de catégorie Utilité prévus pour la phase 12 (textes dans le
 // plan d'implémentation). Leur approbation se fait chez Meta, hors code.
-export type WhatsappTemplateName =
-  | 'rappel_loyer'
-  | 'paiement_recu'
-  | 'loyer_en_retard'
-  | 'bienvenue_locataire';
+// Pas de modèle de bienvenue : depuis l'unité 45, la bienvenue est la
+// réponse libre au « OUI » du locataire (décision 4).
+export type WhatsappTemplateName = 'rappel_loyer' | 'paiement_recu' | 'loyer_en_retard';
 
 const TEMPLATE_LANGUAGE = 'fr';
+
+// Réponses libres aux messages du locataire (unités 44-45) : jamais de
+// publicité, seulement le service.
 export const STOP_CONFIRMATION_SOURCE = 'stop-confirmation';
-// Texte de la confirmation d'arrêt (unité 44). La réactivation par
-// « REPRENDRE » arrive avec l'unité 45.
 export const STOP_CONFIRMATION_TEXT =
   "C'est noté : vous ne recevrez plus de messages WARAH sur WhatsApp. " +
-  'Pour les réactiver, contactez votre agence.';
+  'Pour les réactiver, répondez REPRENDRE ou activez-les depuis votre espace WARAH.';
+export const CONSENT_WELCOME_SOURCE = 'consent-welcome';
+export const CONSENT_WELCOME_TEXT =
+  'Bienvenue sur WARAH ! Vous recevrez ici vos rappels de loyer, vos quittances et ' +
+  'les messages de service de votre logement. Pour arrêter à tout moment, répondez STOP.';
+export const RESUME_CONFIRMATION_SOURCE = 'resume-confirmation';
+export const RESUME_CONFIRMATION_TEXT =
+  "C'est noté : vous recevez de nouveau les messages de service WARAH sur WhatsApp. " +
+  'Pour arrêter à tout moment, répondez STOP.';
 const ERROR_MESSAGE_MAX_LENGTH = 200;
 const MEDIA_UPLOAD_UNCERTAIN = 'MEDIA_UPLOAD_UNCERTAIN';
 
@@ -108,12 +116,24 @@ export class WhatsappService {
     return this.markSent(message.id, input.source, wamid);
   }
 
+  // Réponse libre (sans modèle) à un message du locataire : bienvenue après
+  // son « OUI », confirmation de reprise (unité 45), puis le robot (unité
+  // 47). Mêmes contrôles que send() — revérifiés au moment de l'envoi, donc
+  // un STOP ou un changement de numéro arrivé entre-temps l'emporte — plus
+  // la fenêtre de 24 h.
+  async reply(input: SendContext & { text: string; inboundReceivedAt: Date }): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    return this.send({ userId: input.userId, source: input.source, kind: 'text', text: input.text });
+  }
+
   // Confirmation d'un STOP (unité 44) — même invariant d'appels que send()
   // (un seul appel Meta), mais contrôlée par canSendStopConfirmation : c'est
   // le seul message autorisé après un arrêt. Envoyée une seule fois, par la
-  // liste de travail des messages reçus (WhatsappInboundProcessor).
-  async sendStopConfirmation(userId: string): Promise<WhatsappSendResult> {
+  // liste de travail des messages reçus (WhatsappInboundProcessor), et
+  // seulement dans la fenêtre de 24 h après le STOP (unité 45).
+  async sendStopConfirmation(userId: string, inboundReceivedAt: Date): Promise<WhatsappSendResult> {
     const input: SendContext = { userId, source: STOP_CONFIRMATION_SOURCE };
+    if (!isWithinReplyWindow(inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
     const access = await this.access.canSendStopConfirmation(userId);
     if (!access.allowed) return this.refused(input, access.reason);
 

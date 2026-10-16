@@ -38,6 +38,7 @@ import { ContactModule } from './modules/contact/contact.module';
 import { WhatsappChannelModule } from './modules/whatsapp-channel/whatsapp-channel.module';
 import { PayLinksModule } from './modules/pay-links/pay-links.module';
 import { WhatsappWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
+import { WhatsappConsentModule } from './modules/whatsapp-consent/whatsapp-consent.module';
 import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -184,6 +185,10 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Webhook Meta WhatsApp (phase 12, unité 44) — GET/POST
     // /api/webhooks/whatsapp : messages reçus, accusés de livraison, STOP.
     WhatsappWebhookModule,
+
+    // Consentement WhatsApp, numéro vérifié et code locataire (phase 12,
+    // unité 45) — /api/tenants/:id/whatsapp* (agence) et /api/me/whatsapp*.
+    WhatsappConsentModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout

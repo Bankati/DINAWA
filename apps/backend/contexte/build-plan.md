@@ -581,11 +581,16 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 45 Consentement WhatsApp et code locataire
 
-**Logique :**
+**Logique (révisée par `/architect` le 2026-10-16, 4 décisions relues par un tiers, voir `architecture.md` section « Consentement WhatsApp ») :**
 
-- `PATCH /api/tenants/:id/whatsapp-consent` (`OWNER`/`MANAGER`, `canActOnProperty()`), preuve date + auteur
-- Génération du code à 6 chiffres (hashé) à l'acceptation, régénérable ; envoi du modèle `bienvenue_locataire`
-- Frontend : case de consentement, badge d'état, affichage et régénération du code dans la fiche locataire et l'invitation
+- **Règle stricte** : aucun envoi sans accord valide ET numéro vérifié (le locataire a écrit à WARAH depuis ce numéro). Nouvel état `PENDING` ; seul le locataire fait passer à `ACCEPTED`.
+- Transitions : `decideConsent()` (fonction pure) + `applyConsentCommand()` (seul point d'écriture, compare-and-swap + historique dans la même transaction). Ordre des messages par l'heure Meta ; un STOP s'applique toujours.
+- Agence (`OWNER`/`MANAGER`, `canActOnProperty()` sur le bien du bail actif) : déclarer l'accord avec attestation et façon de le recueillir (→ `PENDING`, demande valable 7 jours), noter un refus (→ `STOPPED`), changer le numéro (remise à zéro), réinitialiser le code sans le voir.
+- Locataire (`/api/me/whatsapp*`) : activer / arrêter, changer de numéro, générer son code (affiché une fois, jamais trop simple, `bcrypt(HMAC(WHATSAPP_PIN_PEPPER, code))`).
+- Webhook : tout message reçu vérifie le numéro ; « OUI » (ou la phrase pré-remplie du QR code) et « REPRENDRE » reconnus comme message entier ; bienvenue et confirmation de reprise en réponse libre, avec fenêtre de 24 h vérifiée à l'envoi (aussi pour la confirmation de STOP). Le modèle `bienvenue_locataire` est supprimé.
+- Frontend : badge WhatsApp dans les deux pages « Locataires » (propriétaire, gestionnaire), fenêtre agence avec QR code « Écrire à WARAH » (`qrcode.react`), carte WhatsApp dans le profil du locataire.
+- Migration additive `20261016090000_add_whatsapp_consent_verification` ; nouvelles variables `WHATSAPP_PIN_PEPPER`, `WHATSAPP_BUSINESS_NUMBER` (obligatoires si WhatsApp allumé).
+- Reporté à l'unité 47 : vérification du code par le robot (5 essais / 1 h) et alerte Sentry si les échecs montent sur beaucoup de comptes ; fermer la conversation en cours sur un changement de numéro.
 
 ### 46 Canal WhatsApp dans NotifyService
 

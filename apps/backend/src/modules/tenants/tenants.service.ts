@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   AccountStatus,
+  WhatsappConsent,
   LeaseStatus,
   PaymentFrequency,
   Prisma,
@@ -13,6 +14,7 @@ import {
   TenantPropertyBlock,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isWhatsappPhoneVerified } from '../whatsapp-consent/consent-writer';
 import { canActOnProperty } from '../../common/permissions/property-access';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { BlockTenantDto } from './dto/block-tenant.dto';
@@ -69,6 +71,9 @@ export type TenantSummary = {
     startDate: Date;
     property: { id: string; address: string | null; neighborhood: string; city: string };
   } | null;
+  // Badge WhatsApp de la liste (unité 45) — le détail (demande, code...)
+  // est servi par GET /tenants/:id/whatsapp.
+  whatsapp: { consent: WhatsappConsent; phoneVerified: boolean };
 };
 
 @Injectable()
@@ -159,6 +164,9 @@ export class TenantsService {
         accountStatus: true,
         createdAt: true,
         updatedAt: true,
+        whatsappPhone: true,
+        whatsappConsent: true,
+        whatsappVerifiedPhone: true,
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
           select: {
@@ -192,6 +200,7 @@ export class TenantsService {
             property: tenant.leasesAsTenant[0].property,
           }
         : null,
+      whatsapp: { consent: tenant.whatsappConsent, phoneVerified: isWhatsappPhoneVerified(tenant) },
     };
   }
 
@@ -246,6 +255,9 @@ export class TenantsService {
         accountStatus: true,
         createdAt: true,
         updatedAt: true,
+        whatsappPhone: true,
+        whatsappConsent: true,
+        whatsappVerifiedPhone: true,
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
           select: {
@@ -278,6 +290,10 @@ export class TenantsService {
             property: t.leasesAsTenant[0].property,
           }
         : null,
+      whatsapp: {
+        consent: t.whatsappConsent,
+        phoneVerified: isWhatsappPhoneVerified(t),
+      },
     }));
   }
 

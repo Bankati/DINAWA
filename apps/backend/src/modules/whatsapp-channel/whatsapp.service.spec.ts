@@ -5,6 +5,10 @@ jest.mock('@sentry/nestjs', () => ({ captureMessage: jest.fn() }));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Sentry = require('@sentry/nestjs') as { captureMessage: jest.Mock };
 
+// Heure Meta d'un message du locataire reçu il y a une minute.
+const justNow = (): Date => new Date(Date.now() - 60_000);
+const yesterday = (): Date => new Date(Date.now() - 24 * 60 * 60 * 1000);
+
 describe('WhatsappService', () => {
   let prisma: { whatsappMessage: { create: jest.Mock; update: jest.Mock } };
   let access: { canUseWhatsapp: jest.Mock; canSendStopConfirmation: jest.Mock };
@@ -268,7 +272,7 @@ describe('WhatsappService', () => {
 
   describe('sendStopConfirmation (unité 44)', () => {
     it('passe par canSendStopConfirmation, jamais par canUseWhatsapp', async () => {
-      await expect(service.sendStopConfirmation('tenant-1')).resolves.toEqual({
+      await expect(service.sendStopConfirmation('tenant-1', justNow())).resolves.toEqual({
         outcome: 'SENT',
         messageId: 'msg-1',
         wamid: 'wamid.2',
@@ -278,7 +282,7 @@ describe('WhatsappService', () => {
     });
 
     it('trace l’envoi (source dédiée) et fait un seul appel Meta', async () => {
-      await service.sendStopConfirmation('tenant-1');
+      await service.sendStopConfirmation('tenant-1', justNow());
       expect(createdData()).toMatchObject({
         userId: 'tenant-1',
         source: 'stop-confirmation',
@@ -294,7 +298,7 @@ describe('WhatsappService', () => {
 
     it('refus (interrupteur éteint) : aucune ligne, aucun appel', async () => {
       access.canSendStopConfirmation.mockResolvedValueOnce({ allowed: false, reason: 'CHANNEL_DISABLED' });
-      await expect(service.sendStopConfirmation('tenant-1')).resolves.toEqual({
+      await expect(service.sendStopConfirmation('tenant-1', justNow())).resolves.toEqual({
         outcome: 'REFUSED',
         reason: 'CHANNEL_DISABLED',
       });
@@ -304,7 +308,45 @@ describe('WhatsappService', () => {
 
     it('erreur Meta : classée comme les autres envois, jamais levée', async () => {
       client.sendText.mockRejectedValueOnce(new MetaApiError('timeout', null));
-      await expect(service.sendStopConfirmation('tenant-1')).resolves.toMatchObject({ outcome: 'UNKNOWN' });
+      await expect(service.sendStopConfirmation('tenant-1', justNow())).resolves.toMatchObject({ outcome: 'UNKNOWN' });
+    });
+
+    it('fenêtre de 24 h dépassée : rien ne part, sans même lire la base (unité 45)', async () => {
+      await expect(service.sendStopConfirmation('tenant-1', yesterday())).resolves.toEqual({
+        outcome: 'REFUSED',
+        reason: 'REPLY_WINDOW_CLOSED',
+      });
+      expect(access.canSendStopConfirmation).not.toHaveBeenCalled();
+      expect(client.sendText).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reply (unité 45)', () => {
+    const welcome = { userId: 'tenant-1', source: 'consent-welcome', text: 'Bienvenue' };
+
+    it('réponse libre dans la fenêtre : mêmes contrôles que send(), un seul appel Meta', async () => {
+      await expect(service.reply({ ...welcome, inboundReceivedAt: justNow() })).resolves.toMatchObject({ outcome: 'SENT' });
+      expect(access.canUseWhatsapp).toHaveBeenCalledWith('tenant-1');
+      expect(createdData()).toMatchObject({ source: 'consent-welcome', messageType: 'TEXT', payload: { body: 'Bienvenue' } });
+      expect(client.sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it('fenêtre de 24 h dépassée : refus, aucun appel', async () => {
+      await expect(service.reply({ ...welcome, inboundReceivedAt: yesterday() })).resolves.toEqual({
+        outcome: 'REFUSED',
+        reason: 'REPLY_WINDOW_CLOSED',
+      });
+      expect(access.canUseWhatsapp).not.toHaveBeenCalled();
+      expect(client.sendText).not.toHaveBeenCalled();
+    });
+
+    it('un STOP ou un changement de numéro survenu entre-temps l’emporte (contrôle au moment de l’envoi)', async () => {
+      access.canUseWhatsapp.mockResolvedValueOnce({ allowed: false, reason: 'NO_CONSENT' });
+      await expect(service.reply({ ...welcome, inboundReceivedAt: justNow() })).resolves.toEqual({
+        outcome: 'REFUSED',
+        reason: 'NO_CONSENT',
+      });
+      expect(client.sendText).not.toHaveBeenCalled();
     });
   });
 });

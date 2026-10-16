@@ -8,6 +8,7 @@ import { initiales } from '@/lib/format';
 import { NotificationToggle, PhotoUploadZone, ChangePasswordCard } from '@/components/ui';
 import { PageHeader, Card, CardBody, Label, Input, Button, Badge } from '@/components/ds';
 import { MapPin } from 'lucide-react';
+import { MyWhatsappCard } from '@/components/whatsapp/my-whatsapp-card';
 
 interface UserProfile {
   id: string;
@@ -154,6 +155,12 @@ export default function LocataireProfilPage() {
           <Card>
             <CardBody>
               <NotificationToggle />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <MyWhatsappCard />
             </CardBody>
           </Card>
 

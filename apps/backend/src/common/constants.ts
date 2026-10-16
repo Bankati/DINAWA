@@ -129,6 +129,35 @@ export const WHATSAPP_INBOUND_RETRY_AFTER_MS = 2 * 60 * 1000;
 export const WHATSAPP_INBOUND_MAX_ATTEMPTS = 3;
 export const WHATSAPP_INBOUND_RECOVERY_BATCH = 50;
 
+// Consentement WhatsApp (unité 45, /architect 2026-10-16). Version du texte
+// attesté par l'agence, montré dans l'espace locataire et pré-rempli dans le
+// lien « Écrire à WARAH » — à incrémenter à chaque changement de texte (la
+// version est gardée dans l'historique comme preuve). Une demande d'accord
+// de l'agence attend le « OUI » du locataire au plus 7 jours ; au-delà,
+// l'agence relance une nouvelle demande.
+export const WHATSAPP_CONSENT_NOTICE_VERSION = 'consentement-v1';
+// Textes de la version ci-dessus — seule source : le frontend les affiche
+// tels que renvoyés par l'API (WhatsappStatusView.notice), pour que la
+// version gardée en preuve corresponde toujours au texte montré.
+export const WHATSAPP_AGENCY_ATTESTATION_TEXT =
+  "J'atteste que le locataire a accepté de recevoir les messages de service WARAH sur WhatsApp " +
+  '(rappels de loyer, quittances, relances, assistance). Jamais de publicité.';
+export const WHATSAPP_TENANT_NOTICE_TEXT =
+  'En activant WhatsApp, vous acceptez de recevoir les messages de service WARAH sur ce numéro : ' +
+  'rappels de loyer, quittances, relances et assistance. Jamais de publicité. ' +
+  'Vous pouvez arrêter à tout moment ici ou en répondant STOP.';
+export const WHATSAPP_CONSENT_REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Phrase pré-remplie par le lien / QR code « Écrire à WARAH » : reconnue
+// comme un « OUI » par le webhook (consent-keyword.ts).
+export const WHATSAPP_CONSENT_PREFILL_TEXT =
+  "OUI, j'accepte de recevoir les messages de service WARAH sur WhatsApp";
+
+// Une réponse libre (sans modèle validé par Meta) n'est possible que dans
+// les 24 h qui suivent le dernier message du locataire. Marge de 5 minutes
+// pour ne jamais tenter un envoi à la limite, que Meta refuserait.
+// « Sans modèle » ne veut pas dire gratuit : tarifs Meta à vérifier.
+export const WHATSAPP_REPLY_WINDOW_MS = 24 * 60 * 60 * 1000 - 5 * 60 * 1000;
+
 export const CRON_PAYDUNYA_RECONCILIATION = '*/15 * * * *';
 export const PAYDUNYA_RECONCILE_AFTER_MS = 15 * 60 * 1000;
 export const PAYDUNYA_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
