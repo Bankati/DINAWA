@@ -19,6 +19,7 @@ const BASE_ENV = {
   VAPID_SUBJECT: 'mailto:contact@warah.tg',
   FRONTEND_URL: 'http://localhost:3000',
   INVITATION_TOKEN_SECRET: 'invitation-secret',
+  PAY_LINK_SECRET: 'pay-link-secret',
 };
 
 describe('validate (frais de service payés par le locataire)', () => {
@@ -62,4 +63,49 @@ describe('validate (frais de service payés par le locataire)', () => {
       );
     },
   );
+});
+
+describe('validate (canal WhatsApp, phase 12)', () => {
+  const WHATSAPP_ENV = {
+    WHATSAPP_ENABLED: 'true',
+    WHATSAPP_PHONE_NUMBER_ID: '123456789',
+    WHATSAPP_ACCESS_TOKEN: 'token',
+    WHATSAPP_APP_SECRET: 'app-secret',
+    WHATSAPP_VERIFY_TOKEN: 'verify',
+    WHATSAPP_GRAPH_VERSION: 'v23.0',
+  };
+
+  it('est éteint par défaut et démarre sans aucune variable WHATSAPP_*', () => {
+    expect(validate({ ...BASE_ENV }).WHATSAPP_ENABLED).toBe(false);
+  });
+
+  it('lit la chaîne "false" comme éteint (jamais la conversion implicite en true)', () => {
+    expect(validate({ ...BASE_ENV, WHATSAPP_ENABLED: 'false' }).WHATSAPP_ENABLED).toBe(false);
+  });
+
+  it('démarre allumé quand toutes les variables Meta sont présentes', () => {
+    expect(validate({ ...BASE_ENV, ...WHATSAPP_ENV }).WHATSAPP_ENABLED).toBe(true);
+  });
+
+  it.each([
+    'WHATSAPP_PHONE_NUMBER_ID',
+    'WHATSAPP_ACCESS_TOKEN',
+    'WHATSAPP_APP_SECRET',
+    'WHATSAPP_VERIFY_TOKEN',
+    'WHATSAPP_GRAPH_VERSION',
+  ])('refuse de démarrer allumé sans %s', (missing) => {
+    expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV, [missing]: undefined })).toThrow(
+      new RegExp(missing),
+    );
+  });
+
+  it('refuse une version Graph mal formée', () => {
+    expect(() =>
+      validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_GRAPH_VERSION: 'latest' }),
+    ).toThrow(/WHATSAPP_GRAPH_VERSION/);
+  });
+
+  it('démarre sans PAY_LINK_SECRET tant que le lien de paiement n’existe pas (obligatoire à l’unité 43)', () => {
+    expect(() => validate({ ...BASE_ENV, PAY_LINK_SECRET: undefined })).not.toThrow();
+  });
 });
