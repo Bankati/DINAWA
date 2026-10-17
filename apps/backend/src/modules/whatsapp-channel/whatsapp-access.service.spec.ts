@@ -20,6 +20,7 @@ describe('WhatsappAccessService.canUseWhatsapp', () => {
           phone: '90112233',
           whatsappPhone: null,
           whatsappConsent: 'ACCEPTED',
+          whatsappVerifiedPhone: '90112233',
         }),
       },
       lease: { findFirst: jest.fn().mockResolvedValue({ id: 'lease-1', property }) },
@@ -46,6 +47,7 @@ describe('WhatsappAccessService.canUseWhatsapp', () => {
       phone: '90112233',
       whatsappPhone: '99445566',
       whatsappConsent: 'ACCEPTED',
+      whatsappVerifiedPhone: '99445566',
     });
     await expect(service.canUseWhatsapp('tenant-1')).resolves.toMatchObject({
       recipientPhone: '99445566',
@@ -62,7 +64,7 @@ describe('WhatsappAccessService.canUseWhatsapp', () => {
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it.each(['NOT_ASKED', 'STOPPED'])('refuse sans consentement accepté (%s)', async (consent) => {
+  it.each(['NOT_ASKED', 'PENDING', 'STOPPED'])('refuse sans consentement accepté (%s)', async (consent) => {
     prisma.user.findUnique.mockResolvedValueOnce({
       phone: '90112233',
       whatsappPhone: null,
@@ -83,6 +85,41 @@ describe('WhatsappAccessService.canUseWhatsapp', () => {
     await expect(service.canUseWhatsapp('tenant-1')).resolves.toMatchObject({
       reason: 'NO_VALID_NUMBER',
     });
+  });
+
+  // Règle stricte (unité 45, décision 3).
+  it('refuse un numéro qui n’a jamais écrit à WARAH', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce({
+      phone: '90112233',
+      whatsappPhone: null,
+      whatsappConsent: 'ACCEPTED',
+      whatsappVerifiedPhone: null,
+    });
+    await expect(service.canUseWhatsapp('tenant-1')).resolves.toEqual({
+      allowed: false,
+      reason: 'NUMBER_NOT_VERIFIED',
+    });
+    expect(prisma.lease.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('refuse quand le numéro utilisé n’est plus celui qui a été vérifié', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce({
+      phone: '90112233',
+      whatsappPhone: '99445566',
+      whatsappConsent: 'ACCEPTED',
+      whatsappVerifiedPhone: '90112233',
+    });
+    await expect(service.canUseWhatsapp('tenant-1')).resolves.toMatchObject({ reason: 'NUMBER_NOT_VERIFIED' });
+  });
+
+  it('compare le numéro vérifié à la forme à 8 chiffres, quel que soit le format enregistré', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce({
+      phone: '+22890112233',
+      whatsappPhone: null,
+      whatsappConsent: 'ACCEPTED',
+      whatsappVerifiedPhone: '90112233',
+    });
+    await expect(service.canUseWhatsapp('tenant-1')).resolves.toMatchObject({ allowed: true });
   });
 
   it('refuse sans bail actif', async () => {
@@ -129,7 +166,12 @@ describe('WhatsappAccessService.canSendStopConfirmation (unité 44)', () => {
   beforeEach(() => {
     prisma = {
       user: {
-        findUnique: jest.fn().mockResolvedValue({ phone: '90112233', whatsappPhone: null, whatsappConsent: 'STOPPED' }),
+        findUnique: jest.fn().mockResolvedValue({
+          phone: '90112233',
+          whatsappPhone: null,
+          whatsappConsent: 'STOPPED',
+          whatsappVerifiedPhone: '90112233',
+        }),
       },
     };
     config = { get: jest.fn().mockReturnValue(true) };
@@ -163,7 +205,22 @@ describe('WhatsappAccessService.canSendStopConfirmation (unité 44)', () => {
   });
 
   it('préfère le numéro WhatsApp dédié', async () => {
-    prisma.user.findUnique.mockResolvedValue({ phone: '90112233', whatsappPhone: '99887766', whatsappConsent: 'STOPPED' });
+    prisma.user.findUnique.mockResolvedValue({
+      phone: '90112233',
+      whatsappPhone: '99887766',
+      whatsappConsent: 'STOPPED',
+      whatsappVerifiedPhone: '99887766',
+    });
     await expect(service.canSendStopConfirmation('tenant-1')).resolves.toMatchObject({ metaNumber: '22899887766' });
+  });
+
+  it('jamais vers un numéro qui n’a pas écrit à WARAH (unité 45)', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      phone: '90112233',
+      whatsappPhone: null,
+      whatsappConsent: 'STOPPED',
+      whatsappVerifiedPhone: null,
+    });
+    await expect(service.canSendStopConfirmation('tenant-1')).resolves.toMatchObject({ reason: 'NUMBER_NOT_VERIFIED' });
   });
 });

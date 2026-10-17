@@ -322,6 +322,26 @@ describe('TenantsService', () => {
       });
     });
 
+    it('donne le badge WhatsApp sans exposer le numéro vérifié (unité 45)', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        ...makeTenant(),
+        email: null,
+        phone: '+22890000000',
+        accountStatus: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        whatsappPhone: null,
+        whatsappConsent: 'ACCEPTED',
+        whatsappVerifiedPhone: '90000000',
+        leasesAsTenant: [],
+      });
+
+      const result = await service.getTenantById(owner, 'tenant-1');
+
+      expect(result.whatsapp).toEqual({ consent: 'ACCEPTED', phoneVerified: true });
+      expect(result).not.toHaveProperty('whatsappVerifiedPhone');
+    });
+
     it('retourne activeLease null quand aucun bail actif', async () => {
       prisma.user.findFirst.mockResolvedValueOnce({
         ...makeTenant(),

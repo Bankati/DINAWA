@@ -2,13 +2,27 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../prisma/prisma.service';
-import { STOP_CONFIRMATION_SOURCE, WhatsappService } from '../whatsapp-channel/whatsapp.service';
+import {
+  CONSENT_WELCOME_SOURCE,
+  CONSENT_WELCOME_TEXT,
+  RESUME_CONFIRMATION_SOURCE,
+  RESUME_CONFIRMATION_TEXT,
+  STOP_CONFIRMATION_SOURCE,
+  WhatsappSendResult,
+  WhatsappService,
+} from '../whatsapp-channel/whatsapp.service';
 import {
   WHATSAPP_INBOUND_MAX_ATTEMPTS,
   WHATSAPP_INBOUND_RECOVERY_BATCH,
   WHATSAPP_INBOUND_RETRY_AFTER_MS,
 } from '../../common/constants';
-import { WHATSAPP_INBOUND_RECEIVED, WhatsappInboundReceivedEvent } from './whatsapp-inbound.events';
+import { InboundAction, WHATSAPP_INBOUND_RECEIVED, WhatsappInboundReceivedEvent } from './whatsapp-inbound.events';
+
+// Réponses libres (unité 45) : texte et source de chaque action.
+const REPLIES: Record<Exclude<InboundAction, 'STOP_CONFIRMATION'>, { source: string; text: string }> = {
+  CONSENT_WELCOME: { source: CONSENT_WELCOME_SOURCE, text: CONSENT_WELCOME_TEXT },
+  RESUME_CONFIRMATION: { source: RESUME_CONFIRMATION_SOURCE, text: RESUME_CONFIRMATION_TEXT },
+};
 
 // Traitement des messages reçus, hors de la requête du webhook (unité 44,
 // /architect 2026-10-13, décision 5). Même schéma que les reversements :
@@ -85,13 +99,16 @@ export class WhatsappInboundProcessor {
 
     const message = await this.prisma.whatsappMessage.findUnique({
       where: { id: messageId },
-      select: { userId: true, inboundAction: true, createdAt: true, processingAttempts: true },
+      select: { userId: true, inboundAction: true, createdAt: true, sentAt: true, processingAttempts: true },
     });
     if (!message) return;
 
     try {
-      if (message.inboundAction === 'STOP_CONFIRMATION' && message.userId) {
-        await this.confirmStop(message.userId, message.createdAt);
+      const action = message.inboundAction as InboundAction | null;
+      if (action && message.userId) {
+        // Heure Meta du message du locataire : départ de la fenêtre de 24 h.
+        const receivedAt = message.sentAt ?? message.createdAt;
+        await this.replyOnce(message.userId, action, message.createdAt, receivedAt);
       }
       await this.prisma.whatsappMessage.update({ where: { id: messageId }, data: { processedAt: new Date() } });
     } catch (error) {
@@ -104,26 +121,30 @@ export class WhatsappInboundProcessor {
     }
   }
 
-  // Une confirmation déjà créée depuis la réception du STOP (traitement
+  // Une réponse déjà créée depuis l'enregistrement du message (traitement
   // interrompu APRÈS l'envoi, puis repris) n'est jamais renvoyée.
-  private async confirmStop(userId: string, stopReceivedAt: Date): Promise<void> {
+  private async replyOnce(userId: string, action: InboundAction, recordedAt: Date, receivedAt: Date): Promise<void> {
+    const source = action === 'STOP_CONFIRMATION' ? STOP_CONFIRMATION_SOURCE : REPLIES[action].source;
     const alreadySent = await this.prisma.whatsappMessage.findFirst({
-      where: {
-        userId,
-        direction: 'OUTBOUND',
-        source: STOP_CONFIRMATION_SOURCE,
-        createdAt: { gte: stopReceivedAt },
-      },
+      where: { userId, direction: 'OUTBOUND', source, createdAt: { gte: recordedAt } },
       select: { id: true },
     });
     if (alreadySent) return;
 
-    // Résultat REFUSED / FAILED / UNKNOWN : la confirmation est un geste de
-    // courtoisie, l'arrêt est déjà enregistré quoi qu'il arrive. Jamais de
-    // nouvel essai automatique (un UNKNOWN a peut-être été reçu).
-    const result = await this.whatsapp.sendStopConfirmation(userId);
+    // Tous les contrôles sont refaits ICI, au moment de l'envoi : un STOP,
+    // un changement de numéro ou la fin de la fenêtre de 24 h survenus depuis
+    // la réception l'emportent (REFUSED, la tâche est simplement abandonnée).
+    // REFUSED / FAILED / UNKNOWN : la réponse est un geste de courtoisie, le
+    // changement d'état est déjà enregistré quoi qu'il arrive, et un échec
+    // d'envoi n'y touche jamais. Pas de nouvel essai automatique (un UNKNOWN
+    // a peut-être été reçu).
+    const result: WhatsappSendResult =
+      action === 'STOP_CONFIRMATION'
+        ? await this.whatsapp.sendStopConfirmation(userId, receivedAt)
+        : await this.whatsapp.reply({ userId, ...REPLIES[action], inboundReceivedAt: receivedAt });
     if (result.outcome !== 'SENT') {
-      this.logger.warn(`[whatsapp-inbound] confirmation de STOP non envoyée pour user=${userId} : ${result.outcome}`);
+      const detail = result.outcome === 'REFUSED' ? `REFUSED (${result.reason})` : result.outcome;
+      this.logger.warn(`[whatsapp-inbound] réponse ${source} non envoyée pour user=${userId} : ${detail}`);
     }
   }
 }

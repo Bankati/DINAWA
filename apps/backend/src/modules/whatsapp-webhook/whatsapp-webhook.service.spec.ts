@@ -1,6 +1,7 @@
 import { ForbiddenException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHmac } from 'node:crypto';
+import { applyConsentCommand } from '../whatsapp-consent/consent-writer';
 import { WhatsappWebhookService } from './whatsapp-webhook.service';
 import { WHATSAPP_INBOUND_RECEIVED } from './whatsapp-inbound.events';
 import {
@@ -12,6 +13,11 @@ import {
   statusNotification,
   textNotification,
 } from './__fixtures__/meta-notifications';
+
+// Le rédacteur du consentement a ses propres tests (consent-writer.spec.ts) :
+// ici on vérifie seulement ce que le webhook lui demande.
+jest.mock('../whatsapp-consent/consent-writer', () => ({ applyConsentCommand: jest.fn() }));
+const applyConsent = applyConsentCommand as jest.Mock;
 
 const APP_SECRET = 'secret-app-test';
 const VERIFY_TOKEN = 'jeton-equipe';
@@ -40,9 +46,11 @@ describe('WhatsappWebhookService', () => {
   let prisma: Mocked;
   let configValues: Record<string, string | undefined>;
   let events: { emit: jest.Mock };
+  let consent: { refreshAgencyLists: jest.Mock };
   let service: WhatsappWebhookService;
 
   beforeEach(() => {
+    applyConsent.mockReset();
     prisma = {
       whatsappMessage: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -70,10 +78,12 @@ describe('WhatsappWebhookService', () => {
       WHATSAPP_PHONE_NUMBER_ID: PHONE_NUMBER_ID,
     };
     events = { emit: jest.fn() };
+    consent = { refreshAgencyLists: jest.fn().mockResolvedValue(undefined) };
     service = new WhatsappWebhookService(
       prisma as never,
       { get: (key: string) => configValues[key] } as never,
       events as never,
+      consent as never,
     );
   });
 
@@ -212,7 +222,67 @@ describe('WhatsappWebhookService', () => {
   });
 
   describe('messages reçus', () => {
-    const tenant = { id: 'tenant-1', whatsappConsent: 'ACCEPTED' };
+    const tenant = { id: 'tenant-1', whatsappPhone: SENDER_LOCAL, phone: null };
+
+    it('tout message d’un locataire connu vérifie son numéro, sans donner d’accord (unité 45)', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      await receive(textNotification('bjr'));
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'tenant-1', OR: [{ whatsappVerifiedPhone: null }, { whatsappVerifiedPhone: { not: SENDER_LOCAL } }] },
+        data: { whatsappVerifiedPhone: SENDER_LOCAL, whatsappPhoneVerifiedAt: new Date(1791800100 * 1000) },
+      });
+      expect(applyConsent).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
+    });
+
+    it('accord déjà donné dans l’espace : le message qui vérifie le numéro déclenche la bienvenue (/review unité 45)', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      // findUnique sert aussi de source simulée pour la recherche par
+      // numéro dédié : ici, l'expéditeur est trouvé par le numéro principal.
+      prisma.user.findUnique.mockImplementation((args?: { select?: { whatsappConsent?: boolean } }) =>
+        Promise.resolve(args?.select?.whatsappConsent ? { whatsappConsent: 'ACCEPTED' } : null),
+      );
+      prisma.whatsappMessage.create.mockResolvedValue({ id: 'in-welcome' });
+      await receive(textNotification('bjr'));
+      expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ inboundAction: 'CONSENT_WELCOME' }) as unknown }),
+      );
+      expect(events.emit).toHaveBeenCalledWith(WHATSAPP_INBOUND_RECEIVED, { messageId: 'in-welcome' });
+      // Badge « numéro vérifié » de la liste de l'agence.
+      expect(consent.refreshAgencyLists).toHaveBeenCalledWith('tenant-1');
+    });
+
+    it('numéro déjà vérifié : ni bienvenue répétée, ni cache vidé', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      await receive(textNotification('bjr'));
+      expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ inboundAction: null }) as unknown }),
+      );
+      expect(consent.refreshAgencyLists).not.toHaveBeenCalled();
+    });
+
+    it('numéro vérifié mais aucun accord : pas de bienvenue', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.findUnique.mockImplementation((args?: { select?: { whatsappConsent?: boolean } }) =>
+        Promise.resolve(args?.select?.whatsappConsent ? { whatsappConsent: 'NOT_ASKED' } : null),
+      );
+      await receive(textNotification('bjr'));
+      expect(events.emit).not.toHaveBeenCalled();
+    });
+
+    it('un échec du vidage de cache ne fait jamais renvoyer la notification par Meta', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      consent.refreshAgencyLists.mockRejectedValue(new Error('cache'));
+      await expect(receive(textNotification('bjr'))).resolves.toBeUndefined();
+    });
+
+    it('un numéro inconnu ne vérifie rien', async () => {
+      await receive(textNotification('bjr'));
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
 
     it('enregistre le texte d’un locataire connu, sans traitement en attente', async () => {
       prisma.user.findFirst.mockResolvedValue(tenant);
@@ -257,8 +327,8 @@ describe('WhatsappWebhookService', () => {
       prisma.user.findMany
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
-          { id: 'ancien', whatsappConsent: 'ACCEPTED', whatsappPhone: null, phone: `+228${SENDER_LOCAL}` },
-          { id: 'exact', whatsappConsent: 'ACCEPTED', whatsappPhone: null, phone: SENDER_LOCAL },
+          { id: 'ancien', whatsappPhone: null, phone: `+228${SENDER_LOCAL}` },
+          { id: 'exact', whatsappPhone: null, phone: SENDER_LOCAL },
         ]);
       await receive(textNotification('bjr'));
       expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
@@ -313,74 +383,130 @@ describe('WhatsappWebhookService', () => {
     });
   });
 
-  describe('STOP', () => {
-    const tenant = { id: 'tenant-1', whatsappConsent: 'ACCEPTED' };
+  describe('mots-clés du consentement (unités 44-45)', () => {
+    const tenant = { id: 'tenant-1', whatsappPhone: SENDER_LOCAL, phone: null };
+    const RECEIVED_AT = new Date(1791800100 * 1000);
+    const changed = { decision: { kind: 'changed' }, previous: 'ACCEPTED', eventId: 'evt-1' };
 
     beforeEach(() => {
       prisma.user.findFirst.mockResolvedValue(tenant);
-      prisma.whatsappMessage.create.mockResolvedValue({ id: 'in-stop' });
+      prisma.whatsappMessage.create.mockResolvedValue({ id: 'in-kw' });
+      applyConsent.mockResolvedValue(changed);
     });
 
-    it('arrête le canal, historise et demande une confirmation, dans une transaction', async () => {
+    const commandSent = (): Record<string, unknown> => {
+      const [, input] = applyConsent.mock.calls[0] as [unknown, Record<string, unknown>];
+      return input;
+    };
+
+    it('STOP : arrêt par le rédacteur unique, dans la transaction du message, puis confirmation', async () => {
       await receive(textNotification('Stop.'));
 
       expect(prisma.$transaction).toHaveBeenCalled();
-      expect(prisma.user.updateMany).toHaveBeenCalledWith({
-        where: { id: 'tenant-1', whatsappConsent: { not: 'STOPPED' } },
-        data: { whatsappConsent: 'STOPPED', whatsappStoppedAt: new Date(1791800100 * 1000) },
-      });
-      expect(prisma.whatsappConsentEvent.create).toHaveBeenCalledWith({
-        data: { userId: 'tenant-1', previousConsent: 'ACCEPTED', newConsent: 'STOPPED', source: 'BOT', actorUserId: 'tenant-1' },
+      expect(commandSent()).toEqual({
+        userId: 'tenant-1',
+        command: { type: 'BOT_STOP', sourceAt: RECEIVED_AT },
+        actorUserId: 'tenant-1',
+        noticeVersion: undefined,
       });
       expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ inboundAction: 'STOP_CONFIRMATION' }) as unknown }),
       );
       // Traitement lancé APRÈS l'enregistrement, hors de la requête.
-      expect(events.emit).toHaveBeenCalledWith(WHATSAPP_INBOUND_RECEIVED, { messageId: 'in-stop' });
+      expect(events.emit).toHaveBeenCalledWith(WHATSAPP_INBOUND_RECEIVED, { messageId: 'in-kw' });
+    });
+
+    it('le numéro est vérifié AVANT le changement de consentement, dans la même transaction', async () => {
+      const order: string[] = [];
+      prisma.user.updateMany.mockImplementation(() => {
+        order.push('vérification');
+        return Promise.resolve({ count: 1 });
+      });
+      applyConsent.mockImplementation(() => {
+        order.push('consentement');
+        return Promise.resolve(changed);
+      });
+      await receive(textNotification('OUI'));
+      expect(order).toEqual(['vérification', 'consentement']);
     });
 
     it('STOP d’un locataire enregistré avec +228… : bien arrêté (/review unité 44)', async () => {
-      prisma.user.findFirst.mockResolvedValue({ ...tenant, whatsappPhone: null, phone: `+228${SENDER_LOCAL}` });
+      prisma.user.findFirst.mockResolvedValue({ id: 'tenant-1', whatsappPhone: null, phone: `+228${SENDER_LOCAL}` });
       await receive(textNotification('STOP'));
-      expect(prisma.user.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'tenant-1', whatsappConsent: { not: 'STOPPED' } } }),
-      );
+      expect(commandSent()).toMatchObject({ userId: 'tenant-1', command: { type: 'BOT_STOP' } });
     });
 
-    it('un locataire jamais inscrit qui écrit STOP passe aussi à « arrêté »', async () => {
-      prisma.user.findFirst.mockResolvedValue({ id: 'tenant-1', whatsappConsent: 'NOT_ASKED' });
-      await receive(textNotification('ARRÊT'));
-      expect(prisma.whatsappConsentEvent.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ previousConsent: 'NOT_ASKED' }) as unknown }),
-      );
-    });
-
-    it('un second STOP (déjà arrêté) : pas d’événement, pas de nouvelle confirmation', async () => {
-      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    it('un second STOP (déjà arrêté) : pas de nouvelle confirmation', async () => {
+      applyConsent.mockResolvedValue({ decision: { kind: 'unchanged', reason: 'ALREADY_IN_STATE' }, previous: 'STOPPED', eventId: null });
       await receive(textNotification('STOP'));
-      expect(prisma.whatsappConsentEvent.create).not.toHaveBeenCalled();
       expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ inboundAction: null }) as unknown }),
       );
       expect(events.emit).not.toHaveBeenCalled();
     });
 
-    it('STOP renvoyé par Meta : la transaction est annulée, rien n’est relancé', async () => {
+    it.each(['OUI', "OUI, j'accepte de recevoir les messages de service WARAH sur WhatsApp"])(
+      '« %s » à une demande en cours : accord avec la version du texte, puis bienvenue',
+      async (text) => {
+        await receive(textNotification(text));
+        expect(commandSent()).toEqual({
+          userId: 'tenant-1',
+          command: { type: 'BOT_CONFIRM', sourceAt: RECEIVED_AT },
+          actorUserId: 'tenant-1',
+          noticeVersion: 'consentement-v1',
+        });
+        expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ inboundAction: 'CONSENT_WELCOME' }) as unknown }),
+        );
+        expect(events.emit).toHaveBeenCalledWith(WHATSAPP_INBOUND_RECEIVED, { messageId: 'in-kw' });
+      },
+    );
+
+    it.each(['NO_PENDING_REQUEST', 'REQUEST_EXPIRED', 'STALE'])(
+      '« OUI » sans effet (%s) : le numéro est vérifié, mais ni accord ni réponse',
+      async (reason) => {
+        applyConsent.mockResolvedValue({ decision: { kind: 'unchanged', reason }, previous: 'NOT_ASKED', eventId: null });
+        await receive(textNotification('oui'));
+        expect(prisma.user.updateMany).toHaveBeenCalled();
+        expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ inboundAction: null }) as unknown }),
+        );
+        expect(events.emit).not.toHaveBeenCalled();
+      },
+    );
+
+    it('REPRENDRE après un arrêt : nouvel accord, puis confirmation de reprise', async () => {
+      await receive(textNotification('Reprendre'));
+      expect(commandSent()).toMatchObject({
+        command: { type: 'BOT_RESUME', sourceAt: RECEIVED_AT },
+        noticeVersion: 'consentement-v1',
+      });
+      expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ inboundAction: 'RESUME_CONFIRMATION' }) as unknown }),
+      );
+    });
+
+    it('message renvoyé par Meta : la transaction est annulée, rien n’est relancé', async () => {
       prisma.whatsappMessage.create.mockRejectedValue(duplicateError());
       await expect(receive(textNotification('STOP'))).resolves.toBeUndefined();
       expect(events.emit).not.toHaveBeenCalled();
     });
 
-    it('une phrase contenant « stop » n’arrête rien', async () => {
-      await receive(textNotification('je paie demain, stop aux pénalités'));
-      expect(prisma.user.updateMany).not.toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
+    it.each(['je paie demain, stop aux pénalités', 'oui je passe demain', 'je veux reprendre le paiement'])(
+      'une phrase qui contient le mot (« %s ») ne change rien au consentement',
+      async (text) => {
+        await receive(textNotification(text));
+        expect(applyConsent).not.toHaveBeenCalled();
+        expect(events.emit).not.toHaveBeenCalled();
+      },
+    );
 
-    it('un numéro inconnu qui écrit STOP : rien à arrêter', async () => {
+    it('un numéro inconnu qui écrit STOP ou OUI : rien à vérifier ni à changer', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
       await receive(textNotification('STOP'));
+      await receive(textNotification('OUI', { wamid: 'wamid.IN-2' }));
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect(applyConsent).not.toHaveBeenCalled();
       expect(events.emit).not.toHaveBeenCalled();
     });
   });

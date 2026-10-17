@@ -13,12 +13,19 @@ import { keepRawBodyForSignedWebhooks } from '../../common/middleware/raw-body';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappWebhookService } from './whatsapp-webhook.service';
+import { WhatsappConsentService } from '../whatsapp-consent/whatsapp-consent.service';
 import { PHONE_NUMBER_ID } from './__fixtures__/meta-notifications';
 
 const APP_SECRET = 'secret-app-test';
 
 // Le webhook monté comme en production (préfixe /api, bodyParser avec le
 // corps brut) : la signature doit porter sur les octets EXACTS reçus.
+// Vraies requêtes HTTP sur une application Nest démarrée : pendant la suite
+// complète, la machine chargée dépasse les 5 s par défaut de Jest (échecs
+// constatés le 2026-10-16, 7/7 en isolé). Délai explicite plutôt qu'un test
+// qui échoue au hasard.
+jest.setTimeout(30_000);
+
 describe('WhatsappWebhookController', () => {
   describe('protections déclarées', () => {
     const handler = (name: 'handshake' | 'receive'): object =>
@@ -52,6 +59,7 @@ describe('WhatsappWebhookController', () => {
           WhatsappWebhookService,
           { provide: PrismaService, useValue: prisma },
           { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+          { provide: WhatsappConsentService, useValue: { refreshAgencyLists: jest.fn().mockResolvedValue(undefined) } },
           {
             provide: ConfigService,
             useValue: {
