@@ -9,7 +9,9 @@ import {
   WhatsappStatus,
   changeMyWhatsappPhone,
   generateMyPin,
+  WHATSAPP_WAITING_REFRESH_MS,
   getMyWhatsapp,
+  isWaitingForTenant,
   setMyConsent,
   whatsappBadge,
 } from '@/lib/whatsapp';
@@ -22,7 +24,12 @@ type Mode = 'view' | 'phone' | 'pin-confirm';
 // vraiment donné — l'agence ne fait que le demander.
 export function MyWhatsappCard() {
   const queryClient = useQueryClient();
-  const { data: status, isLoading, error } = useQuery({ queryKey: MY_WHATSAPP_KEY, queryFn: getMyWhatsapp });
+  const { data: status, isLoading, error } = useQuery({
+    queryKey: MY_WHATSAPP_KEY,
+    queryFn: getMyWhatsapp,
+    // Après « Écrire à WARAH », la carte passe d'elle-même à « vérifié ».
+    refetchInterval: (query) => (isWaitingForTenant(query.state.data) ? WHATSAPP_WAITING_REFRESH_MS : false),
+  });
 
   const [mode, setMode] = useState<Mode>('view');
   const [phone, setPhone] = useState('');

@@ -17,6 +17,7 @@ import { NotifyService } from '../notify/notify.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { PAYOUT_OPERATOR_LABEL } from '../../common/utils/payout-operator-label';
 import { applyConsentCommand, effectiveLocalPhone } from '../whatsapp-consent/consent-writer';
+import { CONSENT_TRANSACTION_OPTIONS } from '../../common/constants';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationConsentDto } from './dto/update-notification-consent.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -136,7 +137,7 @@ export class ProfileService {
           });
         }
         return saved;
-      });
+      }, CONSENT_TRANSACTION_OPTIONS);
     } catch (dbError) {
       // `phone` est unique (@unique en base) — jamais laisser une violation
       // de contrainte remonter en 500 brut (même pattern que
@@ -265,7 +266,7 @@ export class ProfileService {
       });
       await tx.whatsappConsentEvent.updateMany({ where: { userId: user.id }, data: { phoneLast2: null } });
       await applyConsentCommand(tx, { userId: user.id, command: { type: 'SYSTEM_STOP' }, actorUserId: null });
-    });
+    }, CONSENT_TRANSACTION_OPTIONS);
 
     // Supprimée seulement après confirmation de l'update — une photo de
     // visage reste une donnée personnelle, l'anonymisation doit la

@@ -157,6 +157,12 @@ export const WHATSAPP_TENANT_NOTICE_TEXT =
   'rappels de loyer, quittances, relances et assistance. Jamais de publicité. ' +
   'Vous pouvez arrêter à tout moment ici ou en répondant STOP.';
 export const WHATSAPP_CONSENT_REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Transactions du consentement (agence, espace locataire, webhook, profil) :
+// 6 à 8 allers-retours vers la base. Le délai Prisma par défaut (5 s) est
+// dépassé avec une base distante lente — constaté à l'essai réel du
+// 2026-10-17 (« Transaction not found » → 500). maxWait : attente d'une
+// connexion libre ; timeout : durée maximale de la transaction.
+export const CONSENT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 15_000 } as const;
 // Phrase pré-remplie par le lien / QR code « Écrire à WARAH » : reconnue
 // comme un « OUI » par le webhook (consent-keyword.ts).
 export const WHATSAPP_CONSENT_PREFILL_TEXT =
