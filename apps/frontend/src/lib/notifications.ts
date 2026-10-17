@@ -25,6 +25,8 @@ export const NOTIFICATION_ICONS: Record<string, LucideIcon> = {
   receipt: Receipt,
   "payment-reminder": Bell,
   "overdue-alert": AlertTriangle,
+  // Relance du locataire en retard (backend unité 46).
+  "tenant-overdue": AlertTriangle,
   "payment-declaration-pending": Clock,
   "payment-rejected": XCircle,
   "monthly-report": FileBarChart2,

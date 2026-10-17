@@ -48,7 +48,9 @@ export class PaymentConfirmedListener {
 
       const pdf = await this.receiptPdf.generate(payment);
       const period = `${format(payment.scheduleEntry.periodStart, 'dd/MM/yyyy')} — ${format(payment.scheduleEntry.periodEnd, 'dd/MM/yyyy')}`;
-      const variables = { period, amount: payment.paidAmount };
+      // tenantFirstName : modèle WhatsApp « paiement_recu » (unité 46), envoyé
+      // au seul locataire par NotifyService avec ce même PDF en en-tête.
+      const variables = { period, amount: payment.paidAmount, tenantFirstName: payment.lease.tenant.firstName };
       const emailAttachments = [{ filename: 'quittance-warah.pdf', content: pdf }];
 
       // Bien sous mandat actif : le gestionnaire reçoit aussi la quittance —
@@ -61,7 +63,13 @@ export class PaymentConfirmedListener {
 
       await Promise.all(
         recipientUserIds.map((userId) =>
-          this.notify.notifyUser({ userId, event: 'receipt', variables, emailAttachments }),
+          this.notify.notifyUser({
+            userId,
+            event: 'receipt',
+            variables,
+            emailAttachments,
+            relatedTo: { paymentId: payment.id, scheduleEntryId: payment.scheduleEntryId },
+          }),
         ),
       );
     } catch (error) {
