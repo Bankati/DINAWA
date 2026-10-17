@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { Check, MessageCircle } from 'lucide-react';
@@ -13,7 +13,9 @@ import {
   WhatsappConsentMethod,
   WhatsappStatus,
   changeTenantWhatsappPhone,
+  WHATSAPP_WAITING_REFRESH_MS,
   getTenantWhatsapp,
+  isWaitingForTenant,
   recordTenantRefusal,
   requestTenantConsent,
   resetTenantPin,
@@ -61,7 +63,18 @@ export function TenantWhatsappDialog({
     queryKey: tenantWhatsappKey(tenant?.id ?? ''),
     queryFn: () => getTenantWhatsapp(tenant!.id),
     enabled: !!tenant,
+    // QR code affiché : on guette le « OUI » du locataire pour que la
+    // fenêtre passe d'elle-même à « WhatsApp actif ».
+    refetchInterval: (query) => (isWaitingForTenant(query.state.data) ? WHATSAPP_WAITING_REFRESH_MS : false),
   });
+
+  // Le locataire vient de répondre : badge de la liste mis à jour aussi.
+  const wasWaiting = useRef(false);
+  useEffect(() => {
+    const waiting = isWaitingForTenant(status);
+    if (wasWaiting.current && !waiting) void queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    wasWaiting.current = waiting;
+  }, [status, queryClient]);
 
   const [mode, setMode] = useState<Mode>('view');
   const [phone, setPhone] = useState('');
@@ -113,9 +126,7 @@ export function TenantWhatsappDialog({
   const stopped = status?.consent === 'STOPPED';
   // Le QR code sert à confirmer l'accord (demande en cours) ou à vérifier le
   // numéro (accord donné depuis l'espace locataire, numéro pas encore vérifié).
-  const showQr =
-    !!status?.contactLink &&
-    ((status.consent === 'PENDING' && !status.requestExpired) || (status.consent === 'ACCEPTED' && !status.phoneVerified));
+  const showQr = !!status?.contactLink && isWaitingForTenant(status);
   const canRequest = status?.consent === 'NOT_ASKED' || status?.consent === 'PENDING';
 
   return (

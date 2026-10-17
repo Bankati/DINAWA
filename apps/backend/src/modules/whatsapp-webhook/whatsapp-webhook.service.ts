@@ -16,7 +16,7 @@ import { fromWhatsappNumber, storedPhoneVariants } from '../../common/utils/phon
 import { classifyMetaError } from '../whatsapp-channel/meta-error';
 import { InboundMessage, InboundStatus, parseMetaNotification } from './meta-webhook-payload';
 import { DeliveryState, StatusEvent, applyStatusEvent } from './status-transition';
-import { WHATSAPP_CONSENT_NOTICE_VERSION } from '../../common/constants';
+import { CONSENT_TRANSACTION_OPTIONS, WHATSAPP_CONSENT_NOTICE_VERSION } from '../../common/constants';
 import { applyConsentCommand } from '../whatsapp-consent/consent-writer';
 import { WhatsappConsentService } from '../whatsapp-consent/whatsapp-consent.service';
 import { ConsentKeyword, parseConsentKeyword } from './consent-keyword';
@@ -252,7 +252,7 @@ export class WhatsappWebhookService {
         });
         const statusChanged = newlyVerified || keywordResult?.changed === true;
         return { id: created.id, action, statusChangedFor: statusChanged ? sender.id : null };
-      });
+      }, CONSENT_TRANSACTION_OPTIONS);
     } catch (error) {
       // Notification renvoyée par Meta : déjà enregistrée et traitée. La
       // transaction annulée ne laisse ni second événement ni seconde réponse.

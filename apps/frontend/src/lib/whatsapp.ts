@@ -30,6 +30,16 @@ export const COLLECTION_METHOD_LABELS: Record<WhatsappConsentMethod, string> = {
   WRITTEN: 'Par écrit',
 };
 
+// En attente d'un message du locataire (« OUI » à une demande en cours, ou
+// premier message qui vérifie le numéro) : l'écran interroge le serveur
+// toutes les quelques secondes pour se mettre à jour tout seul.
+export const WHATSAPP_WAITING_REFRESH_MS = 4000;
+
+export function isWaitingForTenant(status: WhatsappStatus | undefined): boolean {
+  if (!status) return false;
+  return (status.consent === 'PENDING' && !status.requestExpired) || (status.consent === 'ACCEPTED' && !status.phoneVerified);
+}
+
 type BadgeTone = 'neutral' | 'success' | 'warning' | 'error' | 'info';
 
 // Badge unique pour la liste, la fenêtre de l'agence et l'espace locataire.

@@ -7,6 +7,7 @@ import { TokenService } from '../auth/token.service';
 import { canActOnProperty } from '../../common/permissions/property-access';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import {
+  CONSENT_TRANSACTION_OPTIONS,
   WHATSAPP_AGENCY_ATTESTATION_TEXT,
   WHATSAPP_CONSENT_NOTICE_VERSION,
   WHATSAPP_CONSENT_PREFILL_TEXT,
@@ -246,7 +247,7 @@ export class WhatsappConsentService {
   }
 
   private inTransaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    return this.prisma.$transaction(work);
+    return this.prisma.$transaction(work, CONSENT_TRANSACTION_OPTIONS);
   }
 
   // Lecture : propriétaire ou gestionnaire mandaté du bien du bail actif.
