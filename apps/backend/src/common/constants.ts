@@ -129,6 +129,16 @@ export const WHATSAPP_INBOUND_RETRY_AFTER_MS = 2 * 60 * 1000;
 export const WHATSAPP_INBOUND_MAX_ATTEMPTS = 3;
 export const WHATSAPP_INBOUND_RECOVERY_BATCH = 50;
 
+// Nouveaux essais des notifications WhatsApp (unité 46, /architect
+// 2026-10-16, décision 2) : seulement les modèles déclarés `retry: true`
+// (rappel, relance — jamais la quittance), seulement un refus temporaire de
+// Meta (FAILED réessayable, jamais UNKNOWN), 3 tentatives AU TOTAL (premier
+// envoi compris) et au plus une heure après le premier envoi.
+export const CRON_WHATSAPP_RETRY = '*/10 * * * *';
+export const WHATSAPP_MAX_ATTEMPTS = 3;
+export const WHATSAPP_RETRY_WINDOW_MS = 60 * 60 * 1000;
+export const WHATSAPP_RETRY_BATCH = 50;
+
 // Consentement WhatsApp (unité 45, /architect 2026-10-16). Version du texte
 // attesté par l'agence, montré dans l'espace locataire et pré-rempli dans le
 // lien « Écrire à WARAH » — à incrémenter à chaque changement de texte (la

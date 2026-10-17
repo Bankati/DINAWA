@@ -50,14 +50,20 @@ export class PayLinksService {
     private readonly payments: PaymentsService,
   ) {}
 
-  // Utilisé par les rappels (unité 46) et le robot WhatsApp (unité 47).
+  // Utilisé par le robot WhatsApp (unité 47).
   async createPayLink(scheduleEntryId: string): Promise<string> {
     const entry = await this.prisma.paymentScheduleEntry.findUnique({
       where: { id: scheduleEntryId },
       select: { id: true, dueDate: true },
     });
     if (!entry) throw new NotFoundException('Échéance introuvable');
+    return this.payLinkFor(entry).url;
+  }
 
+  // Rappels et relances (unité 46) : échéance déjà chargée par la tâche,
+  // donc aucune requête (pas de N+1). Le jeton seul sert au bouton du modèle
+  // WhatsApp (base de l'adresse fixée chez Meta), le lien complet à l'email.
+  payLinkFor(entry: { id: string; dueDate: Date }): { token: string; url: string } {
     const token = signToken<PayLinkData>(
       {
         purpose: 'pay-link',
@@ -66,7 +72,7 @@ export class PayLinksService {
       },
       this.secret(),
     );
-    return `${this.frontendUrl()}/payer/${token}`;
+    return { token, url: `${this.frontendUrl()}/payer/${token}` };
   }
 
   async getView(token: string): Promise<PayLinkView> {

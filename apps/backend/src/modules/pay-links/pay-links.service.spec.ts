@@ -70,6 +70,22 @@ describe('PayLinksService', () => {
     });
   });
 
+  describe('payLinkFor (rappels et relances, unité 46)', () => {
+    it('fabrique jeton + lien à partir de l’échéance déjà chargée, sans aucune requête', async () => {
+      prisma.paymentScheduleEntry.findUnique.mockClear();
+      const { token, url } = service.payLinkFor({ id: 'entry-1', dueDate: inDays(5) });
+
+      expect(prisma.paymentScheduleEntry.findUnique).not.toHaveBeenCalled();
+      expect(url).toBe(`${FRONTEND}/payer/${token}`);
+      // Le jeton seul (bouton du modèle WhatsApp) ouvre bien la page de
+      // paiement de cette échéance (échéance complète du beforeEach).
+      await expect(service.getView(token)).resolves.toMatchObject({ status: 'PAYABLE' });
+      expect(prisma.paymentScheduleEntry.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'entry-1' } }),
+      );
+    });
+  });
+
   describe('getView', () => {
     it('n’expose que les informations minimales du loyer (ni nom de famille, ni téléphone, ni adresse)', async () => {
       const view = await service.getView(tokenFor('entry-1'));

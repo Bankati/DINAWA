@@ -455,10 +455,17 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
       | Livraison 3 — code locataire (HMAC + bcrypt, codes trop simples, révocation, config) | ✅ tests ciblés verts |
       | Livraison 4 — routes et écrans (agence, profil locataire) | ✅ backend `tsc`/`eslint` ; frontend `tsc`, `next build`, `eslint` propres (`qrcode.react` 4.2.0 ajouté) |
       | Suite complète backend | ✅ 1032/1032 (80 fichiers) ; délai explicite ajouté au test HTTP du webhook (dépassait 5 s sous charge, 7/7 en isolé) |
-      | Migration `20261016090000_add_whatsapp_consent_verification` sur la base partagée | ⏳ pas encore appliquée (accord du développeur à demander) |
+      | Migration `20261016090000_add_whatsapp_consent_verification` sur la base partagée (projet Supabase `tbalvljmavxjdrzhuvol`) | ✅ 2026-10-17 après accord du développeur (`migrate deploy`) — aucun compte « en attente » ni « vérifié » au départ, comme prévu |
       | `/review` | ✅ 2026-10-16 — 5 points, tous corrigés : 🟠 « OUI » après une activation dans l'espace sans réponse → bienvenue quand le message vérifie un accord déjà donné ; 🟢 badge de liste en retard (cache 15 s) → `refreshAgencyLists` ; 🟢 comptes d'avant l'unité 45 sans numéro dédié → remise à zéro aussi depuis le profil ; 🟢 textes d'accord recopiés côté frontend → servis par l'API avec leur version ; 🟢 pas de test de bout en bout → `whatsapp-consent.flow.spec.ts` (vrai webhook + vrai rédacteur) |
       | Essai réel Meta | ⏳ attend la publication de l'application Meta |
-- [ ] 46 Canal WhatsApp dans NotifyService — ven. 16 (rappel, quittance) et mer. 21 (relance retard, retry)
+- [ ] 46 Canal WhatsApp dans NotifyService — **construite le 2026-10-16** (`/architect` le même jour, 3 décisions relues par un tiers), branche `feat/whatsapp-46-notify` (créée depuis la 45). Voir `build-plan.md` unité 46 et `architecture.md` section « Notifications WhatsApp ».
+      | Vérification | État |
+      | --- | --- |
+      | Tests ciblés (notify, scheduling, pay-links, receipts, whatsapp-channel, email), `tsc`, `eslint` | ✅ 20 fichiers verts (les 2 tests « portier » de l'unité 43 dépassent leur fenêtre d'une minute sous charge, verts en isolé) |
+      | Suite complète backend | ✅ 1108/1108 (84 fichiers) après les corrections du `/review` ; `tsc`/`eslint` backend et frontend propres |
+      | `/review` | ✅ 2026-10-16 — 5 points, tous corrigés (relus par un tiers) : 🟠 WhatsApp la nuit → notifications aux locataires 7 h – 21 h (heure de Lomé), vérifiées à l'envoi, reprises au passage de 7 h ; 🟠 retours à la ligne refusés par Meta → normalisation + limite de 200 caractères ; 🟢 abandon hors délai sans alerte → `alertExpired` (une alerte par lot, sans doublon) ; 🟢 bouton « Payer » et staging → documenté ; 🟢 « T-Money » dans l'email de rappel → « Flooz ou Mixx by Yas » |
+      | Migration `20261016120000_add_whatsapp_notify` sur la base partagée | ✅ 2026-10-17 après accord du développeur — 17 retards déjà signalés marqués « relance traitée » (pas de vague de relances) |
+      | Essai réel | ⏳ attend le moyen de paiement Meta (141006) et la validation des 3 modèles |
 - [ ] 47 Robot à menu — prévu jeu. 15 (backend) ; démo « payer depuis le robot » ven. 16
 - [ ] 48 Messagerie de l'agence — backend lun. 19, frontend jeu. 15 → mer. 21
 - [ ] 39 Signalements locataire (réactivée) — prévu mar. 20 ; photo reportable en semaine 3 si retard constaté le 19

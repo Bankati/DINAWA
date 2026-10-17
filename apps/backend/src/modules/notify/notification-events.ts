@@ -105,6 +105,11 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: 'Votre abonnement {tierLabel} pour {periodLabel} est à régler.',
     url: '/profil',
   },
+  'tenant-overdue': {
+    title: 'Loyer en attente',
+    body: "Votre loyer pour {propertyAddress} n'est pas encore réglé.",
+    url: '/locataire',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {

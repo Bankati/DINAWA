@@ -43,6 +43,9 @@ type SendContext = {
   source: string;
   scheduleEntryId?: string;
   paymentId?: string;
+  // Nouvel essai d'un envoi raté (tâche whatsapp-retry, unité 46) : numéro
+  // de la tentative et heure du premier envoi de la série.
+  retryOf?: { attempt: number; firstAttemptAt: Date };
 };
 
 type TemplateParams = {
@@ -247,6 +250,7 @@ export class WhatsappService {
         status: 'QUEUED',
         scheduleEntryId: input.scheduleEntryId,
         paymentId: input.paymentId,
+        ...(input.retryOf ? { attempt: input.retryOf.attempt, firstAttemptAt: input.retryOf.firstAttemptAt } : {}),
         ...content,
       },
       select: { id: true },
