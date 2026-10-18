@@ -75,6 +75,7 @@ function fakeDb() {
         return Promise.resolve(data);
       }),
     },
+    whatsappConversation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     tenantProfile: {
       findUnique: jest.fn().mockResolvedValue({ invitedByUserId: 'owner-1' }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -135,7 +136,9 @@ describe('Parcours consentement WhatsApp de bout en bout (unité 45)', () => {
       config as never,
       { invalidateUser: jest.fn() } as never,
     );
-    webhook = new WhatsappWebhookService(db as never, config as never, events as never, consent);
+    webhook = new WhatsappWebhookService(db as never, config as never, events as never, consent, {
+      pinDigest: (pin: string) => `empreinte-${pin}`,
+    } as never);
   });
 
   function receive(body: Record<string, unknown>): Promise<void> {

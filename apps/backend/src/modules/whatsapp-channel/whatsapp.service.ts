@@ -3,7 +3,7 @@ import { Prisma, WhatsappMessageStatus, WhatsappMessageType } from '@prisma/clie
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappAccessRefusal, WhatsappAccessService } from './whatsapp-access.service';
-import { TemplateComponent, WhatsappCloudClient } from './whatsapp-cloud.client';
+import { InteractiveListRow, TemplateComponent, WhatsappCloudClient } from './whatsapp-cloud.client';
 import { MetaApiError, MetaErrorClassification, classifyMetaError } from './meta-error';
 import { isWithinReplyWindow } from './reply-window';
 
@@ -24,8 +24,11 @@ export const STOP_CONFIRMATION_TEXT =
 export const CONSENT_WELCOME_SOURCE = 'consent-welcome';
 export const CONSENT_WELCOME_TEXT =
   'Bienvenue sur WARAH ! Vous recevrez ici vos rappels de loyer, vos quittances et ' +
-  'les messages de service de votre logement. Pour arrêter à tout moment, répondez STOP.';
+  'les messages de service de votre logement. Écrivez « menu » pour payer votre loyer ou ' +
+  'recevoir une quittance. Pour arrêter à tout moment, répondez STOP.';
 export const RESUME_CONFIRMATION_SOURCE = 'resume-confirmation';
+// Invitation « répondez OUI » du robot (unité 47).
+export const BOT_INVITATION_SOURCE = 'bot-invitation';
 export const RESUME_CONFIRMATION_TEXT =
   "C'est noté : vous recevez de nouveau les messages de service WARAH sur WhatsApp. " +
   'Pour arrêter à tout moment, répondez STOP.';
@@ -63,6 +66,8 @@ export type WhatsappDocumentInput = SendContext & {
   // Avec modèle : document en en-tête d'un modèle approuvé (obligatoire hors
   // de la fenêtre de 24 h). Sans : simple message document (robot, unité 47).
   template?: Omit<TemplateParams, 'buttonParam'>;
+  // Légende sous le document (message sans modèle seulement).
+  caption?: string;
 };
 
 export type WhatsappSendResult =
@@ -127,6 +132,78 @@ export class WhatsappService {
   async reply(input: SendContext & { text: string; inboundReceivedAt: Date }): Promise<WhatsappSendResult> {
     if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
     return this.send({ userId: input.userId, source: input.source, kind: 'text', text: input.text });
+  }
+
+  // Menu cliquable du robot (unité 47) : mêmes contrôles que reply()
+  // (accès revérifié à l'envoi + fenêtre de 24 h), un seul appel Meta.
+  async replyList(
+    input: SendContext & { body: string; buttonLabel: string; rows: InteractiveListRow[]; inboundReceivedAt: Date },
+  ): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    const access = await this.access.canUseWhatsapp(input.userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'INTERACTIVE',
+      templateName: null,
+      payload: { body: input.body, rows: input.rows.map((row) => row.id) },
+    });
+    let wamid: string;
+    try {
+      wamid = await this.client.sendInteractiveList({
+        to: access.metaNumber,
+        body: input.body,
+        buttonLabel: input.buttonLabel,
+        rows: input.rows,
+        callbackData: message.id,
+      });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
+  }
+
+  // Document en réponse (quittance du robot, unité 47) : PDF en mémoire,
+  // jamais stocké (invariant #5), fenêtre de 24 h vérifiée à l'envoi.
+  async replyDocument(
+    input: SendContext & {
+      document: WhatsappDocumentInput['document'];
+      caption?: string;
+      inboundReceivedAt: Date;
+    },
+  ): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    return this.sendDocument({
+      userId: input.userId,
+      source: input.source,
+      paymentId: input.paymentId,
+      document: input.document,
+      caption: input.caption,
+    });
+  }
+
+  // Invitation « répondez OUI » (unité 47, décision 1) : contrôlée par
+  // canSendInvitation (locataire sans accord, numéro vérifié, jamais après
+  // un STOP) et par la fenêtre de 24 h. La réservation « une par 24 h » est
+  // faite par l'appelant AVANT (WhatsappBotService).
+  async sendInvitation(userId: string, text: string, inboundReceivedAt: Date): Promise<WhatsappSendResult> {
+    const input: SendContext = { userId, source: BOT_INVITATION_SOURCE };
+    if (!isWithinReplyWindow(inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    const access = await this.access.canSendInvitation(userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'TEXT',
+      templateName: null,
+      payload: { body: text },
+    });
+    let wamid: string;
+    try {
+      wamid = await this.client.sendText({ to: access.metaNumber, body: text, callbackData: message.id });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
   }
 
   // Confirmation d'un STOP (unité 44) — même invariant d'appels que send()
@@ -218,6 +295,7 @@ export class WhatsappService {
             to: access.metaNumber,
             mediaId,
             filename: input.document.filename,
+            caption: input.caption,
             callbackData: message.id,
           });
     } catch (error) {

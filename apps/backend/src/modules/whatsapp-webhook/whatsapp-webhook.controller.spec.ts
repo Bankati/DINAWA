@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappWebhookService } from './whatsapp-webhook.service';
 import { WhatsappConsentService } from '../whatsapp-consent/whatsapp-consent.service';
+import { TokenService } from '../auth/token.service';
 import { PHONE_NUMBER_ID } from './__fixtures__/meta-notifications';
 
 const APP_SECRET = 'secret-app-test';
@@ -60,6 +61,7 @@ describe('WhatsappWebhookController', () => {
           { provide: PrismaService, useValue: prisma },
           { provide: EventEmitter2, useValue: { emit: jest.fn() } },
           { provide: WhatsappConsentService, useValue: { refreshAgencyLists: jest.fn().mockResolvedValue(undefined) } },
+          { provide: TokenService, useValue: { pinDigest: jest.fn((pin: string) => `empreinte-${pin}`) } },
           {
             provide: ConfigService,
             useValue: {

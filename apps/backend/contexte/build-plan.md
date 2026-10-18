@@ -606,7 +606,9 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 47 Robot à menu
 
-**Logique :**
+**Construite le 2026-10-17** (`/architect` du même jour, 2 décisions relues par un tiers) — détails dans `architecture.md`, section « Robot à menu WhatsApp » : robot réservé aux locataires avec bail actif ; invitation « répondez OUI » unique par 24 h pour un locataire sans accord ; code pour quittance et relevé seulement (jamais en clair, essai réservé avant comparaison, 30 jours liés au numéro) ; quittance en pièce jointe ; anti-abus 20 réponses / h. Migration `20261017160000_add_whatsapp_bot`.
+
+**Logique (plan initial) :**
 
 - Écouteur `whatsapp.inbound` → `BotService` : conversation par numéro, retour au menu après 30 min, aiguillage par état
 - `bot-identity.service.ts` : numéro d'un locataire avec bail actif + code à 6 chiffres (redemandé tous les 30 jours, blocage 1 h après 5 erreurs)

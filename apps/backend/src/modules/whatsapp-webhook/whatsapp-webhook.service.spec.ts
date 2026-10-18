@@ -47,6 +47,7 @@ describe('WhatsappWebhookService', () => {
   let configValues: Record<string, string | undefined>;
   let events: { emit: jest.Mock };
   let consent: { refreshAgencyLists: jest.Mock };
+  let tokens: { pinDigest: jest.Mock };
   let service: WhatsappWebhookService;
 
   beforeEach(() => {
@@ -79,11 +80,13 @@ describe('WhatsappWebhookService', () => {
     };
     events = { emit: jest.fn() };
     consent = { refreshAgencyLists: jest.fn().mockResolvedValue(undefined) };
+    tokens = { pinDigest: jest.fn((pin: string) => `empreinte-${pin}`) };
     service = new WhatsappWebhookService(
       prisma as never,
       { get: (key: string) => configValues[key] } as never,
       events as never,
       consent as never,
+      tokens as never,
     );
   });
 
@@ -218,6 +221,72 @@ describe('WhatsappWebhookService', () => {
     it('ignore un accusé pour un message inconnu (essai depuis la console Meta)', async () => {
       await receive(statusNotification('delivered', { wamid: 'wamid.CONSOLE' }));
       expect(prisma.whatsappMessage.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('robot (unité 47)', () => {
+    const tenant = { id: 'tenant-1', role: 'TENANT', whatsappPhone: SENDER_LOCAL, phone: null };
+
+    it('un message ordinaire d’un locataire va au robot', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      prisma.whatsappMessage.create.mockResolvedValue({ id: 'in-bot' });
+      await receive(textNotification('payer'));
+      expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ inboundAction: 'BOT', body: 'payer' }) as unknown }),
+      );
+      expect(events.emit).toHaveBeenCalledWith(WHATSAPP_INBOUND_RECEIVED, { messageId: 'in-bot' });
+    });
+
+    it('un propriétaire qui écrit : pas de robot', async () => {
+      prisma.user.findFirst.mockResolvedValue({ ...tenant, role: 'OWNER' });
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      await receive(textNotification('payer'));
+      expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ inboundAction: null }) as unknown }),
+      );
+    });
+
+    it('STOP ne va jamais au robot (même déjà arrêté)', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      applyConsent.mockResolvedValue({ decision: { kind: 'unchanged', reason: 'ALREADY_IN_STATE' }, previous: 'STOPPED', eventId: null });
+      await receive(textNotification('STOP'));
+      expect(prisma.whatsappMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ inboundAction: null }) as unknown }),
+      );
+    });
+
+    it('un code à 6 chiffres n’est JAMAIS gardé en clair : seulement son empreinte', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      // Une vraie empreinte HMAC ne laisse rien deviner du code.
+      tokens.pinDigest.mockReturnValueOnce('9f2c4e7a');
+      await receive(textNotification(' 583920 '));
+      expect(tokens.pinDigest).toHaveBeenCalledWith('583920');
+      const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(args.data['body']).toBeNull();
+      expect(args.data['payload']).toEqual({ pinDigest: '9f2c4e7a' });
+      expect(JSON.stringify(args.data)).not.toContain('583920');
+    });
+
+    it('clé du code absente : le code n’est pas gardé non plus', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      tokens.pinDigest.mockImplementation(() => {
+        throw new Error('clé absente');
+      });
+      await receive(textNotification('583920'));
+      const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(args.data['body']).toBeNull();
+      expect(args.data['payload']).toEqual({ pinDigest: null });
+    });
+
+    it('numéro inconnu qui envoie 6 chiffres : rien n’est gardé, pas d’empreinte', async () => {
+      await receive(textNotification('583920'));
+      expect(tokens.pinDigest).not.toHaveBeenCalled();
+      const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(args.data['body']).toBeNull();
     });
   });
 

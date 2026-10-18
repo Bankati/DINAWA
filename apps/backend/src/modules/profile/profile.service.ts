@@ -265,6 +265,8 @@ export class ProfileService {
         data: { body: null, payload: Prisma.DbNull, recipientPhone: ANONYMIZED_PHONE },
       });
       await tx.whatsappConsentEvent.updateMany({ where: { userId: user.id }, data: { phoneLast2: null } });
+      // Conversation avec le robot (unité 47) supprimée avec le reste.
+      await tx.whatsappConversation.deleteMany({ where: { userId: user.id } });
       await applyConsentCommand(tx, { userId: user.id, command: { type: 'SYSTEM_STOP' }, actorUserId: null });
     }, CONSENT_TRANSACTION_OPTIONS);
 

@@ -45,6 +45,7 @@ export async function applyConsentCommand(
         whatsappConsentChangedAt: true,
         whatsappConsentRequestId: true,
         whatsappConsentRequestExpiresAt: true,
+        whatsappInvitedAt: true,
       },
     });
     if (!user) throw new NotFoundException('Utilisateur introuvable');
@@ -54,6 +55,7 @@ export async function applyConsentCommand(
       changedAt: user.whatsappConsentChangedAt,
       requestId: user.whatsappConsentRequestId,
       requestExpiresAt: user.whatsappConsentRequestExpiresAt,
+      invitedAt: user.whatsappInvitedAt,
     };
     const decision = decideConsent(state, input.command, now);
     if (decision.kind !== 'changed') return { decision, previous: state.consent, eventId: null };
@@ -71,6 +73,8 @@ export async function applyConsentCommand(
             whatsappConsentRequestExpiresAt: new Date(now.getTime() + WHATSAPP_CONSENT_REQUEST_TTL_MS),
           }
         : { whatsappConsentRequestId: null, whatsappConsentRequestExpiresAt: null }),
+      // Tout changement d'état rend caduque une invitation du robot (unité 47).
+      whatsappInvitedAt: null,
       ...(decision.next === 'ACCEPTED' ? { whatsappConsentAt: decision.changedAt, whatsappConsentById: input.actorUserId } : {}),
       ...(decision.next === 'STOPPED' && state.consent !== 'STOPPED' ? { whatsappStoppedAt: decision.changedAt } : {}),
       // Nouveau numéro = plus vérifié, quel qu'il soit (décision 3).
@@ -106,6 +110,7 @@ export async function applyConsentCommand(
         collectionMethod: input.collectionMethod ?? null,
         phoneLast2: concernedPhone ? concernedPhone.slice(-2) : null,
         requestId: decision.answeredRequestId,
+        invitedAt: decision.answeredInvitationAt,
         sourceAt: 'sourceAt' in input.command ? input.command.sourceAt : null,
       },
     });
@@ -115,8 +120,11 @@ export async function applyConsentCommand(
     if (isPhoneChange) {
       await tx.tenantProfile.updateMany({
         where: { userId: input.userId },
-        data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null },
+        data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null, pinVerifiedAt: null, pinVerifiedPhone: null },
       });
+      // Conversation en cours avec le robot fermée (point reporté de l'unité
+      // 45) : un nouveau numéro repart du menu, sans code vérifié.
+      await tx.whatsappConversation.deleteMany({ where: { userId: input.userId } });
     }
 
     return { decision, previous: state.consent, eventId };
