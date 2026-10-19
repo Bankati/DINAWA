@@ -359,10 +359,6 @@
 .tb-card:hover { transform: translateY(-4px); box-shadow: 0 16px 32px rgba(15,23,42,0.09); }
 
 .tb-top { position: relative; display: flex; align-items: center; gap: 14px; padding: 24px 24px 0; }
-.tb-ava-img {
-  width: 56px; height: 56px; border-radius: 50%; object-fit: cover; display: block;
-  border: 2px solid #EAF1F8;
-}
 .tb-oq {
   font-size: 40px; font-family: Georgia, serif; font-weight: 900;
   color: var(--color-accent); line-height: 1; opacity: 0.85; margin-left: auto;
