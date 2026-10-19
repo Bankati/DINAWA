@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, WhatsappBotAction, WhatsappBotState } from '@prisma/client';
+import { Prisma, WhatsappBotAction, WhatsappBotState, WhatsappMessageType } from '@prisma/client';
 import { addDays } from 'date-fns';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappSendResult, WhatsappService } from '../whatsapp-channel/whatsapp.service';
 import { PayLinksService } from '../pay-links/pay-links.service';
 import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
+import { WhatsappThreadService, isExchangeOpen } from '../whatsapp-inbox/whatsapp-thread.service';
 import {
   BOT_CONVERSATION_TIMEOUT_MS,
   BOT_MAX_REPLIES_PER_HOUR,
@@ -12,6 +13,8 @@ import {
   BOT_STATEMENT_MONTHS,
   PAY_LINK_VALID_DAYS_AFTER_DUE,
   WHATSAPP_INVITATION_TTL_MS,
+  WHATSAPP_RELAY_MAX_PER_HOUR,
+  WHATSAPP_RELAY_WINDOW_MS,
 } from '../../common/constants';
 import { BotIdentityService } from './bot-identity.service';
 import {
@@ -23,6 +26,7 @@ import {
   formatFcfa,
   formatMonth,
   parseBotChoice,
+  parseHumanExit,
 } from './bot-messages';
 
 // Message reçu à traiter (lu par WhatsappInboundProcessor).
@@ -31,6 +35,7 @@ export type BotInbound = {
   userId: string;
   // Heure Meta du message : départ de la fenêtre de 24 h.
   receivedAt: Date;
+  messageType: WhatsappMessageType;
   text: string | null;
   payload: Prisma.JsonValue;
 };
@@ -47,10 +52,19 @@ type Reply =
   | { kind: 'text'; text: string; source: string }
   | { kind: 'document'; paymentId: string; content: Buffer; caption: string };
 
-type Step = { reply: Reply; state: WhatsappBotState; pendingAction: WhatsappBotAction | null };
+// openPropertyId : « Contacter mon gestionnaire » — l'échange humain n'est
+// ouvert qu'une fois la réponse partie (unité 48).
+type Step = {
+  reply: Reply;
+  state: WhatsappBotState;
+  pendingAction: WhatsappBotAction | null;
+  openPropertyId?: string;
+};
 
 type BotUser = {
   firstName: string;
+  // Bien du bail actif (le premier, comme pour « Payer »).
+  activePropertyId: string;
   whatsappVerifiedPhone: string | null;
   tenantProfile: {
     whatsappPinHash: string | null;
@@ -66,7 +80,9 @@ type BotUser = {
 // entre-temps l'emporte).
 //   - locataire avec accord : menu, « Payer », « Quittance », « Relevé » ;
 //   - locataire sans accord : UNE invitation « répondez OUI » par 24 h ;
-//   - arrêté (STOP), non-locataire, sans bail actif : silence.
+//   - arrêté (STOP), non-locataire, sans bail actif : silence ;
+//   - échange avec le gestionnaire en cours (unité 48) : relais, sauf
+//     commande du menu, 24 h sans message ou STOP.
 // L'état de la conversation n'autorise jamais rien à lui seul : quittance
 // et relevé revérifient le code à chaque fois (BotIdentityService).
 @Injectable()
@@ -82,6 +98,7 @@ export class WhatsappBotService {
     private readonly payLinks: PayLinksService,
     private readonly receiptPdf: ReceiptPdfService,
     private readonly identity: BotIdentityService,
+    private readonly threads: WhatsappThreadService,
   ) {}
 
   handle(inbound: BotInbound): Promise<void> {
@@ -122,7 +139,11 @@ export class WhatsappBotService {
             pinLockedUntil: true,
           },
         },
-        leasesAsTenant: { where: { status: 'ACTIVE' }, select: { id: true }, take: 1 },
+        leasesAsTenant: {
+          where: { status: 'ACTIVE' },
+          select: { id: true, propertyId: true },
+          take: 1,
+        },
       },
     });
     // Robot réservé aux locataires avec un bail actif ; silence après un STOP.
@@ -138,8 +159,18 @@ export class WhatsappBotService {
       where: { userId: inbound.userId },
       create: { userId: inbound.userId, lastActivityAt: now, replyWindowStart: now, replyCount: 0 },
       update: {},
-      select: { state: true, pendingAction: true, lastActivityAt: true },
+      select: { state: true, pendingAction: true, lastActivityAt: true, humanThreadId: true },
     });
+    const botUser: BotUser = { ...user, activePropertyId: user.leasesAsTenant[0].propertyId };
+
+    let currentState = conversation.state;
+    if (currentState === 'HUMAN') {
+      if (conversation.humanThreadId && (await this.onHuman(inbound, conversation.humanThreadId, now)))
+        return;
+      // Échange terminé (commande du menu ou 24 h) : le robot répond.
+      currentState = 'MENU';
+    }
+
     if (!(await this.reserveReply(inbound.userId, now))) {
       this.logger.warn(
         `[whatsapp-bot] user=${inbound.userId} : plafond de réponses de l'heure atteint, silence`,
@@ -149,12 +180,12 @@ export class WhatsappBotService {
 
     const idle =
       now.getTime() - conversation.lastActivityAt.getTime() >= BOT_CONVERSATION_TIMEOUT_MS;
-    const state = idle ? 'MENU' : conversation.state;
+    const state = idle ? 'MENU' : currentState;
     const pending = idle ? null : conversation.pendingAction;
 
     let step: Step;
     try {
-      step = await this.decide(inbound, user, state, pending, now);
+      step = await this.decide(inbound, botUser, state, pending, now);
     } catch (error) {
       this.logger.error(
         `[whatsapp-bot] user=${inbound.userId} : réponse impossible`,
@@ -178,20 +209,103 @@ export class WhatsappBotService {
     });
     if (claimed.count === 0) return;
 
+    // « Contacter mon gestionnaire » : échange ouvert AVANT l'accusé (correctif
+    // /review) — une panne entre les deux laisse au pire un échange ouvert
+    // sans accusé (les messages vont au gestionnaire, comme voulu), jamais
+    // un accusé « il vous répondra » suivi de messages partis au robot.
+    const humanThreadId = step.openPropertyId
+      ? await this.threads.openExchange(inbound.userId, step.openPropertyId, inbound.receivedAt, now)
+      : null;
+    if (humanThreadId) {
+      await this.prisma.whatsappConversation.update({
+        where: { userId: inbound.userId },
+        data: { state: 'HUMAN', pendingAction: null, lastActivityAt: now, humanThreadId },
+      });
+    }
+
     const result = await this.send(inbound, step.reply);
     if (result.outcome !== 'SENT') {
       // Étape non enregistrée : le robot n'attend pas un code qu'il n'a pas
-      // réussi à demander.
+      // réussi à demander, et aucun échange ne reste ouvert sans accusé.
       const detail = result.outcome === 'REFUSED' ? `REFUSED (${result.reason})` : result.outcome;
       this.logger.warn(
         `[whatsapp-bot] réponse non envoyée pour user=${inbound.userId} : ${detail}`,
       );
+      if (humanThreadId) await this.threads.closeExchange(humanThreadId, 'SYSTEM', now);
       return;
     }
+    if (humanThreadId) return;
     await this.prisma.whatsappConversation.update({
       where: { userId: inbound.userId },
-      data: { state: step.state, pendingAction: step.pendingAction, lastActivityAt: now },
+      data: { state: step.state, pendingAction: step.pendingAction, lastActivityAt: now, humanThreadId: null },
     });
+  }
+
+  // Message reçu pendant un échange avec le gestionnaire (unité 48,
+  // décision 1). Renvoie true s'il est traité ici (relais ou rappel), false
+  // si l'échange vient de se terminer : le robot répond alors normalement.
+  private async onHuman(inbound: BotInbound, threadId: string, now: Date): Promise<boolean> {
+    const thread = await this.prisma.whatsappThread.findUnique({
+      where: { id: threadId },
+      select: { humanOpenedAt: true, humanClosedAt: true, lastTenantMessageAt: true },
+    });
+    if (!thread || !isExchangeOpen(thread, now)) {
+      await this.threads.closeExchange(threadId, 'TIMEOUT', now);
+      return false;
+    }
+
+    const exit = parseHumanExit(inbound.text, readString(inbound.payload, 'replyId'));
+    if (exit === 'AGENT') {
+      if (await this.reserveReply(inbound.userId, now))
+        await this.sendOnce(inbound, BOT_TEXTS.agentAlreadyOpen, 'bot-agent');
+      return true;
+    }
+    if (exit) {
+      await this.threads.closeExchange(threadId, 'TENANT', now);
+      return false;
+    }
+
+    // Plafond des messages transmis (correctif /review) : au-delà, plus rien
+    // n'est rangé dans le fil pendant l'heure, avec UN seul avertissement
+    // (au premier message de trop). Le message reste enregistré comme reçu.
+    const sentLastHour = await this.prisma.whatsappMessage.count({
+      where: {
+        userId: inbound.userId,
+        direction: 'INBOUND',
+        createdAt: { gt: new Date(now.getTime() - WHATSAPP_RELAY_WINDOW_MS) },
+      },
+    });
+    if (sentLastHour > WHATSAPP_RELAY_MAX_PER_HOUR) {
+      this.logger.warn(`[whatsapp-bot] user=${inbound.userId} : plafond des messages transmis atteint`);
+      if (sentLastHour === WHATSAPP_RELAY_MAX_PER_HOUR + 1)
+        await this.sendOnce(inbound, BOT_TEXTS.relayLimit, 'bot-relay-limit');
+      return true;
+    }
+
+    const { mediaNotice } = await this.threads.relay(
+      { threadId, messageId: inbound.messageId, messageType: inbound.messageType, receivedAt: inbound.receivedAt },
+      now,
+    );
+    if (mediaNotice) await this.sendOnce(inbound, BOT_TEXTS.mediaNotForwarded, 'bot-media-notice');
+    return true;
+  }
+
+  // Réponse courte hors du parcours du menu, avec la même garantie « jamais
+  // deux réponses au même message » que respond().
+  private async sendOnce(inbound: BotInbound, text: string, source: string): Promise<void> {
+    const claimed = await this.prisma.whatsappMessage.updateMany({
+      where: { id: inbound.messageId, processedAt: null },
+      data: { processedAt: new Date() },
+    });
+    if (claimed.count === 0) return;
+    const result = await this.whatsapp.reply({
+      userId: inbound.userId,
+      inboundReceivedAt: inbound.receivedAt,
+      source,
+      text,
+    });
+    if (result.outcome !== 'SENT')
+      this.logger.warn(`[whatsapp-bot] ${source} non envoyé pour user=${inbound.userId} : ${result.outcome}`);
   }
 
   private async decide(
@@ -231,6 +345,14 @@ export class WhatsappBotService {
   ): Promise<Step> {
     if (choice === 'MENU') return menuStep(BOT_TEXTS.menu(user.firstName));
     if (choice === 'PAY') return textStep(await this.payText(inbound.userId, now), 'bot-pay');
+    if (choice === 'AGENT') {
+      return {
+        reply: { kind: 'text', text: BOT_TEXTS.agentOpened, source: 'bot-agent' },
+        state: 'HUMAN',
+        pendingAction: null,
+        openPropertyId: user.activePropertyId,
+      };
+    }
 
     const action = PROTECTED[choice];
     const pin = user.tenantProfile;

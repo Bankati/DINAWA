@@ -76,6 +76,8 @@ export const WHATSAPP_TEMPLATES: Record<NotificationEvent, WhatsappTemplateSpec 
   'payment-reminder': REMINDER,
   receipt: RECEIPT,
   'tenant-overdue': TENANT_OVERDUE,
+  // Destiné au responsable du bien, jamais à un locataire.
+  'whatsapp-message': null,
   'overdue-alert': null,
   'payment-declaration-pending': null,
   'payment-rejected': null,

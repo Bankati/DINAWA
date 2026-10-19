@@ -4,6 +4,7 @@ import { WhatsappChannelModule } from '../whatsapp-channel/whatsapp-channel.modu
 import { PayLinksModule } from '../pay-links/pay-links.module';
 import { ReceiptsModule } from '../receipts/receipts.module';
 import { AuthModule } from '../auth/auth.module';
+import { WhatsappInboxModule } from '../whatsapp-inbox/whatsapp-inbox.module';
 import { BotIdentityService } from './bot-identity.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
 
@@ -11,7 +12,15 @@ import { WhatsappBotService } from './whatsapp-bot.service';
 // des messages reçus (WhatsappInboundProcessor, module whatsapp-webhook) —
 // ce module ne dépend pas du webhook, pas de dépendance circulaire.
 @Module({
-  imports: [PrismaModule, WhatsappChannelModule, PayLinksModule, ReceiptsModule, AuthModule],
+  imports: [
+    PrismaModule,
+    WhatsappChannelModule,
+    PayLinksModule,
+    ReceiptsModule,
+    AuthModule,
+    // Échange avec le gestionnaire (unité 48).
+    WhatsappInboxModule,
+  ],
   providers: [WhatsappBotService, BotIdentityService],
   exports: [WhatsappBotService],
 })

@@ -127,6 +127,22 @@ export async function applyConsentCommand(
       await tx.whatsappConversation.deleteMany({ where: { userId: input.userId } });
     }
 
+    // Échange avec le gestionnaire (unité 48) : un STOP ou un nouveau numéro
+    // y met fin tout de suite (le fil reste lisible par le responsable).
+    const stopped = decision.next === 'STOPPED' && state.consent !== 'STOPPED';
+    if (isPhoneChange || stopped) {
+      await tx.whatsappThread.updateMany({
+        where: { tenantUserId: input.userId, humanOpenedAt: { not: null }, humanClosedAt: null },
+        data: { humanClosedAt: now, closedReason: isPhoneChange ? 'SYSTEM' : 'STOP' },
+      });
+      if (!isPhoneChange) {
+        await tx.whatsappConversation.updateMany({
+          where: { userId: input.userId, state: 'HUMAN' },
+          data: { state: 'MENU', pendingAction: null, humanThreadId: null },
+        });
+      }
+    }
+
     return { decision, previous: state.consent, eventId };
   }
 

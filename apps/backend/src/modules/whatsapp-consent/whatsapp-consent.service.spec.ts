@@ -79,7 +79,11 @@ function fakePrisma(users: FakeUser[]) {
         return Promise.resolve(data);
       }),
     },
-    whatsappConversation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    whatsappConversation: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    whatsappThread: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     tenantProfile: {
       findUnique: jest.fn().mockResolvedValue({ invitedByUserId: 'owner-1' }),
       updateMany: jest.fn(

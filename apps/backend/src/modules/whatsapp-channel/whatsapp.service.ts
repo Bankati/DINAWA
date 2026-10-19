@@ -49,6 +49,9 @@ type SendContext = {
   // Nouvel essai d'un envoi raté (tâche whatsapp-retry, unité 46) : numéro
   // de la tentative et heure du premier envoi de la série.
   retryOf?: { attempt: number; firstAttemptAt: Date };
+  // Messagerie (unité 48) : fil de l'échange et auteur d'une réponse.
+  threadId?: string;
+  sentByUserId?: string;
 };
 
 type TemplateParams = {
@@ -131,7 +134,14 @@ export class WhatsappService {
   // la fenêtre de 24 h.
   async reply(input: SendContext & { text: string; inboundReceivedAt: Date }): Promise<WhatsappSendResult> {
     if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
-    return this.send({ userId: input.userId, source: input.source, kind: 'text', text: input.text });
+    return this.send({
+      userId: input.userId,
+      source: input.source,
+      threadId: input.threadId,
+      sentByUserId: input.sentByUserId,
+      kind: 'text',
+      text: input.text,
+    });
   }
 
   // Menu cliquable du robot (unité 47) : mêmes contrôles que reply()
@@ -328,6 +338,8 @@ export class WhatsappService {
         status: 'QUEUED',
         scheduleEntryId: input.scheduleEntryId,
         paymentId: input.paymentId,
+        threadId: input.threadId,
+        sentByUserId: input.sentByUserId,
         ...(input.retryOf ? { attempt: input.retryOf.attempt, firstAttemptAt: input.retryOf.firstAttemptAt } : {}),
         ...content,
       },

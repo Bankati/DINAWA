@@ -107,6 +107,7 @@ export class WhatsappInboundProcessor {
         createdAt: true,
         sentAt: true,
         processingAttempts: true,
+        messageType: true,
         body: true,
         payload: true,
       },
@@ -126,6 +127,7 @@ export class WhatsappInboundProcessor {
             messageId,
             userId: message.userId,
             receivedAt,
+            messageType: message.messageType,
             text: message.body,
             payload: message.payload,
           });

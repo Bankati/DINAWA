@@ -16,7 +16,7 @@ type FakeUser = {
     pinVerifiedPhone: string | null;
     pinLockedUntil: Date | null;
   };
-  leasesAsTenant: { id: string }[];
+  leasesAsTenant: { id: string; propertyId: string }[];
 };
 
 function inbound(overrides: Partial<BotInbound> = {}): BotInbound {
@@ -24,6 +24,7 @@ function inbound(overrides: Partial<BotInbound> = {}): BotInbound {
     messageId: 'in-1',
     userId: 'tenant-1',
     receivedAt: RECEIVED,
+    messageType: 'TEXT',
     text: 'menu',
     payload: null,
     ...overrides,
@@ -32,9 +33,10 @@ function inbound(overrides: Partial<BotInbound> = {}): BotInbound {
 
 describe('WhatsappBotService (unité 47)', () => {
   let prisma: {
-    whatsappMessage: { updateMany: jest.Mock };
+    whatsappMessage: { updateMany: jest.Mock; count: jest.Mock };
     user: { findUnique: jest.Mock; updateMany: jest.Mock };
     whatsappConversation: { upsert: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+    whatsappThread: { findUnique: jest.Mock };
     paymentScheduleEntry: { findFirst: jest.Mock; findMany: jest.Mock };
     payment: { findFirst: jest.Mock };
   };
@@ -47,6 +49,7 @@ describe('WhatsappBotService (unité 47)', () => {
   let payLinks: { payLinkFor: jest.Mock };
   let receiptPdf: { generate: jest.Mock };
   let identity: { isVerified: jest.Mock; check: jest.Mock };
+  let threads: { openExchange: jest.Mock; closeExchange: jest.Mock; relay: jest.Mock };
   let service: WhatsappBotService;
   let user: FakeUser;
 
@@ -65,11 +68,12 @@ describe('WhatsappBotService (unité 47)', () => {
         pinVerifiedPhone: null,
         pinLockedUntil: null,
       },
-      leasesAsTenant: [{ id: 'lease-1' }],
+      leasesAsTenant: [{ id: 'lease-1', propertyId: 'prop-1' }],
     };
     prisma = {
       whatsappMessage: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(1),
       },
       user: {
         findUnique: jest.fn(() => Promise.resolve(user)),
@@ -82,6 +86,7 @@ describe('WhatsappBotService (unité 47)', () => {
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      whatsappThread: { findUnique: jest.fn().mockResolvedValue(null) },
       paymentScheduleEntry: {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
@@ -104,12 +109,18 @@ describe('WhatsappBotService (unité 47)', () => {
       isVerified: jest.fn().mockReturnValue(false),
       check: jest.fn().mockResolvedValue({ result: 'OK' }),
     };
+    threads = {
+      openExchange: jest.fn().mockResolvedValue('thread-1'),
+      closeExchange: jest.fn().mockResolvedValue(true),
+      relay: jest.fn().mockResolvedValue({ mediaNotice: false }),
+    };
     service = new WhatsappBotService(
       prisma as never,
       whatsapp as never,
       payLinks as never,
       receiptPdf as never,
       identity as never,
+      threads as never,
     );
   });
 
@@ -489,6 +500,147 @@ describe('WhatsappBotService (unité 47)', () => {
         prisma.whatsappMessage.updateMany.mock.calls as [{ where: { id: string } }][]
       ).map(([call]) => call.where.id);
       expect(claimedIds).toEqual(['in-1', 'in-2']);
+    });
+  });
+
+  describe('échange avec le gestionnaire (unité 48)', () => {
+    const inHuman = (): void => {
+      prisma.whatsappConversation.upsert.mockResolvedValue({
+        state: 'HUMAN',
+        pendingAction: null,
+        lastActivityAt: new Date(),
+        humanThreadId: 'thread-1',
+      });
+      prisma.whatsappThread.findUnique.mockResolvedValue({
+        humanOpenedAt: new Date(Date.now() - 3600_000),
+        humanClosedAt: null,
+        lastTenantMessageAt: new Date(Date.now() - 60_000),
+      });
+    };
+
+    it('« Contacter mon gestionnaire » : accusé, puis échange ouvert sur le bien du bail actif', async () => {
+      await service.handle(inbound({ text: null, payload: { replyId: 'AGENT' } }));
+      expect(lastText()).toBe(BOT_TEXTS.agentOpened);
+      expect(threads.openExchange).toHaveBeenCalledWith('tenant-1', 'prop-1', RECEIVED, expect.any(Date));
+      expect(conversationUpdate()).toMatchObject({ state: 'HUMAN', humanThreadId: 'thread-1' });
+    });
+
+    it('échange ouvert AVANT l’accusé (une panne entre les deux ne renvoie jamais au robot)', async () => {
+      const order: string[] = [];
+      threads.openExchange.mockImplementation(() => {
+        order.push('ouverture');
+        return Promise.resolve('thread-1');
+      });
+      whatsapp.reply.mockImplementation(() => {
+        order.push('accusé');
+        return Promise.resolve(sent);
+      });
+      await service.handle(inbound({ text: 'gestionnaire' }));
+      expect(order).toEqual(['ouverture', 'accusé']);
+      expect(threads.closeExchange).not.toHaveBeenCalled();
+    });
+
+    it('accusé non parti : l’échange tout juste ouvert est refermé', async () => {
+      whatsapp.reply.mockResolvedValue({ outcome: 'REFUSED', reason: 'REPLY_WINDOW_CLOSED' });
+      await service.handle(inbound({ text: 'gestionnaire' }));
+      expect(threads.closeExchange).toHaveBeenCalledWith('thread-1', 'SYSTEM', expect.any(Date));
+    });
+
+    it('plafond des messages transmis : un seul avertissement au premier message de trop', async () => {
+      inHuman();
+      prisma.whatsappMessage.count.mockResolvedValue(61);
+      await service.handle(inbound({ text: 'encore un message' }));
+      expect(threads.relay).not.toHaveBeenCalled();
+      expect(lastText()).toBe(BOT_TEXTS.relayLimit);
+    });
+
+    it('au-delà du plafond : silence, rien n’est transmis', async () => {
+      inHuman();
+      prisma.whatsappMessage.count.mockResolvedValue(62);
+      await service.handle(inbound({ text: 'encore un message' }));
+      expect(threads.relay).not.toHaveBeenCalled();
+      expect(whatsapp.reply).not.toHaveBeenCalled();
+    });
+
+    it('message libre pendant l’échange : relayé au gestionnaire, le robot se tait', async () => {
+      inHuman();
+      await service.handle(inbound({ messageId: 'in-7', text: 'Ma porte ne ferme plus' }));
+      expect(threads.relay).toHaveBeenCalledWith(
+        { threadId: 'thread-1', messageId: 'in-7', messageType: 'TEXT', receivedAt: RECEIVED },
+        expect.any(Date),
+      );
+      expect(whatsapp.reply).not.toHaveBeenCalled();
+      expect(whatsapp.replyList).not.toHaveBeenCalled();
+      // Pas compté dans l'anti-abus du robot : aucune réponse envoyée.
+      expect(prisma.whatsappConversation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('« bonjour » ou « oui » seuls restent des messages pour le gestionnaire', async () => {
+      inHuman();
+      await service.handle(inbound({ text: 'Bonjour' }));
+      await service.handle(inbound({ messageId: 'in-2', text: 'oui' }));
+      expect(threads.relay).toHaveBeenCalledTimes(2);
+      expect(threads.closeExchange).not.toHaveBeenCalled();
+    });
+
+    it('« payer » tapé seul : fin de l’échange (TENANT) et le robot donne le lien', async () => {
+      inHuman();
+      await service.handle(inbound({ text: 'payer' }));
+      expect(threads.closeExchange).toHaveBeenCalledWith('thread-1', 'TENANT', expect.any(Date));
+      expect(threads.relay).not.toHaveBeenCalled();
+      expect(lastText()).toBe(BOT_TEXTS.upToDate);
+    });
+
+    it('choix dans la liste pendant l’échange : le robot reprend la main', async () => {
+      inHuman();
+      await service.handle(inbound({ text: null, payload: { replyId: 'STATEMENT' } }));
+      expect(threads.closeExchange).toHaveBeenCalledWith('thread-1', 'TENANT', expect.any(Date));
+      expect(lastText()).toBe(BOT_TEXTS.askPin);
+    });
+
+    it('« je vais payer demain » : une phrase, relayée au gestionnaire', async () => {
+      inHuman();
+      await service.handle(inbound({ text: 'je vais payer demain' }));
+      expect(threads.relay).toHaveBeenCalled();
+      expect(threads.closeExchange).not.toHaveBeenCalled();
+    });
+
+    it('24 h sans message du locataire : l’échange se termine (TIMEOUT) et le robot répond', async () => {
+      inHuman();
+      prisma.whatsappThread.findUnique.mockResolvedValue({
+        humanOpenedAt: new Date(Date.now() - 30 * 3600_000),
+        humanClosedAt: null,
+        lastTenantMessageAt: new Date(Date.now() - 25 * 3600_000),
+      });
+      await service.handle(inbound({ text: 'Ma porte ne ferme plus' }));
+      expect(threads.closeExchange).toHaveBeenCalledWith('thread-1', 'TIMEOUT', expect.any(Date));
+      expect(threads.relay).not.toHaveBeenCalled();
+      expect(whatsapp.replyList).toHaveBeenCalledWith(
+        expect.objectContaining({ body: BOT_TEXTS.notUnderstood }),
+      );
+    });
+
+    it('photo ou vocal : relayé, et un seul avis au locataire', async () => {
+      inHuman();
+      threads.relay.mockResolvedValue({ mediaNotice: true });
+      await service.handle(inbound({ text: null, messageType: 'AUDIO' }));
+      expect(lastText()).toBe(BOT_TEXTS.mediaNotForwarded);
+      expect((whatsapp.reply.mock.calls[0] as [{ source: string }])[0].source).toBe('bot-media-notice');
+    });
+
+    it('« Contacter mon gestionnaire » à nouveau : rappel, rien de relayé', async () => {
+      inHuman();
+      await service.handle(inbound({ text: null, payload: { replyId: 'AGENT' } }));
+      expect(lastText()).toBe(BOT_TEXTS.agentAlreadyOpen);
+      expect(threads.relay).not.toHaveBeenCalled();
+    });
+
+    it('après un STOP : silence, même si un échange était en cours', async () => {
+      inHuman();
+      user.whatsappConsent = 'STOPPED';
+      await service.handle(inbound({ text: 'Ma porte ne ferme plus' }));
+      expect(threads.relay).not.toHaveBeenCalled();
+      expect(whatsapp.reply).not.toHaveBeenCalled();
     });
   });
 });
