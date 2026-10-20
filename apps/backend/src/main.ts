@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { forwardedForDiagnostic } from './common/middleware/forwarded-for-diagnostic';
+import { keepRawBodyForSignedWebhooks } from './common/middleware/raw-body';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule } from '@nestjs/swagger';
 import { Logger as PinoLogger } from 'nestjs-pino';
@@ -47,8 +48,10 @@ async function bootstrap(): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-call
   app.use(require('compression')());
 
-  // Body parser avec limite à 1 MB (évite les attaques par payload volumineux)
-  app.use(bodyParser.json({ limit: '1mb' }));
+  // Body parser avec limite à 1 MB (évite les attaques par payload volumineux).
+  // Corps brut conservé pour le seul webhook WhatsApp, dont la signature se
+  // calcule sur les octets exacts reçus (unité 44).
+  app.use(bodyParser.json({ limit: '1mb', verify: keepRawBodyForSignedWebhooks }));
   app.use(bodyParser.urlencoded({ extended: true, limit: '1mb' }));
 
   // Préfixe global /api — exclu pour les health checks (Railway sonde ces URLs directement)

@@ -15,6 +15,12 @@ export type WhatsappTemplateName =
   | 'bienvenue_locataire';
 
 const TEMPLATE_LANGUAGE = 'fr';
+export const STOP_CONFIRMATION_SOURCE = 'stop-confirmation';
+// Texte de la confirmation d'arrêt (unité 44). La réactivation par
+// « REPRENDRE » arrive avec l'unité 45.
+export const STOP_CONFIRMATION_TEXT =
+  "C'est noté : vous ne recevrez plus de messages WARAH sur WhatsApp. " +
+  'Pour les réactiver, contactez votre agence.';
 const ERROR_MESSAGE_MAX_LENGTH = 200;
 const MEDIA_UPLOAD_UNCERTAIN = 'MEDIA_UPLOAD_UNCERTAIN';
 
@@ -96,6 +102,34 @@ export class WhatsappService {
               callbackData: message.id,
             })
           : await this.client.sendText({ to: access.metaNumber, body: input.text, callbackData: message.id });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
+  }
+
+  // Confirmation d'un STOP (unité 44) — même invariant d'appels que send()
+  // (un seul appel Meta), mais contrôlée par canSendStopConfirmation : c'est
+  // le seul message autorisé après un arrêt. Envoyée une seule fois, par la
+  // liste de travail des messages reçus (WhatsappInboundProcessor).
+  async sendStopConfirmation(userId: string): Promise<WhatsappSendResult> {
+    const input: SendContext = { userId, source: STOP_CONFIRMATION_SOURCE };
+    const access = await this.access.canSendStopConfirmation(userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'TEXT',
+      templateName: null,
+      payload: { body: STOP_CONFIRMATION_TEXT },
+    });
+
+    let wamid: string;
+    try {
+      wamid = await this.client.sendText({
+        to: access.metaNumber,
+        body: STOP_CONFIRMATION_TEXT,
+        callbackData: message.id,
+      });
     } catch (error) {
       return this.markFailure(message.id, input.source, error, classify(error));
     }

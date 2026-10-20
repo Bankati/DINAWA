@@ -11,8 +11,10 @@ jest.mock('../storage/image-processor', () => ({
 describe('ProfileService', () => {
   let service: ProfileService;
   let prisma: {
-    user: { update: jest.Mock; findUniqueOrThrow: jest.Mock };
+    user: { update: jest.Mock; findUniqueOrThrow: jest.Mock; findUnique: jest.Mock };
     session: { updateMany: jest.Mock };
+    whatsappMessage: { updateMany: jest.Mock };
+    whatsappConsentEvent: { create: jest.Mock };
     $transaction: jest.Mock;
   };
   let storage: { upload: jest.Mock; remove: jest.Mock; getSignedUrl: jest.Mock };
@@ -35,8 +37,11 @@ describe('ProfileService', () => {
       user: {
         update: jest.fn().mockResolvedValue({}),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'user-1', passwordHash: 'old-hash' }),
+        findUnique: jest.fn().mockResolvedValue({ whatsappConsent: 'ACCEPTED' }),
       },
       session: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      whatsappMessage: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
+      whatsappConsentEvent: { create: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
     storage = {
@@ -404,6 +409,27 @@ describe('ProfileService', () => {
     it("ne touche pas au Storage si l'utilisateur n'avait pas de photo de profil", async () => {
       await service.anonymize(user);
       expect(storage.remove).not.toHaveBeenCalled();
+    });
+
+    it('efface textes, contenus et numéros des messages WhatsApp, et arrête le canal (unité 44)', async () => {
+      await service.anonymize(user);
+
+      expect(prisma.whatsappMessage.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        data: { body: null, payload: Prisma.DbNull, recipientPhone: '[anonymisé]' },
+      });
+      const [updateArgs] = prisma.user.update.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(updateArgs.data).toMatchObject({ whatsappPhone: null, whatsappConsent: 'STOPPED' });
+      expect(prisma.whatsappConsentEvent.create).toHaveBeenCalledWith({
+        data: { userId: 'user-1', previousConsent: 'ACCEPTED', newConsent: 'STOPPED', source: 'SYSTEM' },
+      });
+    });
+
+    it("n'ajoute pas d'événement de consentement si le canal était déjà arrêté", async () => {
+      prisma.user.findUnique.mockResolvedValue({ whatsappConsent: 'STOPPED' });
+      await service.anonymize(user);
+      expect(prisma.whatsappConsentEvent.create).not.toHaveBeenCalled();
+      expect(prisma.whatsappMessage.updateMany).toHaveBeenCalled();
     });
   });
 });

@@ -210,10 +210,18 @@ enum WhatsappDirection {
   INBOUND
 }
 
+// INTERACTIVE à OTHER : messages reçus (unité 44). OTHER = localisation,
+// contact, réaction, autocollant... — seul le type Meta est gardé
+// (payload.metaType), jamais le contenu.
 enum WhatsappMessageType {
   TEMPLATE
   TEXT
   DOCUMENT
+  INTERACTIVE
+  IMAGE
+  AUDIO
+  VIDEO
+  OTHER
 }
 
 // Classé selon ce que l'on SAIT du message, jamais selon ce qu'on espère
@@ -223,11 +231,14 @@ enum WhatsappMessageType {
 // - FAILED  : Meta a refusé de façon déterministe (rien n'est parti)
 // - UNKNOWN : timeout, coupure, 5xx ou réponse sans wamid — on ne sait pas
 //   si Meta a pris le message. Jamais renvoyé automatiquement (doublon).
+// - RECEIVED : message ENTRANT (direction INBOUND, unité 44) — jamais un
+//   envoi de WARAH, donc jamais concerné par les renvois.
 enum WhatsappMessageStatus {
   QUEUED
   SENT
   FAILED
   UNKNOWN
+  RECEIVED
 }
 
 enum NotificationDispatchStatus {
@@ -292,8 +303,10 @@ model User {
   inactivityWarning7SentAt  DateTime?           @db.Timestamptz(6)
   inactivityWarning1SentAt  DateTime?           @db.Timestamptz(6)
   anonymizedAt              DateTime?           @db.Timestamptz(6)
-  // Canal WhatsApp (unité 42). whatsappPhone : 8 chiffres comme `phone`, null
-  // = utiliser `phone`. Unique : le robot doit retrouver sans ambiguïté le
+  // Canal WhatsApp (unité 42). whatsappPhone : 8 chiffres, null = utiliser
+  // `phone` — attention, `phone` est stocké tel que saisi (90330557,
+  // 22890330557 ou +22890330557) : toute recherche par numéro passe par
+  // storedPhoneVariants() (/review unité 44). Unique : le robot doit retrouver sans ambiguïté le
   // locataire à partir du numéro qui lui écrit. Le format Meta (228XXXXXXXX)
   // n'est jamais stocké — voir common/utils/phone.ts.
   whatsappPhone             String?             @unique
@@ -909,6 +922,10 @@ model Notification {
 // secret, jeton ou code locataire ; ses données personnelles suivent la même
 // conservation que la ligne. `recipientPhone` (8 chiffres) garde le numéro
 // réellement utilisé, le numéro du locataire pouvant changer ensuite.
+// Messages ENTRANTS (unité 44, /architect 2026-10-13) : recipientPhone est
+// alors le numéro de l'EXPÉDITEUR (8 chiffres, ou format international
+// complet hors Togo), userId est null pour un numéro inconnu, et sentAt est
+// l'heure d'envoi par l'expéditeur, fournie par Meta.
 model WhatsappMessage {
   id              String                @id @default(cuid())
   userId          String?
@@ -936,11 +953,31 @@ model WhatsappMessage {
   payment         Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   sentAt          DateTime?             @db.Timestamptz(6)
   failedAt        DateTime?             @db.Timestamptz(6)
+  // Accusés Meta (unité 44) — heure fournie par Meta, jamais effacée une
+  // fois remplie (voir applyStatusEvent). Pas de « lu » ≠ « pas lu » : le
+  // locataire peut avoir désactivé les confirmations de lecture.
+  deliveredAt     DateTime?             @db.Timestamptz(6)
+  readAt          DateTime?             @db.Timestamptz(6)
+  // Texte d'un message reçu (ou légende d'un média) — champ dédié pour
+  // pouvoir l'effacer sans supprimer la ligne (suppression de compte,
+  // future durée de conservation). Jamais journalisé. Null pour un numéro
+  // inconnu : rien n'est gardé de quelqu'un sans lien avec WARAH.
+  body            String?
+  // Liste de travail durable des messages reçus (unité 44) : enregistrée
+  // dans la même écriture que le message, reprise par la tâche de
+  // rattrapage si le serveur redémarre avant la fin du traitement.
+  // inboundAction : traitement attendu ('STOP_CONFIRMATION', puis le robot
+  // à l'unité 47) ; null = rien à faire.
+  inboundAction       String?
+  processedAt         DateTime?         @db.Timestamptz(6)
+  processingStartedAt DateTime?         @db.Timestamptz(6)
+  processingAttempts  Int               @default(0)
   createdAt       DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime              @updatedAt @db.Timestamptz(6)
 
   @@index([status, createdAt])
   @@index([userId, createdAt])
+  @@index([direction, processedAt, createdAt])
   @@map("whatsapp_messages")
 }
 

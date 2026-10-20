@@ -6,13 +6,20 @@ import { maskSensitiveUrl } from './mask-sensitive-url';
 // d'invitation ne doit quitter le serveur (unité 43). Types volontairement
 // structurels pour ne pas dépendre des types internes de Sentry.
 type ScrubbableEvent = {
-  request?: { url?: string; query_string?: unknown };
+  request?: { url?: string; query_string?: unknown; data?: unknown };
   transaction?: string;
   breadcrumbs?: { message?: string; data?: Record<string, unknown> }[];
 };
 
+// Corps de requête jamais envoyé à Sentry pour le webhook WhatsApp (unité
+// 44) : texte des messages des locataires et numéros de téléphone.
+const WHATSAPP_WEBHOOK_PATH = '/webhooks/whatsapp';
+
 export function scrubSentryEvent<T extends ScrubbableEvent>(event: T): T {
   if (event.request) {
+    if (event.request.url?.includes(WHATSAPP_WEBHOOK_PATH) && event.request.data !== undefined) {
+      event.request.data = '[masqué]';
+    }
     event.request.url = maskSensitiveUrl(event.request.url);
     if (typeof event.request.query_string === 'string') {
       event.request.query_string = maskSensitiveUrl(`?${event.request.query_string}`).slice(1);

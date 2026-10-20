@@ -1,10 +1,12 @@
 import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { Request } from 'express';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../types/authenticated-user.type';
+import { SKIP_AUDIT_LOG_KEY } from '../decorators/skip-audit-log.decorator';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -40,12 +42,23 @@ function redact(value: unknown, depth = 0): unknown {
 export class AuditLogInterceptor implements NestInterceptor {
   private readonly logger = new Logger(AuditLogInterceptor.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reflector: Reflector,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
 
     if (!MUTATING_METHODS.has(req.method)) {
+      return next.handle();
+    }
+
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_AUDIT_LOG_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (skip) {
       return next.handle();
     }
 

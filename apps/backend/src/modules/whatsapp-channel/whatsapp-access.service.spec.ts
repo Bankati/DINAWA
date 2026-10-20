@@ -120,3 +120,50 @@ describe('WhatsappAccessService.canUseWhatsapp', () => {
     });
   });
 });
+
+describe('WhatsappAccessService.canSendStopConfirmation (unité 44)', () => {
+  let prisma: { user: { findUnique: jest.Mock } };
+  let config: { get: jest.Mock };
+  let service: WhatsappAccessService;
+
+  beforeEach(() => {
+    prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ phone: '90112233', whatsappPhone: null, whatsappConsent: 'STOPPED' }),
+      },
+    };
+    config = { get: jest.fn().mockReturnValue(true) };
+    service = new WhatsappAccessService(prisma as never, config as never, {} as never);
+  });
+
+  it('autorise la confirmation pour un locataire qui vient de passer à STOPPED, sans bail ni forfait', async () => {
+    await expect(service.canSendStopConfirmation('tenant-1')).resolves.toEqual({
+      allowed: true,
+      recipientPhone: '90112233',
+      metaNumber: '22890112233',
+    });
+  });
+
+  it('respecte l’interrupteur général', async () => {
+    config.get.mockReturnValue(false);
+    await expect(service.canSendStopConfirmation('tenant-1')).resolves.toEqual({
+      allowed: false,
+      reason: 'CHANNEL_DISABLED',
+    });
+  });
+
+  it.each(['ACCEPTED', 'NOT_ASKED'])('refuse si le consentement est %s (garde-fou)', async (consent) => {
+    prisma.user.findUnique.mockResolvedValue({ phone: '90112233', whatsappPhone: null, whatsappConsent: consent });
+    await expect(service.canSendStopConfirmation('tenant-1')).resolves.toMatchObject({ reason: 'NO_CONSENT' });
+  });
+
+  it('exige un numéro exploitable', async () => {
+    prisma.user.findUnique.mockResolvedValue({ phone: null, whatsappPhone: null, whatsappConsent: 'STOPPED' });
+    await expect(service.canSendStopConfirmation('tenant-1')).resolves.toMatchObject({ reason: 'NO_VALID_NUMBER' });
+  });
+
+  it('préfère le numéro WhatsApp dédié', async () => {
+    prisma.user.findUnique.mockResolvedValue({ phone: '90112233', whatsappPhone: '99887766', whatsappConsent: 'STOPPED' });
+    await expect(service.canSendStopConfirmation('tenant-1')).resolves.toMatchObject({ metaNumber: '22899887766' });
+  });
+});
