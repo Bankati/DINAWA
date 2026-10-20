@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
 
 // Jeton autoporteur générique (signature HMAC + expiration), vérifié sans
@@ -66,4 +66,15 @@ export function verifyToken<T>(
   if (Date.now() > payload.exp) throw new BadRequestException(EXPIRED_MESSAGE);
 
   return payload.d;
+}
+
+// Empreinte non réversible d'un jeton — pour s'en servir comme clé (limite de
+// débit « par lien », masquage dans les journaux) sans jamais le stocker ni le
+// journaliser en clair. Ce n'est PAS une vérification : verifyToken() reste
+// la seule autorité sur la validité d'un jeton.
+export function tokenFingerprint(token: string | undefined): string {
+  return createHash('sha256')
+    .update(token ?? '')
+    .digest('hex')
+    .slice(0, 16);
 }
