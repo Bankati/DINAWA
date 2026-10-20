@@ -1,4 +1,5 @@
 import { WhatsappConsent, WhatsappConsentSource } from '@prisma/client';
+import { WHATSAPP_INVITATION_TTL_MS } from '../../common/constants';
 
 // Règles du consentement WhatsApp (unité 45, /architect 2026-10-16) — seule
 // définition des transitions, appliquée par ConsentWriter. Fonction pure :
@@ -18,6 +19,8 @@ export type ConsentState = {
   changedAt: Date | null;
   requestId: string | null;
   requestExpiresAt: Date | null;
+  // Dernière invitation « répondez OUI » du robot (unité 47).
+  invitedAt: Date | null;
 };
 
 export type ConsentCommand =
@@ -54,6 +57,8 @@ export type ConsentDecision =
       request: 'open' | 'close';
       // Demande à laquelle répond un « OUI » (preuve).
       answeredRequestId: string | null;
+      // Invitation du robot à laquelle répond un « OUI » (preuve, unité 47).
+      answeredInvitationAt: Date | null;
     }
   | { kind: 'unchanged'; reason: ConsentUnchangedReason }
   | { kind: 'refused'; reason: ConsentRefusedReason };
@@ -82,14 +87,27 @@ export function decideConsent(state: ConsentState, command: ConsentCommand, now:
       return changed(state, 'STOPPED', 'TENANT_PORTAL', now, 'close');
 
     case 'BOT_CONFIRM': {
-      // Un « OUI » hors demande en cours ne vaut pas accord : il vérifie
-      // seulement le numéro (fait par le webhook, pas ici).
-      if (consent !== 'PENDING' || !state.requestId) return unchanged('NO_PENDING_REQUEST');
-      if (!state.requestExpiresAt || command.sourceAt >= state.requestExpiresAt) return unchanged('REQUEST_EXPIRED');
+      // Un « OUI » ne vaut accord qu'en réponse à une demande de l'agence
+      // encore valable, ou à une invitation du robot de moins de 24 h (unité
+      // 47). Sinon il vérifie seulement le numéro (fait par le webhook).
+      const requestValid =
+        consent === 'PENDING' &&
+        state.requestId !== null &&
+        state.requestExpiresAt !== null &&
+        command.sourceAt < state.requestExpiresAt;
+      const invitationValid =
+        (consent === 'NOT_ASKED' || consent === 'PENDING') &&
+        state.invitedAt !== null &&
+        command.sourceAt > state.invitedAt &&
+        command.sourceAt.getTime() < state.invitedAt.getTime() + WHATSAPP_INVITATION_TTL_MS;
+      if (!requestValid && !invitationValid) {
+        return unchanged(consent === 'PENDING' && state.requestId ? 'REQUEST_EXPIRED' : 'NO_PENDING_REQUEST');
+      }
       if (isStale(state, command.sourceAt)) return unchanged('STALE');
       return {
         ...changed(state, 'ACCEPTED', 'BOT', command.sourceAt, 'close'),
-        answeredRequestId: state.requestId,
+        answeredRequestId: requestValid ? state.requestId : null,
+        answeredInvitationAt: requestValid ? null : state.invitedAt,
       };
     }
 
@@ -136,7 +154,7 @@ function changed(
   request: 'open' | 'close',
 ): Extract<ConsentDecision, { kind: 'changed' }> {
   const changedAt = state.changedAt && state.changedAt.getTime() > at.getTime() ? state.changedAt : at;
-  return { kind: 'changed', next, source, changedAt, request, answeredRequestId: null };
+  return { kind: 'changed', next, source, changedAt, request, answeredRequestId: null, answeredInvitationAt: null };
 }
 
 function unchanged(reason: ConsentUnchangedReason): ConsentDecision {

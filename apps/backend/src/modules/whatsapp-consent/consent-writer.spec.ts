@@ -14,6 +14,7 @@ describe('applyConsentCommand', () => {
     user: { findUnique: jest.Mock; updateMany: jest.Mock };
     whatsappConsentEvent: { create: jest.Mock };
     tenantProfile: { updateMany: jest.Mock };
+    whatsappConversation: { deleteMany: jest.Mock };
   };
 
   const baseUser = {
@@ -30,6 +31,7 @@ describe('applyConsentCommand', () => {
       user: { findUnique: jest.fn().mockResolvedValue(baseUser), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       whatsappConsentEvent: { create: jest.fn().mockResolvedValue({}) },
       tenantProfile: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      whatsappConversation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
   });
 
@@ -78,6 +80,7 @@ describe('applyConsentCommand', () => {
         phoneLast2: '33',
         requestId: null,
         sourceAt: null,
+        invitedAt: null,
       },
     });
     expect(tx.tenantProfile.updateMany).not.toHaveBeenCalled();
@@ -131,8 +134,10 @@ describe('applyConsentCommand', () => {
     });
     expect(tx.tenantProfile.updateMany).toHaveBeenCalledWith({
       where: { userId: 'tenant-1' },
-      data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null },
+      data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null, pinVerifiedAt: null, pinVerifiedPhone: null },
     });
+    // Conversation avec le robot fermée (unité 47).
+    expect(tx.whatsappConversation.deleteMany).toHaveBeenCalledWith({ where: { userId: 'tenant-1' } });
   });
 
   it('un arrêt fixe la date d’arrêt une seule fois', async () => {

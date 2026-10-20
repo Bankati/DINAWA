@@ -225,6 +225,20 @@ enum WhatsappConsentMethod {
   WRITTEN
 }
 
+// Robot WhatsApp (unité 47) : où en est la conversation. AWAITING_PIN = le
+// robot vient de demander le code pour une action protégée (pendingAction).
+enum WhatsappBotState {
+  MENU
+  AWAITING_PIN
+}
+
+// Actions protégées par le code locataire (unité 47, décision 2). « Payer »
+// n'en fait pas partie : le lien ne montre que prénom, logement et montant.
+enum WhatsappBotAction {
+  RECEIPT
+  STATEMENT
+}
+
 enum WhatsappDirection {
   OUTBOUND
   INBOUND
@@ -349,6 +363,11 @@ model User {
   // automatiquement plus vérifié. Aucun envoi sans numéro vérifié.
   whatsappVerifiedPhone           String?
   whatsappPhoneVerifiedAt         DateTime?           @db.Timestamptz(6)
+  // Robot (unité 47, décision 1) : heure de la dernière invitation envoyée
+  // à un locataire sans accord (« répondez OUI »). Une par 24 h au plus,
+  // réservée par écriture conditionnelle ; un « OUI » ne vaut accord que
+  // dans les 24 h qui suivent.
+  whatsappInvitedAt               DateTime?           @db.Timestamptz(6)
   createdAt                       DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt                       DateTime            @updatedAt @db.Timestamptz(6)
 
@@ -381,6 +400,7 @@ model User {
   whatsappMessages       WhatsappMessage[]
   whatsappConsentEvents  WhatsappConsentEvent[] @relation("WhatsappConsentSubject")
   whatsappConsentActions WhatsappConsentEvent[] @relation("WhatsappConsentActor")
+  whatsappConversation   WhatsappConversation?
 
   @@map("users")
 }
@@ -433,6 +453,12 @@ model TenantProfile {
   whatsappPinHash   String?
   pinFailedAttempts Int       @default(0)
   pinLockedUntil    DateTime? @db.Timestamptz(6)
+  // Dernier bon code donné au robot (unité 47) : ouvre les actions
+  // protégées pendant 30 jours, seulement si le numéro vérifié est toujours
+  // pinVerifiedPhone. Effacé à chaque nouveau code, réinitialisation ou
+  // changement de numéro.
+  pinVerifiedAt     DateTime? @db.Timestamptz(6)
+  pinVerifiedPhone  String?
   createdAt         DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
 
@@ -1051,6 +1077,9 @@ model WhatsappConsentEvent {
   phoneLast2       String?
   requestId        String?
   sourceAt         DateTime?                @db.Timestamptz(6)
+  // « OUI » en réponse à l'invitation du robot (unité 47) : heure de cette
+  // invitation (preuve que l'accord répond à une invitation valable).
+  invitedAt        DateTime?                @db.Timestamptz(6)
   createdAt        DateTime                 @default(now()) @db.Timestamptz(6)
 
   @@index([userId, createdAt])
@@ -1094,4 +1123,25 @@ model ContactMessage {
   @@index([status])
   @@index([createdAt])
   @@map("contact_messages")
+}
+
+// Conversation d'un locataire avec le robot WhatsApp (unité 47) — en base
+// pour survivre à un redémarrage. Revient au menu après 30 min sans message.
+// L'état n'autorise jamais rien à lui seul : une action protégée revérifie
+// le code (TenantProfile.pinVerifiedAt / pinVerifiedPhone) à chaque fois.
+// replyWindowStart / replyCount : anti-abus, 20 réponses par heure au plus,
+// comptées par écriture conditionnelle.
+model WhatsappConversation {
+  id               String             @id @default(cuid())
+  userId           String             @unique
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state            WhatsappBotState   @default(MENU)
+  pendingAction    WhatsappBotAction?
+  lastActivityAt   DateTime           @default(now()) @db.Timestamptz(6)
+  replyWindowStart DateTime           @default(now()) @db.Timestamptz(6)
+  replyCount       Int                @default(0)
+  createdAt        DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(6)
+
+  @@map("whatsapp_conversations")
 }

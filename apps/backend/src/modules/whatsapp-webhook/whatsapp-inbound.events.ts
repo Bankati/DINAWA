@@ -7,6 +7,6 @@ export const WHATSAPP_INBOUND_RECEIVED = 'whatsapp.inbound';
 export type WhatsappInboundReceivedEvent = { messageId: string };
 
 // Traitements attendus d'un message reçu : réponse à un STOP (unité 44), à
-// un « OUI » valable ou à un « REPRENDRE » (unité 45). Le robot (unité 47)
-// ajoutera le sien.
-export type InboundAction = 'STOP_CONFIRMATION' | 'CONSENT_WELCOME' | 'RESUME_CONFIRMATION';
+// un « OUI » valable ou à un « REPRENDRE » (unité 45), et tout autre message
+// d'un locataire confié au robot (unité 47).
+export type InboundAction = 'STOP_CONFIRMATION' | 'CONSENT_WELCOME' | 'RESUME_CONFIRMATION' | 'BOT';

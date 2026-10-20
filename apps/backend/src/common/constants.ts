@@ -163,6 +163,26 @@ export const WHATSAPP_CONSENT_REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // 2026-10-17 (« Transaction not found » → 500). maxWait : attente d'une
 // connexion libre ; timeout : durée maximale de la transaction.
 export const CONSENT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 15_000 } as const;
+// Invitation du robot à un locataire sans accord (unité 47, décision 1) :
+// une par 24 h au plus, et un « OUI » ne vaut accord que dans les 24 h qui
+// suivent l'invitation.
+export const WHATSAPP_INVITATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Robot WhatsApp (unité 47, /architect 2026-10-17). Retour au menu après 30
+// min sans message ; anti-abus : 20 réponses par locataire et par heure au
+// plus (au-delà, silence jusqu'à l'heure suivante).
+export const BOT_CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000;
+export const BOT_MAX_REPLIES_PER_HOUR = 20;
+export const BOT_REPLY_WINDOW_MS = 60 * 60 * 1000;
+// Code locataire demandé par le robot (décision 2) : 5 erreurs → blocage
+// 1 h ; un bon code ouvre les actions protégées 30 jours, sur ce numéro.
+// Alerte Sentry si les échecs dépassent le seuil sur tous les comptes en 1 h.
+export const PIN_MAX_ATTEMPTS = 5;
+export const PIN_LOCK_MS = 60 * 60 * 1000;
+export const PIN_VERIFICATION_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
+export const PIN_FAILURE_ALERT_THRESHOLD = 50;
+// Relevé du robot : 6 derniers mois (mois en cours compris).
+export const BOT_STATEMENT_MONTHS = 6;
 // Phrase pré-remplie par le lien / QR code « Écrire à WARAH » : reconnue
 // comme un « OUI » par le webhook (consent-keyword.ts).
 export const WHATSAPP_CONSENT_PREFILL_TEXT =

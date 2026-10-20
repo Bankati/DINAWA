@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WhatsappBotService } from '../whatsapp-bot/whatsapp-bot.service';
 import {
   CONSENT_WELCOME_SOURCE,
   CONSENT_WELCOME_TEXT,
@@ -19,7 +20,7 @@ import {
 import { InboundAction, WHATSAPP_INBOUND_RECEIVED, WhatsappInboundReceivedEvent } from './whatsapp-inbound.events';
 
 // Réponses libres (unité 45) : texte et source de chaque action.
-const REPLIES: Record<Exclude<InboundAction, 'STOP_CONFIRMATION'>, { source: string; text: string }> = {
+const REPLIES: Record<Exclude<InboundAction, 'STOP_CONFIRMATION' | 'BOT'>, { source: string; text: string }> = {
   CONSENT_WELCOME: { source: CONSENT_WELCOME_SOURCE, text: CONSENT_WELCOME_TEXT },
   RESUME_CONFIRMATION: { source: RESUME_CONFIRMATION_SOURCE, text: RESUME_CONFIRMATION_TEXT },
 };
@@ -38,6 +39,7 @@ export class WhatsappInboundProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsappService,
+    private readonly bot: WhatsappBotService,
   ) {}
 
   @OnEvent(WHATSAPP_INBOUND_RECEIVED, { async: true, promisify: true })
@@ -99,7 +101,15 @@ export class WhatsappInboundProcessor {
 
     const message = await this.prisma.whatsappMessage.findUnique({
       where: { id: messageId },
-      select: { userId: true, inboundAction: true, createdAt: true, sentAt: true, processingAttempts: true },
+      select: {
+        userId: true,
+        inboundAction: true,
+        createdAt: true,
+        sentAt: true,
+        processingAttempts: true,
+        body: true,
+        payload: true,
+      },
     });
     if (!message) return;
 
@@ -108,7 +118,20 @@ export class WhatsappInboundProcessor {
       if (action && message.userId) {
         // Heure Meta du message du locataire : départ de la fenêtre de 24 h.
         const receivedAt = message.sentAt ?? message.createdAt;
-        await this.replyOnce(message.userId, action, message.createdAt, receivedAt);
+        if (action === 'BOT') {
+          // Robot (unité 47) : il décide seul de la réponse (menu,
+          // invitation ou silence) et ne répond jamais deux fois (il marque
+          // lui-même ce message traité juste avant d'envoyer).
+          await this.bot.handle({
+            messageId,
+            userId: message.userId,
+            receivedAt,
+            text: message.body,
+            payload: message.payload,
+          });
+        } else {
+          await this.replyOnce(message.userId, action, message.createdAt, receivedAt);
+        }
       }
       await this.prisma.whatsappMessage.update({ where: { id: messageId }, data: { processedAt: new Date() } });
     } catch (error) {
@@ -123,7 +146,12 @@ export class WhatsappInboundProcessor {
 
   // Une réponse déjà créée depuis l'enregistrement du message (traitement
   // interrompu APRÈS l'envoi, puis repris) n'est jamais renvoyée.
-  private async replyOnce(userId: string, action: InboundAction, recordedAt: Date, receivedAt: Date): Promise<void> {
+  private async replyOnce(
+    userId: string,
+    action: Exclude<InboundAction, 'BOT'>,
+    recordedAt: Date,
+    receivedAt: Date,
+  ): Promise<void> {
     const source = action === 'STOP_CONFIRMATION' ? STOP_CONFIRMATION_SOURCE : REPLIES[action].source;
     const alreadySent = await this.prisma.whatsappMessage.findFirst({
       where: { userId, direction: 'OUTBOUND', source, createdAt: { gte: recordedAt } },

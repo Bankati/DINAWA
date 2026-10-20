@@ -11,12 +11,13 @@ const yesterday = (): Date => new Date(Date.now() - 24 * 60 * 60 * 1000);
 
 describe('WhatsappService', () => {
   let prisma: { whatsappMessage: { create: jest.Mock; update: jest.Mock } };
-  let access: { canUseWhatsapp: jest.Mock; canSendStopConfirmation: jest.Mock };
+  let access: { canUseWhatsapp: jest.Mock; canSendStopConfirmation: jest.Mock; canSendInvitation?: jest.Mock };
   let client: {
     sendTemplate: jest.Mock;
     sendText: jest.Mock;
     uploadMedia: jest.Mock;
     sendDocumentMessage: jest.Mock;
+    sendInteractiveList?: jest.Mock;
   };
   let service: WhatsappService;
 
@@ -318,6 +319,63 @@ describe('WhatsappService', () => {
       });
       expect(access.canSendStopConfirmation).not.toHaveBeenCalled();
       expect(client.sendText).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('réponses du robot (unité 47)', () => {
+    const rows = [{ id: 'PAY', title: 'Payer mon loyer' }];
+
+    it('menu cliquable : accès revérifié, ligne INTERACTIVE, un seul appel Meta', async () => {
+      client.sendInteractiveList = jest.fn().mockResolvedValue('wamid.list');
+      await expect(
+        service.replyList({ userId: 'tenant-1', source: 'bot-menu', body: 'Bonjour', buttonLabel: 'Voir', rows, inboundReceivedAt: justNow() }),
+      ).resolves.toMatchObject({ outcome: 'SENT' });
+      expect(access.canUseWhatsapp).toHaveBeenCalledWith('tenant-1');
+      expect(createdData()).toMatchObject({ messageType: 'INTERACTIVE', source: 'bot-menu', payload: { body: 'Bonjour', rows: ['PAY'] } });
+      expect(client.sendInteractiveList).toHaveBeenCalledTimes(1);
+    });
+
+    it('menu hors fenêtre de 24 h : refus, aucun appel', async () => {
+      client.sendInteractiveList = jest.fn();
+      await expect(
+        service.replyList({ userId: 'tenant-1', source: 'bot-menu', body: 'B', buttonLabel: 'V', rows, inboundReceivedAt: yesterday() }),
+      ).resolves.toEqual({ outcome: 'REFUSED', reason: 'REPLY_WINDOW_CLOSED' });
+      expect(client.sendInteractiveList).not.toHaveBeenCalled();
+    });
+
+    it('quittance en réponse : PDF en pièce jointe avec légende, sans modèle', async () => {
+      client.uploadMedia.mockResolvedValue('media-1');
+      client.sendDocumentMessage.mockResolvedValue('wamid.doc');
+      await service.replyDocument({
+        userId: 'tenant-1',
+        source: 'bot-receipt',
+        paymentId: 'pay-1',
+        document: receipt.document,
+        caption: 'Votre quittance',
+        inboundReceivedAt: justNow(),
+      });
+      expect(client.sendTemplate).not.toHaveBeenCalled();
+      expect(client.sendDocumentMessage).toHaveBeenCalledWith(expect.objectContaining({ caption: 'Votre quittance', mediaId: 'media-1' }));
+    });
+
+    it('document hors fenêtre de 24 h : refus avant tout téléversement', async () => {
+      await service.replyDocument({ userId: 'tenant-1', source: 'bot-receipt', document: receipt.document, inboundReceivedAt: yesterday() });
+      expect(client.uploadMedia).not.toHaveBeenCalled();
+    });
+
+    it('invitation : contrôlée par canSendInvitation, jamais par canUseWhatsapp', async () => {
+      access.canSendInvitation = jest.fn().mockResolvedValue({ allowed: true, recipientPhone: '90112233', metaNumber: '22890112233' });
+      client.sendText.mockResolvedValue('wamid.inv');
+      await expect(service.sendInvitation('tenant-1', 'Répondez OUI', justNow())).resolves.toMatchObject({ outcome: 'SENT' });
+      expect(access.canSendInvitation).toHaveBeenCalledWith('tenant-1');
+      expect(access.canUseWhatsapp).not.toHaveBeenCalled();
+      expect(createdData()).toMatchObject({ source: 'bot-invitation', payload: { body: 'Répondez OUI' } });
+    });
+
+    it('invitation refusée (STOP, pas de bail…) : aucune ligne, aucun appel', async () => {
+      access.canSendInvitation = jest.fn().mockResolvedValue({ allowed: false, reason: 'NO_CONSENT' });
+      await expect(service.sendInvitation('tenant-1', 'Répondez OUI', justNow())).resolves.toEqual({ outcome: 'REFUSED', reason: 'NO_CONSENT' });
+      expect(prisma.whatsappMessage.create).not.toHaveBeenCalled();
     });
   });
 

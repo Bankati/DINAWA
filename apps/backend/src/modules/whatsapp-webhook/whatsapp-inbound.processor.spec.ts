@@ -13,6 +13,7 @@ describe('WhatsappInboundProcessor', () => {
     whatsappMessage: { updateMany: jest.Mock; findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock; findMany: jest.Mock };
   };
   let whatsapp: { sendStopConfirmation: jest.Mock; reply: jest.Mock };
+  let bot: { handle: jest.Mock };
   let processor: WhatsappInboundProcessor;
 
   beforeEach(() => {
@@ -32,7 +33,30 @@ describe('WhatsappInboundProcessor', () => {
       sendStopConfirmation: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'out-1', wamid: 'w' }),
       reply: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'out-2', wamid: 'w2' }),
     };
-    processor = new WhatsappInboundProcessor(prisma as never, whatsapp as never);
+    bot = { handle: jest.fn().mockResolvedValue(undefined) };
+    processor = new WhatsappInboundProcessor(prisma as never, whatsapp as never, bot as never);
+  });
+
+  it('action BOT : le robot reçoit le message (texte, contenu, heure Meta), puis le message est marqué traité (unité 47)', async () => {
+    prisma.whatsappMessage.findUnique.mockResolvedValue({
+      userId: 'tenant-1',
+      inboundAction: 'BOT',
+      createdAt: STOP_AT,
+      sentAt: STOP_META_AT,
+      processingAttempts: 1,
+      body: 'payer',
+      payload: { replyId: 'PAY' },
+    });
+    await processor.process('in-1', NOW);
+    expect(bot.handle).toHaveBeenCalledWith({
+      messageId: 'in-1',
+      userId: 'tenant-1',
+      receivedAt: STOP_META_AT,
+      text: 'payer',
+      payload: { replyId: 'PAY' },
+    });
+    expect(whatsapp.reply).not.toHaveBeenCalled();
+    expect(prisma.whatsappMessage.update).toHaveBeenCalled();
   });
 
   it('réserve le message par une écriture conditionnelle avant de le traiter', async () => {

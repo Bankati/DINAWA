@@ -79,6 +79,7 @@ function fakePrisma(users: FakeUser[]) {
         return Promise.resolve(data);
       }),
     },
+    whatsappConversation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     tenantProfile: {
       findUnique: jest.fn().mockResolvedValue({ invitedByUserId: 'owner-1' }),
       updateMany: jest.fn(
@@ -337,7 +338,13 @@ describe('WhatsappConsentService', () => {
       });
       await expect(service.generatePinForTenant(tenantUser)).resolves.toEqual({ pin: '048213' });
       expect(tokens.hashPin).toHaveBeenCalledWith('048213');
-      expect(tenant.tenantProfile).toEqual({ whatsappPinHash: '$2b$12$hash', pinFailedAttempts: 0, pinLockedUntil: null });
+      expect(tenant.tenantProfile).toEqual({
+        whatsappPinHash: '$2b$12$hash',
+        pinFailedAttempts: 0,
+        pinLockedUntil: null,
+        pinVerifiedAt: null,
+        pinVerifiedPhone: null,
+      });
       // Jamais réaffiché ensuite : l'état ne dit que « un code existe ».
       const view = await service.getForTenant(tenantUser);
       expect(view.pinSet).toBe(true);
@@ -356,7 +363,13 @@ describe('WhatsappConsentService', () => {
       const view = await service.resetPinByAgency(owner, 'tenant-1');
       expect(view.pinSet).toBe(false);
       expect(JSON.stringify(view)).not.toContain('hash');
-      expect(tenant.tenantProfile).toEqual({ whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null });
+      expect(tenant.tenantProfile).toEqual({
+        whatsappPinHash: null,
+        pinFailedAttempts: 0,
+        pinLockedUntil: null,
+        pinVerifiedAt: null,
+        pinVerifiedPhone: null,
+      });
     });
 
     it('réinitialisation refusée à une agence sans droit sur le bien', async () => {

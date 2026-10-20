@@ -61,7 +61,15 @@ const STATUS_SELECT = {
   tenantProfile: { select: { whatsappPinHash: true } },
 } as const;
 
-const PIN_RESET = { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null };
+// Nouveau code ou réinitialisation : la vérification du robot (30 jours,
+// unité 47) tombe avec l'ancien code.
+const PIN_RESET = {
+  whatsappPinHash: null,
+  pinFailedAttempts: 0,
+  pinLockedUntil: null,
+  pinVerifiedAt: null,
+  pinVerifiedPhone: null,
+};
 
 const STOPPED_MESSAGE = 'Le locataire a arrêté les messages WhatsApp : lui seul peut les réactiver';
 // Message volontairement neutre : ne révèle pas à qui appartient le numéro.

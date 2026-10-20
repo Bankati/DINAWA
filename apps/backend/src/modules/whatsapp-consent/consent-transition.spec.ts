@@ -7,7 +7,7 @@ const LATER = new Date('2026-10-16T11:00:00.000Z');
 const EXPIRES = new Date('2026-10-23T10:00:00.000Z');
 
 function state(consent: WhatsappConsent, extra: Partial<ConsentState> = {}): ConsentState {
-  return { consent, changedAt: null, requestId: null, requestExpiresAt: null, ...extra };
+  return { consent, changedAt: null, requestId: null, requestExpiresAt: null, invitedAt: null, ...extra };
 }
 
 const pending = (extra: Partial<ConsentState> = {}): ConsentState =>
@@ -25,6 +25,7 @@ describe('decideConsent — agence', () => {
       changedAt: NOW,
       request: 'open',
       answeredRequestId: null,
+      answeredInvitationAt: null,
     });
   });
 
@@ -97,6 +98,7 @@ describe('decideConsent — « OUI » (confirmation par le robot)', () => {
       changedAt: LATER,
       request: 'close',
       answeredRequestId: 'req-1',
+      answeredInvitationAt: null,
     });
   });
 
@@ -115,6 +117,59 @@ describe('decideConsent — « OUI » (confirmation par le robot)', () => {
 
   it('même seconde que la demande = ambigu = pas d’activation', () => {
     expect(decideConsent(pending(), oui(NOW), LATER)).toEqual({ kind: 'unchanged', reason: 'STALE' });
+  });
+});
+
+describe('decideConsent — « OUI » en réponse à l’invitation du robot (unité 47)', () => {
+  const INVITED = new Date('2026-10-16T09:30:00.000Z');
+  const oui = (sourceAt: Date): ConsentCommand => ({ type: 'BOT_CONFIRM', sourceAt });
+
+  it.each(['NOT_ASKED', 'PENDING'] as const)('%s : un OUI après l’invitation active le canal, preuve gardée', (from) => {
+    expect(decideConsent(state(from, { invitedAt: INVITED }), oui(NOW), NOW)).toEqual({
+      kind: 'changed',
+      next: 'ACCEPTED',
+      source: 'BOT',
+      changedAt: NOW,
+      request: 'close',
+      answeredRequestId: null,
+      answeredInvitationAt: INVITED,
+    });
+  });
+
+  it('un OUI plus de 24 h après l’invitation ne vaut pas accord', () => {
+    const late = new Date(INVITED.getTime() + 24 * 60 * 60 * 1000 + 1000);
+    expect(decideConsent(state('NOT_ASKED', { invitedAt: INVITED }), oui(late), late)).toEqual({
+      kind: 'unchanged',
+      reason: 'NO_PENDING_REQUEST',
+    });
+  });
+
+  it('un OUI envoyé AVANT l’invitation (message en retard) ne vaut pas accord', () => {
+    expect(decideConsent(state('NOT_ASKED', { invitedAt: NOW }), oui(EARLIER), LATER)).toMatchObject({ kind: 'unchanged' });
+  });
+
+  it('sans invitation ni demande : le OUI ne fait rien', () => {
+    expect(decideConsent(state('NOT_ASKED'), oui(NOW), NOW)).toEqual({ kind: 'unchanged', reason: 'NO_PENDING_REQUEST' });
+  });
+
+  it('après un STOP, une invitation ne permet jamais de réactiver par OUI (seul REPRENDRE le peut)', () => {
+    expect(decideConsent(state('STOPPED', { invitedAt: INVITED }), oui(NOW), NOW)).toMatchObject({ kind: 'unchanged' });
+  });
+
+  it('un changement plus récent que le OUI l’emporte (ancienneté)', () => {
+    expect(decideConsent(state('NOT_ASKED', { invitedAt: INVITED, changedAt: LATER }), oui(NOW), LATER)).toEqual({
+      kind: 'unchanged',
+      reason: 'STALE',
+    });
+  });
+
+  it('demande de l’agence valable ET invitation : la preuve garde la demande de l’agence', () => {
+    const decision = decideConsent(
+      state('PENDING', { changedAt: EARLIER, requestId: 'req-1', requestExpiresAt: EXPIRES, invitedAt: INVITED }),
+      oui(NOW),
+      NOW,
+    );
+    expect(decision).toMatchObject({ kind: 'changed', answeredRequestId: 'req-1', answeredInvitationAt: null });
   });
 });
 

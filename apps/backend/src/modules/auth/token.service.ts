@@ -73,6 +73,18 @@ export class TokenService {
     return bcrypt.compare(this.pepperPin(pin), hash);
   }
 
+  // Code tapé dans WhatsApp (robot, unité 47) : le webhook ne garde JAMAIS
+  // le code en clair, seulement cette empreinte HMAC (clé hors de la base),
+  // effacée dès la vérification. pinDigest() puis verifyPinDigest() donnent
+  // exactement le même résultat que verifyPin(pin, hash).
+  pinDigest(pin: string): string {
+    return this.pepperPin(pin);
+  }
+
+  async verifyPinDigest(digest: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(digest, hash);
+  }
+
   private pepperPin(pin: string): string {
     const pepper = this.config.get<string>('WHATSAPP_PIN_PEPPER');
     // Obligatoire au démarrage quand WhatsApp est allumé (env.validation.ts) ;

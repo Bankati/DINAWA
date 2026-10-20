@@ -158,6 +158,69 @@ describe('WhatsappAccessService.canUseWhatsapp', () => {
   });
 });
 
+describe('WhatsappAccessService.canSendInvitation (unité 47)', () => {
+  let prisma: {
+    user: { findUnique: jest.Mock };
+    lease: { findFirst: jest.Mock };
+    mandate: { findFirst: jest.Mock };
+    subscription: { findUnique: jest.Mock };
+  };
+  let config: { get: jest.Mock };
+  let platformSettings: { whatsappEnabledTiers: jest.Mock };
+  let service: WhatsappAccessService;
+  const tenant = { phone: '90112233', whatsappPhone: null, whatsappConsent: 'NOT_ASKED', whatsappVerifiedPhone: '90112233', role: 'TENANT' };
+
+  beforeEach(() => {
+    prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(tenant) },
+      lease: { findFirst: jest.fn().mockResolvedValue({ id: 'lease-1', property: { id: 'prop-1', ownerId: 'owner-1' } }) },
+      mandate: { findFirst: jest.fn().mockResolvedValue(null) },
+      subscription: { findUnique: jest.fn().mockResolvedValue({ tier: 'STARTER' }) },
+    };
+    config = { get: jest.fn().mockReturnValue(true) };
+    platformSettings = { whatsappEnabledTiers: jest.fn().mockResolvedValue(['STARTER', 'PRO', 'PREMIUM']) };
+    service = new WhatsappAccessService(prisma as never, config as never, platformSettings as never);
+  });
+
+  it.each(['NOT_ASKED', 'PENDING'])('autorise l’invitation d’un locataire sans accord (%s), vers son numéro vérifié', async (consent) => {
+    prisma.user.findUnique.mockResolvedValue({ ...tenant, whatsappConsent: consent });
+    await expect(service.canSendInvitation('tenant-1')).resolves.toEqual({
+      allowed: true,
+      recipientPhone: '90112233',
+      metaNumber: '22890112233',
+    });
+  });
+
+  it.each(['ACCEPTED', 'STOPPED'])('jamais pour un accord déjà donné ni après un STOP (%s)', async (consent) => {
+    prisma.user.findUnique.mockResolvedValue({ ...tenant, whatsappConsent: consent });
+    await expect(service.canSendInvitation('tenant-1')).resolves.toMatchObject({ reason: 'NO_CONSENT' });
+  });
+
+  it('numéro non vérifié : refus', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...tenant, whatsappVerifiedPhone: null });
+    await expect(service.canSendInvitation('tenant-1')).resolves.toMatchObject({ reason: 'NUMBER_NOT_VERIFIED' });
+  });
+
+  it('non-locataire ou sans bail actif : refus', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...tenant, role: 'OWNER' });
+    await expect(service.canSendInvitation('tenant-1')).resolves.toMatchObject({ reason: 'NO_ACTIVE_LEASE' });
+    prisma.user.findUnique.mockResolvedValue(tenant);
+    prisma.lease.findFirst.mockResolvedValue(null);
+    await expect(service.canSendInvitation('tenant-1')).resolves.toMatchObject({ reason: 'NO_ACTIVE_LEASE' });
+  });
+
+  it('forfait du responsable sans WhatsApp : refus', async () => {
+    platformSettings.whatsappEnabledTiers.mockResolvedValue(['PRO']);
+    await expect(service.canSendInvitation('tenant-1')).resolves.toMatchObject({ reason: 'TIER_NOT_INCLUDED' });
+  });
+
+  it('interrupteur éteint : refus sans lire la base', async () => {
+    config.get.mockReturnValue(false);
+    await expect(service.canSendInvitation('tenant-1')).resolves.toMatchObject({ reason: 'CHANNEL_DISABLED' });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+});
+
 describe('WhatsappAccessService.canSendStopConfirmation (unité 44)', () => {
   let prisma: { user: { findUnique: jest.Mock } };
   let config: { get: jest.Mock };

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -16,22 +16,38 @@ import { fromWhatsappNumber, storedPhoneVariants } from '../../common/utils/phon
 import { classifyMetaError } from '../whatsapp-channel/meta-error';
 import { InboundMessage, InboundStatus, parseMetaNotification } from './meta-webhook-payload';
 import { DeliveryState, StatusEvent, applyStatusEvent } from './status-transition';
-import { CONSENT_TRANSACTION_OPTIONS, WHATSAPP_CONSENT_NOTICE_VERSION } from '../../common/constants';
+import {
+  CONSENT_TRANSACTION_OPTIONS,
+  WHATSAPP_CONSENT_NOTICE_VERSION,
+} from '../../common/constants';
 import { applyConsentCommand } from '../whatsapp-consent/consent-writer';
 import { WhatsappConsentService } from '../whatsapp-consent/whatsapp-consent.service';
+import { TokenService } from '../auth/token.service';
 import { ConsentKeyword, parseConsentKeyword } from './consent-keyword';
-import { InboundAction, WHATSAPP_INBOUND_RECEIVED, WhatsappInboundReceivedEvent } from './whatsapp-inbound.events';
+import {
+  InboundAction,
+  WHATSAPP_INBOUND_RECEIVED,
+  WhatsappInboundReceivedEvent,
+} from './whatsapp-inbound.events';
 
 const INBOUND_SOURCE = 'inbound';
 // Un accusé peut croiser un autre accusé du même message : l'écriture est
 // conditionnée à l'état lu, et recalculée si elle a perdu la course.
 const STATUS_WRITE_ATTEMPTS = 3;
 
-type KnownSender = { id: string };
+type KnownSender = { id: string; role: UserRole };
+
+// Un message qui n'est QUE 6 chiffres est presque toujours le code
+// locataire tapé pour le robot (unité 47) : jamais gardé en clair.
+const PIN_MESSAGE = /^\s*(\d{6})\s*$/;
 
 // statusChangedFor : locataire dont l'état affiché à l'agence a changé
 // (numéro vérifié ou consentement), pour vider le cache de ses listes.
-type RecordedInbound = { id: string; action: InboundAction | null; statusChangedFor: string | null };
+type RecordedInbound = {
+  id: string;
+  action: InboundAction | null;
+  statusChangedFor: string | null;
+};
 
 // Mot-clé reçu → commande du consentement, et réponse à envoyer si l'état a
 // réellement changé (unités 44-45).
@@ -42,7 +58,13 @@ const KEYWORD_ACTION: Record<ConsentKeyword, InboundAction> = {
   RESUME: 'RESUME_CONFIRMATION',
 };
 
-type Summary = { messages: number; duplicates: number; statuses: number; unknownStatuses: number; skipped: number };
+type Summary = {
+  messages: number;
+  duplicates: number;
+  statuses: number;
+  unknownStatuses: number;
+  skipped: number;
+};
 
 // Webhook Meta (unité 44, /architect 2026-10-13). Ordre imposé par la
 // décision 5 : vérifier la signature, ENREGISTRER, laisser le contrôleur
@@ -58,11 +80,16 @@ export class WhatsappWebhookService {
     private readonly config: ConfigService,
     private readonly events: EventEmitter2,
     private readonly consent: WhatsappConsentService,
+    private readonly tokens: TokenService,
   ) {}
 
   // Poignée de main de l'abonnement (GET) : Meta renvoie le jeton choisi par
   // l'équipe et attend le challenge en retour.
-  verifyHandshake(mode: string | undefined, token: string | undefined, challenge: string | undefined): string {
+  verifyHandshake(
+    mode: string | undefined,
+    token: string | undefined,
+    challenge: string | undefined,
+  ): string {
     const expected = this.config.get<string>('WHATSAPP_VERIFY_TOKEN');
     if (!expected) throw new ServiceUnavailableException('Webhook WhatsApp non configuré');
     if (mode !== 'subscribe' || !token || !challenge || !sameSecret(token, expected)) {
@@ -71,7 +98,11 @@ export class WhatsappWebhookService {
     return challenge;
   }
 
-  async handleNotification(rawBody: Buffer | undefined, signature: string | undefined, body: unknown): Promise<void> {
+  async handleNotification(
+    rawBody: Buffer | undefined,
+    signature: string | undefined,
+    body: unknown,
+  ): Promise<void> {
     // Interrupteur général éteint ou non : le webhook reste ouvert (décision
     // 6), un STOP reçu pendant une coupure doit être enregistré. Sans clé
     // secrète, impossible d'authentifier Meta : 503, Meta réessaiera.
@@ -82,14 +113,24 @@ export class WhatsappWebhookService {
     }
 
     const phoneNumberId = this.config.get<string>('WHATSAPP_PHONE_NUMBER_ID');
-    const summary: Summary = { messages: 0, duplicates: 0, statuses: 0, unknownStatuses: 0, skipped: 0 };
+    const summary: Summary = {
+      messages: 0,
+      duplicates: 0,
+      statuses: 0,
+      unknownStatuses: 0,
+      skipped: 0,
+    };
     const toProcess: string[] = [];
     // Locataires dont l'état WhatsApp affiché à l'agence a changé.
     const changedTenants = new Set<string>();
 
     for (const notification of parseMetaNotification(body)) {
       // Une notification d'un autre numéro du compte n'est pas pour WARAH.
-      if (phoneNumberId && notification.phoneNumberId && notification.phoneNumberId !== phoneNumberId) {
+      if (
+        phoneNumberId &&
+        notification.phoneNumberId &&
+        notification.phoneNumberId !== phoneNumberId
+      ) {
         summary.skipped += notification.messages.length + notification.statuses.length;
         continue;
       }
@@ -149,7 +190,9 @@ export class WhatsappWebhookService {
       const result = applyStatusEvent(message, event);
       if (result.kind === 'unchanged') return true;
       if (result.kind === 'incoherent') {
-        this.logger.warn(`[whatsapp-webhook] accusé « ${status.status} » ignoré pour message=${message.id} : ${result.reason}`);
+        this.logger.warn(
+          `[whatsapp-webhook] accusé « ${status.status} » ignoré pour message=${message.id} : ${result.reason}`,
+        );
         return true;
       }
 
@@ -173,14 +216,23 @@ export class WhatsappWebhookService {
       }
     }
 
-    this.logger.warn(`[whatsapp-webhook] accusé « ${status.status} » non appliqué après ${STATUS_WRITE_ATTEMPTS} essais`);
+    this.logger.warn(
+      `[whatsapp-webhook] accusé « ${status.status} » non appliqué après ${STATUS_WRITE_ATTEMPTS} essais`,
+    );
     return true;
   }
 
   private async findOutbound(
     status: InboundStatus,
   ): Promise<(DeliveryState & { id: string; wamid: string | null }) | null> {
-    const select = { id: true, wamid: true, status: true, sentAt: true, deliveredAt: true, readAt: true } as const;
+    const select = {
+      id: true,
+      wamid: true,
+      status: true,
+      sentAt: true,
+      deliveredAt: true,
+      readAt: true,
+    } as const;
     if (status.callbackData) {
       const byId = await this.prisma.whatsappMessage.findFirst({
         where: { id: status.callbackData, direction: 'OUTBOUND' },
@@ -188,14 +240,21 @@ export class WhatsappWebhookService {
       });
       if (byId) return byId;
     }
-    return this.prisma.whatsappMessage.findFirst({ where: { wamid: status.wamid, direction: 'OUTBOUND' }, select });
+    return this.prisma.whatsappMessage.findFirst({
+      where: { wamid: status.wamid, direction: 'OUTBOUND' },
+      select,
+    });
   }
 
   // Un échec signalé par accusé dont la cause est chez WARAH (compte bloqué,
   // jeton, paiement...) : tous les envois échoueront, un humain doit agir.
   private alertIfConfigurationIssue(status: InboundStatus, messageId: string): void {
     if (status.errorCode === null) return;
-    const { alert } = classifyMetaError({ httpStatus: 400, errorCode: status.errorCode, errorSubcode: null });
+    const { alert } = classifyMetaError({
+      httpStatus: 400,
+      errorCode: status.errorCode,
+      errorSubcode: null,
+    });
     if (!alert) return;
     const summary = `[whatsapp-webhook] message=${messageId} échec signalé par accusé (code ${status.errorCode})`;
     this.logger.error(summary);
@@ -205,7 +264,12 @@ export class WhatsappWebhookService {
   private async recordInbound(message: InboundMessage): Promise<RecordedInbound | 'duplicate'> {
     const { local, digits } = fromWhatsappNumber(message.from);
     const sender = local ? await this.findSender(local) : null;
-    const keyword = sender !== null && message.type === 'TEXT' ? parseConsentKeyword(message.text) : null;
+    const keyword =
+      sender !== null && message.type === 'TEXT' ? parseConsentKeyword(message.text) : null;
+    // Code locataire tapé (unité 47) : ni le texte ni le code en clair ne
+    // sont gardés, seulement son empreinte HMAC, effacée par le robot dès la
+    // vérification.
+    const pinPayload = sender && message.type === 'TEXT' ? this.pinPayload(message.text) : null;
 
     const data = {
       userId: sender?.id ?? null,
@@ -218,12 +282,14 @@ export class WhatsappWebhookService {
       sentAt: message.receivedAt,
       // Numéro inconnu : rien de son contenu n'est gardé (décision 3), seul
       // le type Meta reste pour un message OTHER.
-      body: sender ? message.text : null,
-      payload: sender
-        ? (message.payload as Prisma.InputJsonObject)
-        : message.type === 'OTHER'
+      body: sender && !pinPayload ? message.text : null,
+      payload: pinPayload
+        ? pinPayload
+        : sender
           ? (message.payload as Prisma.InputJsonObject)
-          : Prisma.DbNull,
+          : message.type === 'OTHER'
+            ? (message.payload as Prisma.InputJsonObject)
+            : Prisma.DbNull,
     };
 
     try {
@@ -238,14 +304,26 @@ export class WhatsappWebhookService {
       // demandée que si l'état a réellement changé : un second STOP, un OUI
       // sans demande en cours ou un message en retard n'en déclenchent pas.
       return await this.prisma.$transaction(async (tx) => {
-        const newlyVerified = await this.markPhoneVerified(tx, sender.id, local, message.receivedAt);
-        const keywordResult = keyword ? await this.applyKeyword(tx, sender.id, keyword, message.receivedAt) : null;
+        const newlyVerified = await this.markPhoneVerified(
+          tx,
+          sender.id,
+          local,
+          message.receivedAt,
+        );
+        const keywordResult = keyword
+          ? await this.applyKeyword(tx, sender.id, keyword, message.receivedAt)
+          : null;
         let action = keywordResult?.action ?? null;
         // Accord déjà donné depuis l'espace locataire, numéro vérifié par CE
         // message (souvent le « OUI » pré-rempli que l'espace demande
         // d'envoyer) : WhatsApp devient actif à l'instant, on souhaite la
         // bienvenue — sinon le locataire n'a aucun retour (/review unité 45).
-        if (!action && newlyVerified && (await this.isAccepted(tx, sender.id))) action = 'CONSENT_WELCOME';
+        if (!action && newlyVerified && (await this.isAccepted(tx, sender.id)))
+          action = 'CONSENT_WELCOME';
+        // Tout autre message d'un locataire va au robot (unité 47), qui
+        // décide selon l'accord : menu, invitation « répondez OUI » ou
+        // silence (arrêté). Un STOP n'y va jamais.
+        if (!action && sender.role === 'TENANT' && keyword !== 'STOP') action = 'BOT';
         const created = await tx.whatsappMessage.create({
           data: { ...data, inboundAction: action },
           select: { id: true },
@@ -256,7 +334,8 @@ export class WhatsappWebhookService {
     } catch (error) {
       // Notification renvoyée par Meta : déjà enregistrée et traitée. La
       // transaction annulée ne laisse ni second événement ni seconde réponse.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return 'duplicate';
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        return 'duplicate';
       throw error;
     }
   }
@@ -265,16 +344,39 @@ export class WhatsappWebhookService {
   // et findSender ne retient que le numéro auquel WhatsApp écrirait. Aucun
   // accord n'en découle. N'écrit que si ce numéro n'était pas déjà vérifié ;
   // renvoie true si CE message vient de le vérifier.
-  private async markPhoneVerified(tx: Prisma.TransactionClient, userId: string, local: string, receivedAt: Date): Promise<boolean> {
+  private async markPhoneVerified(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    local: string,
+    receivedAt: Date,
+  ): Promise<boolean> {
     const { count } = await tx.user.updateMany({
-      where: { id: userId, OR: [{ whatsappVerifiedPhone: null }, { whatsappVerifiedPhone: { not: local } }] },
+      where: {
+        id: userId,
+        OR: [{ whatsappVerifiedPhone: null }, { whatsappVerifiedPhone: { not: local } }],
+      },
       data: { whatsappVerifiedPhone: local, whatsappPhoneVerifiedAt: receivedAt },
     });
     return count === 1;
   }
 
+  private pinPayload(text: string | null): Prisma.InputJsonObject | null {
+    const match = text ? PIN_MESSAGE.exec(text) : null;
+    if (!match) return null;
+    try {
+      return { pinDigest: this.tokens.pinDigest(match[1]) };
+    } catch {
+      // Clé du code absente : le code ne pourra pas être vérifié, mais il
+      // n'est pas gardé non plus.
+      return { pinDigest: null };
+    }
+  }
+
   private async isAccepted(tx: Prisma.TransactionClient, userId: string): Promise<boolean> {
-    const user = await tx.user.findUnique({ where: { id: userId }, select: { whatsappConsent: true } });
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { whatsappConsent: true },
+    });
     return user?.whatsappConsent === 'ACCEPTED';
   }
 
@@ -296,7 +398,9 @@ export class WhatsappWebhookService {
     // Sans effet (ex. « OUI » d'un locataire arrêté, qui devait écrire
     // REPRENDRE) : aucune réponse, car après un STOP seule la confirmation
     // d'arrêt est permise. Le robot (unité 47) guidera ces cas.
-    this.logger.log(`[whatsapp-webhook] mot-clé ${keyword} sans effet pour user=${userId} : ${decision.reason}`);
+    this.logger.log(
+      `[whatsapp-webhook] mot-clé ${keyword} sans effet pour user=${userId} : ${decision.reason}`,
+    );
     return { action: null, changed: false };
   }
 
@@ -307,7 +411,7 @@ export class WhatsappWebhookService {
   // 8 chiffres si elle existe, sinon le plus ancien, et on le signale.
   private async findSender(local: string): Promise<KnownSender | null> {
     const variants = storedPhoneVariants(local);
-    const select = { id: true, whatsappPhone: true, phone: true } as const;
+    const select = { id: true, role: true, whatsappPhone: true, phone: true } as const;
     const byWhatsapp = await this.prisma.user.findMany({
       where: { whatsappPhone: { in: variants } },
       select,
@@ -323,10 +427,13 @@ export class WhatsappWebhookService {
           take: 2,
         });
     if (candidates.length > 1) {
-      this.logger.warn(`[whatsapp-webhook] numéro rattaché à plusieurs comptes (${candidates.map((c) => c.id).join(', ')})`);
+      this.logger.warn(
+        `[whatsapp-webhook] numéro rattaché à plusieurs comptes (${candidates.map((c) => c.id).join(', ')})`,
+      );
     }
-    const chosen = candidates.find((c) => c.whatsappPhone === local || c.phone === local) ?? candidates[0];
-    return chosen ? { id: chosen.id } : null;
+    const chosen =
+      candidates.find((c) => c.whatsappPhone === local || c.phone === local) ?? candidates[0];
+    return chosen ? { id: chosen.id, role: chosen.role } : null;
   }
 }
 
@@ -335,11 +442,15 @@ function toStatusEvent(status: InboundStatus): StatusEvent {
   const retryable =
     status.errorCode === null
       ? false
-      : classifyMetaError({ httpStatus: 400, errorCode: status.errorCode, errorSubcode: null }).retryable;
+      : classifyMetaError({ httpStatus: 400, errorCode: status.errorCode, errorSubcode: null })
+          .retryable;
   return {
     status: 'failed',
     at: status.at,
-    failure: { errorCode: status.errorCode === null ? 'UNSPECIFIED' : `${status.errorCode}`, retryable },
+    failure: {
+      errorCode: status.errorCode === null ? 'UNSPECIFIED' : `${status.errorCode}`,
+      retryable,
+    },
   };
 }
 

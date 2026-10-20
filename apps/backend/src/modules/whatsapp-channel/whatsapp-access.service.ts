@@ -111,6 +111,44 @@ export class WhatsappAccessService {
     if (user.whatsappVerifiedPhone !== recipientPhone) return refuse('NUMBER_NOT_VERIFIED');
     return { allowed: true, recipientPhone, metaNumber };
   }
+
+  // Invitation « répondez OUI » du robot (unité 47, décision 1) — seule
+  // autre exception à canUseWhatsapp avec la confirmation de STOP. Pour un
+  // LOCATAIRE avec bail actif, sans accord (jamais demandé, ou demande de
+  // l'agence en cours), jamais après un STOP, et seulement vers le numéro
+  // vérifié (celui qui vient d'écrire). Forfait du responsable exigé :
+  // inviter quelqu'un qui ne pourra pas utiliser le service n'a pas de sens.
+  async canSendInvitation(userId: string): Promise<WhatsappAccess> {
+    if (this.config.get<boolean>('WHATSAPP_ENABLED') !== true) {
+      return refuse('CHANNEL_DISABLED');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, whatsappPhone: true, whatsappConsent: true, whatsappVerifiedPhone: true, role: true },
+    });
+    if (!user) return refuse('USER_NOT_FOUND');
+    if (user.whatsappConsent !== 'NOT_ASKED' && user.whatsappConsent !== 'PENDING') return refuse('NO_CONSENT');
+
+    const metaNumber = toWhatsappNumber(user.whatsappPhone ?? user.phone);
+    if (!metaNumber) return refuse('NO_VALID_NUMBER');
+    const recipientPhone = metaNumber.slice(3);
+    if (user.whatsappVerifiedPhone !== recipientPhone) return refuse('NUMBER_NOT_VERIFIED');
+
+    const lease = await this.prisma.lease.findFirst({
+      where: { tenantUserId: userId, status: 'ACTIVE' },
+      include: { property: true },
+    });
+    if (user.role !== 'TENANT' || !lease) return refuse('NO_ACTIVE_LEASE');
+
+    const responsibleUserId = await resolveResponsibleUserId(this.prisma, lease.property);
+    const [subscription, enabledTiers] = await Promise.all([
+      this.prisma.subscription.findUnique({ where: { userId: responsibleUserId }, select: { tier: true } }),
+      this.platformSettings.whatsappEnabledTiers(),
+    ]);
+    if (!enabledTiers.includes(subscription?.tier ?? 'STARTER')) return refuse('TIER_NOT_INCLUDED');
+
+    return { allowed: true, recipientPhone, metaNumber };
+  }
 }
 
 function refuse(reason: WhatsappAccessRefusal): WhatsappAccess {
