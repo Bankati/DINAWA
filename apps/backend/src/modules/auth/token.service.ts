@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, randomInt, createHash } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +12,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+const PIN_LENGTH = 6;
 
 export interface AccessTokenPayload {
   sub: string;
@@ -37,6 +38,26 @@ export class TokenService {
 
   comparePassword(password: string, hash: string): Promise<boolean> {
     return bcrypt.compare(password, hash);
+  }
+
+  // Code locataire à 6 chiffres du robot WhatsApp (unité 42) — bcrypt comme
+  // les mots de passe, d'où sa place ici. bcrypt protège le code stocké, PAS
+  // les essais répétés (1 000 000 de possibilités) : la limite de 5 essais
+  // puis 1 h de blocage (TenantProfile.pinFailedAttempts/pinLockedUntil) est
+  // appliquée par le robot (unité 47) avant tout appel à verifyPin(). Le code
+  // en clair ne doit jamais être journalisé ni stocké ailleurs.
+  generatePin(): string {
+    return randomInt(0, 10 ** PIN_LENGTH)
+      .toString()
+      .padStart(PIN_LENGTH, '0');
+  }
+
+  hashPin(pin: string): Promise<string> {
+    return bcrypt.hash(pin, BCRYPT_ROUNDS);
+  }
+
+  verifyPin(pin: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(pin, hash);
   }
 
   verifyAccessToken(token: string): AccessTokenPayload {
