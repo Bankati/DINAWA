@@ -617,19 +617,25 @@ model Lease {
 // ────────────────────────────────────────────────────────────────
 
 model PaymentScheduleEntry {
-  id                 String              @id @default(cuid())
-  leaseId            String
-  lease              Lease               @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  periodStart        DateTime            @db.Timestamptz(6)
-  periodEnd          DateTime            @db.Timestamptz(6)
-  dueDate            DateTime            @db.Timestamptz(6)
-  expectedAmount     Int
-  paidAmount         Int                 @default(0)
-  status             ScheduleEntryStatus @default(PENDING)
-  reminderSentAt     DateTime?           @db.Timestamptz(6)
-  overdueAlertSentAt DateTime?           @db.Timestamptz(6)
-  createdAt          DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime            @updatedAt @db.Timestamptz(6)
+  id                  String              @id @default(cuid())
+  leaseId             String
+  lease               Lease               @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  periodStart         DateTime            @db.Timestamptz(6)
+  periodEnd           DateTime            @db.Timestamptz(6)
+  dueDate             DateTime            @db.Timestamptz(6)
+  expectedAmount      Int
+  paidAmount          Int                 @default(0)
+  status              ScheduleEntryStatus @default(PENDING)
+  reminderSentAt      DateTime?           @db.Timestamptz(6)
+  overdueAlertSentAt  DateTime?           @db.Timestamptz(6)
+  // Relance du LOCATAIRE en retard (unité 46) — une seule fois, au même
+  // délai de tolérance que l'alerte agence. Réservée par une écriture
+  // conditionnelle juste avant l'envoi (qui vérifie aussi que l'échéance est
+  // toujours impayée) ; effacée si l'envoi lève une erreur avant tout envoi.
+  // Sens : « relance prise en charge », chaque canal a son propre suivi.
+  tenantOverdueSentAt DateTime?           @db.Timestamptz(6)
+  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(6)
 
   payments         Payment[]
   whatsappMessages WhatsappMessage[]
@@ -1007,6 +1013,11 @@ model WhatsappMessage {
   processedAt         DateTime?             @db.Timestamptz(6)
   processingStartedAt DateTime?             @db.Timestamptz(6)
   processingAttempts  Int                   @default(0)
+  // Nouveaux essais d'un envoi (unité 46) : numéro de la tentative (1 =
+  // premier envoi, 3 au plus) et heure du premier envoi de la série (null
+  // pour le premier lui-même) — la limite d'une heure se compte depuis elle.
+  attempt             Int                   @default(1)
+  firstAttemptAt      DateTime?             @db.Timestamptz(6)
   createdAt           DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime              @updatedAt @db.Timestamptz(6)
 

@@ -594,7 +594,9 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 46 Canal WhatsApp dans NotifyService
 
-**Logique :**
+**Construite le 2026-10-16** (`/architect` du même jour) — détails et décisions dans `architecture.md`, section « Notifications WhatsApp » : table centrale typée `notify/whatsapp-templates.ts` (textes Meta de référence), WhatsApp pour les locataires seulement, `payLinkFor()` sans requête, relance unique réservée par écriture conditionnelle (`tenantOverdueSentAt`), nouveaux essais 3 tentatives au total / 1 h, jamais la quittance ni un `UNKNOWN`. Migration `20261016120000_add_whatsapp_notify`.
+
+**Logique (plan initial) :**
 
 - `NotifyService.notifyUser()` ajoute WhatsApp après push/email si l'événement a un modèle Meta et que le consentement est `ACCEPTED` — WhatsApp s'ajoute, ne remplace pas l'email
 - `reminders.task.ts` : variable `payToken` pour le bouton « Payer mon loyer »
