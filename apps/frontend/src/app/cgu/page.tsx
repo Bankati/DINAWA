@@ -3,7 +3,10 @@ import PublicNavbar from '@/components/public-navbar';
 import PublicFooter from '@/components/public-footer';
 import './page.css';
 
-export const metadata = { title: "Conditions Générales d'Utilisation — WARAH" };
+export const metadata = {
+  title: "Conditions Générales d'Utilisation — WARAH",
+  alternates: { canonical: '/cgu' },
+};
 
 const SECTIONS = [
   { id: 'objet', label: '1. Objet et champ d’application' },
