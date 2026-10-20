@@ -64,8 +64,11 @@ enum PropertyType {
   APARTMENT
   VILLA
   VILLA_DUPLEX
+  VILLA_MEUBLEE
   APPARTEMENT_MEUBLE
   COMMERCIAL
+  MAGASIN
+  BOUTIQUE
 }
 
 enum PropertyStatus {

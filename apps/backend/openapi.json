@@ -575,8 +575,11 @@
                 "APARTMENT",
                 "VILLA",
                 "VILLA_DUPLEX",
+                "VILLA_MEUBLEE",
                 "APPARTEMENT_MEUBLE",
-                "COMMERCIAL"
+                "COMMERCIAL",
+                "MAGASIN",
+                "BOUTIQUE"
               ],
               "type": "string"
             }
@@ -3692,8 +3695,11 @@
               "APARTMENT",
               "VILLA",
               "VILLA_DUPLEX",
+              "VILLA_MEUBLEE",
               "APPARTEMENT_MEUBLE",
-              "COMMERCIAL"
+              "COMMERCIAL",
+              "MAGASIN",
+              "BOUTIQUE"
             ]
           },
           "address": {
@@ -3740,8 +3746,11 @@
               "APARTMENT",
               "VILLA",
               "VILLA_DUPLEX",
+              "VILLA_MEUBLEE",
               "APPARTEMENT_MEUBLE",
-              "COMMERCIAL"
+              "COMMERCIAL",
+              "MAGASIN",
+              "BOUTIQUE"
             ]
           },
           "status": {
@@ -3979,8 +3988,11 @@
               "APARTMENT",
               "VILLA",
               "VILLA_DUPLEX",
+              "VILLA_MEUBLEE",
               "APPARTEMENT_MEUBLE",
-              "COMMERCIAL"
+              "COMMERCIAL",
+              "MAGASIN",
+              "BOUTIQUE"
             ]
           },
           "status": {

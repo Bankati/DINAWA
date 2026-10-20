@@ -33,12 +33,12 @@ const avantages = [
 ];
 
 const temoignages = [
-  { nom: 'Kofi Assiamah', role: 'Propriétaire', ville: 'Lomé', photo: 'https://randomuser.me/api/portraits/men/36.jpg', texte: "WARAH a transformé ma façon de gérer mes 5 biens. Les quittances automatiques et le suivi des paiements m'ont fait économiser des heures chaque mois. Je recommande à tous les propriétaires." },
-  { nom: 'Adjoa Mensah', role: 'Gestionnaire immobilier', ville: 'Lomé', photo: 'https://randomuser.me/api/portraits/women/56.jpg', texte: 'Je gère le portefeuille de plusieurs propriétaires. WARAH me donne une vue complète sur tous les baux, paiements et locataires en un seul endroit. Un gain de temps considérable.' },
-  { nom: 'Ibrahim Touré', role: 'Propriétaire', ville: 'Kara', photo: 'https://randomuser.me/api/portraits/men/9.jpg', texte: "Même depuis Kara, je suis tout ce qui se passe à Lomé. Les alertes d'impayés arrivent immédiatement sur mon téléphone. C'est vraiment indispensable pour tout propriétaire sérieux." },
-  { nom: 'Afia Dossou', role: 'Locataire', ville: 'Lomé', photo: 'https://randomuser.me/api/portraits/women/31.jpg', texte: "Grâce à WARAH j'ai trouvé mon appartement en moins d'une semaine. Le propriétaire était vérifié, le contrat de bail signé en ligne. Tout était transparent et rapide." },
-  { nom: 'Jean-Baptiste Kuma', role: 'Propriétaire', ville: 'Sokodé', photo: 'https://randomuser.me/api/portraits/men/83.jpg', texte: 'Je possède 8 biens à Sokodé et Lomé. Avant WARAH, je perdais des journées entières à relancer les loyers. Maintenant tout est automatisé — je récupère du temps pour ma famille.' },
-  { nom: 'Sitou Amégan', role: 'Gestionnaire immobilier', ville: 'Lomé', photo: 'https://randomuser.me/api/portraits/women/68.jpg', texte: 'Mes clients propriétaires reçoivent un rapport clair chaque mois, sans que je lève le petit doigt. WARAH a professionnalisé toute mon activité de gestion locative.' },
+  { nom: 'Kofi Assiamah', role: 'Propriétaire', ville: 'Lomé', texte: "WARAH a transformé ma façon de gérer mes 5 biens. Les quittances automatiques et le suivi des paiements m'ont fait économiser des heures chaque mois. Je recommande à tous les propriétaires." },
+  { nom: 'Adjoa Mensah', role: 'Gestionnaire immobilier', ville: 'Lomé', texte: 'Je gère le portefeuille de plusieurs propriétaires. WARAH me donne une vue complète sur tous les baux, paiements et locataires en un seul endroit. Un gain de temps considérable.' },
+  { nom: 'Ibrahim Touré', role: 'Propriétaire', ville: 'Kara', texte: "Même depuis Kara, je suis tout ce qui se passe à Lomé. Les alertes d'impayés arrivent immédiatement sur mon téléphone. C'est vraiment indispensable pour tout propriétaire sérieux." },
+  { nom: 'Afia Dossou', role: 'Locataire', ville: 'Lomé', texte: "Grâce à WARAH j'ai trouvé mon appartement en moins d'une semaine. Le propriétaire était vérifié, le contrat de bail signé en ligne. Tout était transparent et rapide." },
+  { nom: 'Jean-Baptiste Kuma', role: 'Propriétaire', ville: 'Sokodé', texte: 'Je possède 8 biens à Sokodé et Lomé. Avant WARAH, je perdais des journées entières à relancer les loyers. Maintenant tout est automatisé — je récupère du temps pour ma famille.' },
+  { nom: 'Sitou Amégan', role: 'Gestionnaire immobilier', ville: 'Lomé', texte: 'Mes clients propriétaires reçoivent un rapport clair chaque mois, sans que je lève le petit doigt. WARAH a professionnalisé toute mon activité de gestion locative.' },
 ];
 
 const temoPagesArr = Array.from({ length: Math.ceil(temoignages.length / 3) }, (_, i) => i);
@@ -459,7 +459,6 @@ export default function LandingPage() {
             {temoPageItems.map((t, i) => (
               <div className="tb-card" data-aos="fade-down" data-aos-delay={i * 100} key={t.nom}>
                 <div className="tb-top">
-                  <img src={t.photo} alt={t.nom} className="tb-ava-img" loading="lazy" />
                   <span className="tb-oq">&ldquo;</span>
                 </div>
                 <div className="tb-body">
