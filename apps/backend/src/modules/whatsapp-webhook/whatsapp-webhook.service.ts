@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, WhatsappConsent } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -16,7 +16,10 @@ import { fromWhatsappNumber, storedPhoneVariants } from '../../common/utils/phon
 import { classifyMetaError } from '../whatsapp-channel/meta-error';
 import { InboundMessage, InboundStatus, parseMetaNotification } from './meta-webhook-payload';
 import { DeliveryState, StatusEvent, applyStatusEvent } from './status-transition';
-import { isStopKeyword } from './stop-keyword';
+import { CONSENT_TRANSACTION_OPTIONS, WHATSAPP_CONSENT_NOTICE_VERSION } from '../../common/constants';
+import { applyConsentCommand } from '../whatsapp-consent/consent-writer';
+import { WhatsappConsentService } from '../whatsapp-consent/whatsapp-consent.service';
+import { ConsentKeyword, parseConsentKeyword } from './consent-keyword';
 import { InboundAction, WHATSAPP_INBOUND_RECEIVED, WhatsappInboundReceivedEvent } from './whatsapp-inbound.events';
 
 const INBOUND_SOURCE = 'inbound';
@@ -24,7 +27,20 @@ const INBOUND_SOURCE = 'inbound';
 // conditionnée à l'état lu, et recalculée si elle a perdu la course.
 const STATUS_WRITE_ATTEMPTS = 3;
 
-type KnownSender = { id: string; whatsappConsent: WhatsappConsent };
+type KnownSender = { id: string };
+
+// statusChangedFor : locataire dont l'état affiché à l'agence a changé
+// (numéro vérifié ou consentement), pour vider le cache de ses listes.
+type RecordedInbound = { id: string; action: InboundAction | null; statusChangedFor: string | null };
+
+// Mot-clé reçu → commande du consentement, et réponse à envoyer si l'état a
+// réellement changé (unités 44-45).
+const KEYWORD_COMMAND = { STOP: 'BOT_STOP', CONFIRM: 'BOT_CONFIRM', RESUME: 'BOT_RESUME' } as const;
+const KEYWORD_ACTION: Record<ConsentKeyword, InboundAction> = {
+  STOP: 'STOP_CONFIRMATION',
+  CONFIRM: 'CONSENT_WELCOME',
+  RESUME: 'RESUME_CONFIRMATION',
+};
 
 type Summary = { messages: number; duplicates: number; statuses: number; unknownStatuses: number; skipped: number };
 
@@ -41,6 +57,7 @@ export class WhatsappWebhookService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly events: EventEmitter2,
+    private readonly consent: WhatsappConsentService,
   ) {}
 
   // Poignée de main de l'abonnement (GET) : Meta renvoie le jeton choisi par
@@ -67,6 +84,8 @@ export class WhatsappWebhookService {
     const phoneNumberId = this.config.get<string>('WHATSAPP_PHONE_NUMBER_ID');
     const summary: Summary = { messages: 0, duplicates: 0, statuses: 0, unknownStatuses: 0, skipped: 0 };
     const toProcess: string[] = [];
+    // Locataires dont l'état WhatsApp affiché à l'agence a changé.
+    const changedTenants = new Set<string>();
 
     for (const notification of parseMetaNotification(body)) {
       // Une notification d'un autre numéro du compte n'est pas pour WARAH.
@@ -88,6 +107,7 @@ export class WhatsappWebhookService {
         }
         summary.messages += 1;
         if (recorded.action) toProcess.push(recorded.id);
+        if (recorded.statusChangedFor) changedTenants.add(recorded.statusChangedFor);
       }
     }
 
@@ -102,6 +122,18 @@ export class WhatsappWebhookService {
     for (const messageId of toProcess) {
       const event: WhatsappInboundReceivedEvent = { messageId };
       this.events.emit(WHATSAPP_INBOUND_RECEIVED, event);
+    }
+
+    // Badge de la liste « Locataires » de l'agence (cache par utilisateur,
+    // /review unité 45). Après l'enregistrement : un échec ici ne doit pas
+    // faire renvoyer la notification par Meta, l'état est déjà enregistré.
+    for (const tenantUserId of changedTenants) {
+      await this.consent.refreshAgencyLists(tenantUserId).catch((error: unknown) => {
+        this.logger.warn(
+          `[whatsapp-webhook] cache des listes non vidé pour user=${tenantUserId}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
     }
   }
 
@@ -170,10 +202,10 @@ export class WhatsappWebhookService {
     Sentry.captureMessage(`WhatsApp : intervention requise — ${summary}`, 'error');
   }
 
-  private async recordInbound(message: InboundMessage): Promise<{ id: string; action: InboundAction | null } | 'duplicate'> {
+  private async recordInbound(message: InboundMessage): Promise<RecordedInbound | 'duplicate'> {
     const { local, digits } = fromWhatsappNumber(message.from);
     const sender = local ? await this.findSender(local) : null;
-    const isStop = sender !== null && message.type === 'TEXT' && isStopKeyword(message.text);
+    const keyword = sender !== null && message.type === 'TEXT' ? parseConsentKeyword(message.text) : null;
 
     const data = {
       userId: sender?.id ?? null,
@@ -195,43 +227,77 @@ export class WhatsappWebhookService {
     };
 
     try {
-      if (!isStop || !sender) {
+      if (!sender || !local) {
         const created = await this.prisma.whatsappMessage.create({ data, select: { id: true } });
-        return { id: created.id, action: null };
+        return { id: created.id, action: null, statusChangedFor: null };
       }
 
-      // STOP (décision 4) : l'arrêt est enregistré DANS la même transaction
-      // que le message — immédiat et durable. La confirmation n'est demandée
-      // que lors du passage à STOPPED : un second STOP n'en renvoie pas.
+      // Tout dans la même transaction que le message — immédiat et durable :
+      // vérification du numéro, puis changement de consentement éventuel
+      // (STOP, OUI, REPRENDRE) par le rédacteur unique. Une réponse n'est
+      // demandée que si l'état a réellement changé : un second STOP, un OUI
+      // sans demande en cours ou un message en retard n'en déclenchent pas.
       return await this.prisma.$transaction(async (tx) => {
-        const { count } = await tx.user.updateMany({
-          where: { id: sender.id, whatsappConsent: { not: 'STOPPED' } },
-          data: { whatsappConsent: 'STOPPED', whatsappStoppedAt: message.receivedAt },
-        });
-        if (count === 1) {
-          await tx.whatsappConsentEvent.create({
-            data: {
-              userId: sender.id,
-              previousConsent: sender.whatsappConsent,
-              newConsent: 'STOPPED',
-              source: 'BOT',
-              actorUserId: sender.id,
-            },
-          });
-        }
-        const action: InboundAction | null = count === 1 ? 'STOP_CONFIRMATION' : null;
+        const newlyVerified = await this.markPhoneVerified(tx, sender.id, local, message.receivedAt);
+        const keywordResult = keyword ? await this.applyKeyword(tx, sender.id, keyword, message.receivedAt) : null;
+        let action = keywordResult?.action ?? null;
+        // Accord déjà donné depuis l'espace locataire, numéro vérifié par CE
+        // message (souvent le « OUI » pré-rempli que l'espace demande
+        // d'envoyer) : WhatsApp devient actif à l'instant, on souhaite la
+        // bienvenue — sinon le locataire n'a aucun retour (/review unité 45).
+        if (!action && newlyVerified && (await this.isAccepted(tx, sender.id))) action = 'CONSENT_WELCOME';
         const created = await tx.whatsappMessage.create({
           data: { ...data, inboundAction: action },
           select: { id: true },
         });
-        return { id: created.id, action };
-      });
+        const statusChanged = newlyVerified || keywordResult?.changed === true;
+        return { id: created.id, action, statusChangedFor: statusChanged ? sender.id : null };
+      }, CONSENT_TRANSACTION_OPTIONS);
     } catch (error) {
-      // Notification renvoyée par Meta : déjà enregistrée et traitée. Pour un
-      // STOP, la transaction annulée ne laisse aucun second événement.
+      // Notification renvoyée par Meta : déjà enregistrée et traitée. La
+      // transaction annulée ne laisse ni second événement ni seconde réponse.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return 'duplicate';
       throw error;
     }
+  }
+
+  // Numéro vérifié (unité 45, décision 3) : Meta authentifie l'expéditeur,
+  // et findSender ne retient que le numéro auquel WhatsApp écrirait. Aucun
+  // accord n'en découle. N'écrit que si ce numéro n'était pas déjà vérifié ;
+  // renvoie true si CE message vient de le vérifier.
+  private async markPhoneVerified(tx: Prisma.TransactionClient, userId: string, local: string, receivedAt: Date): Promise<boolean> {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, OR: [{ whatsappVerifiedPhone: null }, { whatsappVerifiedPhone: { not: local } }] },
+      data: { whatsappVerifiedPhone: local, whatsappPhoneVerifiedAt: receivedAt },
+    });
+    return count === 1;
+  }
+
+  private async isAccepted(tx: Prisma.TransactionClient, userId: string): Promise<boolean> {
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { whatsappConsent: true } });
+    return user?.whatsappConsent === 'ACCEPTED';
+  }
+
+  // L'heure Meta du message sert à l'ordre : un OUI ou un REPRENDRE plus
+  // ancien que le dernier changement est ignoré, un STOP s'applique toujours.
+  private async applyKeyword(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    keyword: ConsentKeyword,
+    sourceAt: Date,
+  ): Promise<{ action: InboundAction | null; changed: boolean }> {
+    const { decision } = await applyConsentCommand(tx, {
+      userId,
+      command: { type: KEYWORD_COMMAND[keyword], sourceAt },
+      actorUserId: userId,
+      noticeVersion: keyword === 'STOP' ? undefined : WHATSAPP_CONSENT_NOTICE_VERSION,
+    });
+    if (decision.kind === 'changed') return { action: KEYWORD_ACTION[keyword], changed: true };
+    // Sans effet (ex. « OUI » d'un locataire arrêté, qui devait écrire
+    // REPRENDRE) : aucune réponse, car après un STOP seule la confirmation
+    // d'arrêt est permise. Le robot (unité 47) guidera ces cas.
+    this.logger.log(`[whatsapp-webhook] mot-clé ${keyword} sans effet pour user=${userId} : ${decision.reason}`);
+    return { action: null, changed: false };
   }
 
   // Numéro WhatsApp dédié d'abord, sinon numéro principal (même priorité
@@ -241,7 +307,7 @@ export class WhatsappWebhookService {
   // 8 chiffres si elle existe, sinon le plus ancien, et on le signale.
   private async findSender(local: string): Promise<KnownSender | null> {
     const variants = storedPhoneVariants(local);
-    const select = { id: true, whatsappConsent: true, whatsappPhone: true, phone: true } as const;
+    const select = { id: true, whatsappPhone: true, phone: true } as const;
     const byWhatsapp = await this.prisma.user.findMany({
       where: { whatsappPhone: { in: variants } },
       select,
@@ -260,7 +326,7 @@ export class WhatsappWebhookService {
       this.logger.warn(`[whatsapp-webhook] numéro rattaché à plusieurs comptes (${candidates.map((c) => c.id).join(', ')})`);
     }
     const chosen = candidates.find((c) => c.whatsappPhone === local || c.phone === local) ?? candidates[0];
-    return chosen ? { id: chosen.id, whatsappConsent: chosen.whatsappConsent } : null;
+    return chosen ? { id: chosen.id } : null;
   }
 }
 

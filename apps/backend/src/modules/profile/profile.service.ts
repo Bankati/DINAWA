@@ -16,6 +16,8 @@ import { TokenService } from '../auth/token.service';
 import { NotifyService } from '../notify/notify.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { PAYOUT_OPERATOR_LABEL } from '../../common/utils/payout-operator-label';
+import { applyConsentCommand, effectiveLocalPhone } from '../whatsapp-consent/consent-writer';
+import { CONSENT_TRANSACTION_OPTIONS } from '../../common/constants';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateNotificationConsentDto } from './dto/update-notification-consent.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -111,9 +113,31 @@ export class ProfileService {
       data.profilePhotoPath = path;
     }
 
+    // Locataire sans numéro WhatsApp dédié (comptes d'avant l'unité 45) :
+    // WhatsApp suit le numéro principal, donc le changer ici change aussi le
+    // numéro WhatsApp → accord, vérification et code remis à zéro, comme
+    // depuis l'écran WhatsApp (/review unité 45). Comparé sous forme à 8
+    // chiffres : « +22890… » → « 90… » n'est pas un changement.
+    const movesWhatsappNumber =
+      user.role === 'TENANT' &&
+      dto.phone !== undefined &&
+      user.whatsappPhone === null &&
+      user.whatsappConsent !== 'NOT_ASKED' &&
+      effectiveLocalPhone({ phone: dto.phone, whatsappPhone: null }) !== effectiveLocalPhone(user);
+
     let updated: User;
     try {
-      updated = await this.prisma.user.update({ where: { id: user.id }, data });
+      updated = await this.prisma.$transaction(async (tx) => {
+        const saved = await tx.user.update({ where: { id: user.id }, data });
+        if (movesWhatsappNumber) {
+          await applyConsentCommand(tx, {
+            userId: user.id,
+            command: { type: 'PHONE_CHANGE', by: 'TENANT', newPhone: null },
+            actorUserId: user.id,
+          });
+        }
+        return saved;
+      }, CONSENT_TRANSACTION_OPTIONS);
     } catch (dbError) {
       // `phone` est unique (@unique en base) — jamais laisser une violation
       // de contrainte remonter en 500 brut (même pattern que
@@ -213,15 +237,15 @@ export class ProfileService {
     // reçus effacés, numéro et contenu des messages envoyés retirés (les
     // lignes restent, sans donnée personnelle, pour l'historique des envois —
     // /review unité 44), numéro WhatsApp retiré et consentement arrêté par WARAH
-    // (source SYSTEM, sans acteur) — plus aucun message ne peut partir. Les
-    // sauvegardes Supabase, en rotation sur 30 jours, n'en gardent plus
+    // (source SYSTEM, sans acteur, via le rédacteur unique du consentement —
+    // unité 45) — plus aucun message ne peut partir. Le numéro vérifié et
+    // les 2 derniers chiffres gardés dans l'historique sont effacés aussi.
+    // Les sauvegardes Supabase, en rotation sur 30 jours, n'en gardent plus
     // trace au-delà (voir architecture.md).
-    const current = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      select: { whatsappConsent: true },
-    });
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    await this.prisma.$transaction(async (tx) => {
+      // Numéros retirés AVANT l'arrêt : la ligne d'historique SYSTEM ne
+      // garde ainsi aucun chiffre du numéro.
+      await tx.user.update({
         where: { id: user.id },
         data: {
           email: null,
@@ -232,27 +256,17 @@ export class ProfileService {
           supabaseId: null,
           anonymizedAt: new Date(),
           whatsappPhone: null,
-          whatsappConsent: 'STOPPED',
-          whatsappStoppedAt: new Date(),
+          whatsappVerifiedPhone: null,
+          whatsappPhoneVerifiedAt: null,
         },
-      }),
-      this.prisma.whatsappMessage.updateMany({
+      });
+      await tx.whatsappMessage.updateMany({
         where: { userId: user.id },
         data: { body: null, payload: Prisma.DbNull, recipientPhone: ANONYMIZED_PHONE },
-      }),
-      ...(current && current.whatsappConsent !== 'STOPPED'
-        ? [
-            this.prisma.whatsappConsentEvent.create({
-              data: {
-                userId: user.id,
-                previousConsent: current.whatsappConsent,
-                newConsent: 'STOPPED',
-                source: 'SYSTEM',
-              },
-            }),
-          ]
-        : []),
-    ]);
+      });
+      await tx.whatsappConsentEvent.updateMany({ where: { userId: user.id }, data: { phoneLast2: null } });
+      await applyConsentCommand(tx, { userId: user.id, command: { type: 'SYSTEM_STOP' }, actorUserId: null });
+    }, CONSENT_TRANSACTION_OPTIONS);
 
     // Supprimée seulement après confirmation de l'update — une photo de
     // visage reste une donnée personnelle, l'anonymisation doit la

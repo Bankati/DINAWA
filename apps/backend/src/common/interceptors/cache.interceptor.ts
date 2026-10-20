@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { Observable, from } from 'rxjs';
 import { firstValueFrom, tap } from 'rxjs';
-import { CacheService } from '../cache/cache.service';
+import { CacheService, userCachePrefix } from '../cache/cache.service';
 import { CACHEABLE_TTL_KEY } from '../decorators/cacheable.decorator';
 import { AuthenticatedUser } from '../types/authenticated-user.type';
 
@@ -32,7 +32,7 @@ export class CacheInterceptor implements NestInterceptor {
 
     if (MUTATING_METHODS.has(req.method)) {
       if (!userId) return next.handle();
-      return next.handle().pipe(tap(() => this.cache.delByPrefix(`cache:${userId}:`)));
+      return next.handle().pipe(tap(() => this.cache.invalidateUser(userId)));
     }
 
     if (req.method !== 'GET' || !userId) return next.handle();
@@ -40,7 +40,7 @@ export class CacheInterceptor implements NestInterceptor {
     const ttlMs = this.reflector.get<number | undefined>(CACHEABLE_TTL_KEY, context.getHandler());
     if (!ttlMs) return next.handle();
 
-    const key = `cache:${userId}:${req.originalUrl}`;
+    const key = `${userCachePrefix(userId)}${req.originalUrl}`;
     return from(this.cache.wrap(key, ttlMs, () => firstValueFrom(next.handle())));
   }
 }

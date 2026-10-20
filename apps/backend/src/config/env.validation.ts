@@ -1,5 +1,6 @@
 import {
   IsString,
+  MinLength,
   IsOptional,
   IsEnum,
   IsIn,
@@ -245,6 +246,21 @@ class EnvironmentVariables {
   @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
   @Matches(/^v\d+\.\d+$/, { message: 'WHATSAPP_GRAPH_VERSION doit avoir la forme v23.0' })
   WHATSAPP_GRAPH_VERSION?: string;
+
+  // Clé du HMAC appliqué au code locataire avant bcrypt (unité 45) — gardée
+  // hors de la base, différente par environnement. Sans elle, le serveur ne
+  // démarre pas plutôt que de créer des codes mal protégés.
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @IsString()
+  @MinLength(32, { message: 'WHATSAPP_PIN_PEPPER doit faire au moins 32 caractères' })
+  WHATSAPP_PIN_PEPPER?: string;
+
+  // Numéro WhatsApp de WARAH, format international sans « + » (ex.
+  // 22890000000) : lien / QR code « Écrire à WARAH » (unité 45). Chiffres
+  // seuls, sans imposer 228 : le numéro de test Meta est américain.
+  @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
+  @Matches(/^\d{8,15}$/, { message: 'WHATSAPP_BUSINESS_NUMBER doit être un numéro international sans + (ex. 22890000000)' })
+  WHATSAPP_BUSINESS_NUMBER?: string;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {
