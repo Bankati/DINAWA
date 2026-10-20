@@ -74,7 +74,10 @@ describe('PayLinksController', () => {
       // l'adresse ajoutée par le dernier proxy compte.
       expressApp.set('trust proxy', 1);
       app = expressApp;
-      await app.init();
+      // Serveur démarré UNE fois : sinon supertest relance l'écoute à chaque
+      // requête, et 15 requêtes simultanées coupaient des connexions
+      // (ECONNRESET en CI).
+      await app.listen(0, '127.0.0.1');
       server = app.getHttpServer() as Server;
     });
 
