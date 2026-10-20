@@ -193,6 +193,17 @@ export const WHATSAPP_CONSENT_PREFILL_TEXT =
 // pour ne jamais tenter un envoi à la limite, que Meta refuserait.
 // « Sans modèle » ne veut pas dire gratuit : tarifs Meta à vérifier.
 export const WHATSAPP_REPLY_WINDOW_MS = 24 * 60 * 60 * 1000 - 5 * 60 * 1000;
+// Messagerie avec le responsable du bien (unité 48). L'échange humain prend
+// fin avec la fenêtre de réponse (WHATSAPP_REPLY_WINDOW_MS) : au-delà, le
+// responsable ne peut plus écrire, le robot reprend la main.
+export const WHATSAPP_AGENCY_REPLY_MAX_LENGTH = 1000;
+export const WHATSAPP_AGENCY_REPLY_SOURCE = 'agency-reply';
+export const WHATSAPP_AGENCY_CLOSE_SOURCE = 'agency-close';
+export const WHATSAPP_INBOX_MESSAGES_PAGE = 50;
+// Plafond des messages transmis au gestionnaire par locataire (correctif
+// /review unité 48) : large pour un vrai échange, bloque un envoi en rafale.
+export const WHATSAPP_RELAY_MAX_PER_HOUR = 60;
+export const WHATSAPP_RELAY_WINDOW_MS = 60 * 60 * 1000;
 
 export const CRON_PAYDUNYA_RECONCILIATION = '*/15 * * * *';
 export const PAYDUNYA_RECONCILE_AFTER_MS = 15 * 60 * 1000;

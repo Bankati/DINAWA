@@ -227,9 +227,23 @@ enum WhatsappConsentMethod {
 
 // Robot WhatsApp (unité 47) : où en est la conversation. AWAITING_PIN = le
 // robot vient de demander le code pour une action protégée (pendingAction).
+// HUMAN (unité 48) : échange avec le responsable du bien en cours, le robot
+// se tait et relaie les messages (WhatsappConversation.humanThreadId).
 enum WhatsappBotState {
   MENU
   AWAITING_PIN
+  HUMAN
+}
+
+// Pourquoi un échange humain s'est terminé (unité 48). TIMEOUT : 24 h sans
+// message du locataire (constaté au message suivant, l'état affiché est
+// toujours calculé). SYSTEM : changement de numéro.
+enum WhatsappThreadCloseReason {
+  AGENCY
+  TENANT
+  TIMEOUT
+  STOP
+  SYSTEM
 }
 
 // Actions protégées par le code locataire (unité 47, décision 2). « Payer »
@@ -401,6 +415,7 @@ model User {
   whatsappConsentEvents  WhatsappConsentEvent[] @relation("WhatsappConsentSubject")
   whatsappConsentActions WhatsappConsentEvent[] @relation("WhatsappConsentActor")
   whatsappConversation   WhatsappConversation?
+  whatsappThreads        WhatsappThread[]       @relation("WhatsappThreadTenant")
 
   @@map("users")
 }
@@ -536,12 +551,13 @@ model Property {
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
 
-  photos       PropertyPhoto[]
-  documents    PropertyDocument[]
-  leases       Lease[]
-  mandates     Mandate[]
-  listings     Listing[]
-  tenantBlocks TenantPropertyBlock[]
+  photos          PropertyPhoto[]
+  documents       PropertyDocument[]
+  leases          Lease[]
+  mandates        Mandate[]
+  listings        Listing[]
+  tenantBlocks    TenantPropertyBlock[]
+  whatsappThreads WhatsappThread[]
 
   @@index([ownerId])
   @@index([status])
@@ -1044,11 +1060,18 @@ model WhatsappMessage {
   // pour le premier lui-même) — la limite d'une heure se compte depuis elle.
   attempt             Int                   @default(1)
   firstAttemptAt      DateTime?             @db.Timestamptz(6)
+  // Messagerie avec le responsable du bien (unité 48) : message relayé ou
+  // réponse du responsable. sentByUserId = auteur d'une réponse (le nom
+  // affiché est déjà dans payload.body, figé à l'envoi).
+  threadId            String?
+  thread              WhatsappThread?       @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  sentByUserId        String?
   createdAt           DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime              @updatedAt @db.Timestamptz(6)
 
   @@index([status, createdAt])
   @@index([userId, createdAt])
+  @@index([threadId, createdAt])
   @@index([direction, processedAt, createdAt])
   @@map("whatsapp_messages")
 }
@@ -1140,8 +1163,54 @@ model WhatsappConversation {
   lastActivityAt   DateTime           @default(now()) @db.Timestamptz(6)
   replyWindowStart DateTime           @default(now()) @db.Timestamptz(6)
   replyCount       Int                @default(0)
+  // Fil de l'échange humain en cours (état HUMAN, unité 48).
+  humanThreadId    String?
+  humanThread      WhatsappThread?    @relation(fields: [humanThreadId], references: [id], onDelete: SetNull)
   createdAt        DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime           @updatedAt @db.Timestamptz(6)
 
   @@map("whatsapp_conversations")
+}
+
+// Fil d'un locataire avec le responsable d'UN bien (unité 48, /architect
+// 2026-10-18) : un fil par couple locataire + bien, pour qu'un nouveau
+// bailleur ne voie jamais les échanges avec l'ancien. Les droits ne sont
+// jamais figés ici : canActOnProperty() sur le bien, à chaque accès.
+// Échange « en cours » = humanOpenedAt rempli, humanClosedAt vide et dernier
+// message du locataire de moins de 24 h (toujours calculé, aucune tâche).
+model WhatsappThread {
+  id                  String                     @id @default(cuid())
+  tenantUserId        String
+  tenant              User                       @relation("WhatsappThreadTenant", fields: [tenantUserId], references: [id], onDelete: Cascade)
+  propertyId          String
+  property            Property                   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  humanOpenedAt       DateTime?                  @db.Timestamptz(6)
+  humanClosedAt       DateTime?                  @db.Timestamptz(6)
+  closedReason        WhatsappThreadCloseReason?
+  // Heure Meta du dernier message du locataire dans l'échange (ouverture
+  // comprise) : départ du retour automatique au robot après 24 h.
+  lastTenantMessageAt DateTime?                  @db.Timestamptz(6)
+  // Dernier message du fil (relayé ou réponse) : tri de la liste.
+  lastMessageAt       DateTime?                  @db.Timestamptz(6)
+  // Premier message non lu (null = tout est lu). « Lu » = marqué par le
+  // responsable du bien (POST .../read), jamais par une simple lecture.
+  unreadSince         DateTime?                  @db.Timestamptz(6)
+  agencyReadAt        DateTime?                  @db.Timestamptz(6)
+  agencyReadById      String?
+  // Réservation de la notification « une par vague » (écriture
+  // conditionnelle), effacée à la lecture ; notifiedUserId permet de
+  // réarmer pour un nouveau responsable.
+  notifiedAt          DateTime?                  @db.Timestamptz(6)
+  notifiedUserId      String?
+  // Avis « photos et vocaux pas encore transmis » : un seul par échange.
+  mediaNoticeSentAt   DateTime?                  @db.Timestamptz(6)
+  createdAt           DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                   @updatedAt @db.Timestamptz(6)
+
+  messages      WhatsappMessage[]
+  conversations WhatsappConversation[]
+
+  @@unique([tenantUserId, propertyId])
+  @@index([propertyId, lastMessageAt])
+  @@map("whatsapp_threads")
 }

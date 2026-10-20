@@ -16,7 +16,8 @@ describe('ProfileService', () => {
     whatsappMessage: { updateMany: jest.Mock };
     whatsappConsentEvent: { create: jest.Mock; updateMany: jest.Mock };
     tenantProfile: { updateMany: jest.Mock };
-    whatsappConversation: { deleteMany: jest.Mock };
+    whatsappConversation: { deleteMany: jest.Mock; updateMany: jest.Mock };
+    whatsappThread: { deleteMany: jest.Mock; updateMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let storage: { upload: jest.Mock; remove: jest.Mock; getSignedUrl: jest.Mock };
@@ -54,7 +55,14 @@ describe('ProfileService', () => {
       session: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       whatsappMessage: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
       tenantProfile: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      whatsappConversation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      whatsappConversation: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      whatsappThread: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       whatsappConsentEvent: {
         create: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),

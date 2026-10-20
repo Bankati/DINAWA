@@ -622,6 +622,7 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 - Handler « Parler à l'agence » : état `HUMAN`, notification au responsable (`resolveResponsibleUserId()`) via nouvel événement `whatsapp-message`
 - `GET /api/whatsapp/conversations`, `GET /api/whatsapp/conversations/:id/messages`, `POST .../reply` (409 si fenêtre de 24 h fermée), `POST .../close` — `OWNER`/`MANAGER`, `canActOnProperty()`, pagination ≤ 100
 - Frontend : pages Messages (propriétaire et gestionnaire), entrée de menu avec compteur de non lus
+- **Précisions `/architect` du 2026-10-18** (5 décisions, voir `architecture.md` « Messagerie avec le gestionnaire ») : bouton « Contacter mon gestionnaire » ; un fil par locataire + bien (`WhatsappThread`) ; trois sorties (commande seule, 24 h calculées, « Terminer l'échange ») + STOP prioritaire ; une notification par vague sans contenu ; texte seulement (fichiers signalés, affichage avec l'unité 39) ; nom du responsable ajouté par le serveur, 1 000 caractères ; droits recalculés à chaque accès. Alerte WhatsApp au gestionnaire (option 1) en attente de la confirmation du patron.
 
 ### 39 Signalements locataire (réactivée)
 

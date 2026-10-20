@@ -4,7 +4,7 @@ import { normalizeKeywordText } from '../whatsapp-webhook/consent-keyword';
 // Tous les textes du robot WhatsApp (unité 47) — un seul endroit pour les
 // relire et les faire évoluer. Uniquement du service, jamais de publicité.
 
-export type BotChoice = 'MENU' | 'PAY' | 'RECEIPT' | 'STATEMENT';
+export type BotChoice = 'MENU' | 'PAY' | 'RECEIPT' | 'STATEMENT' | 'AGENT';
 
 // Lignes du menu cliquable (limites Meta : titre 24 caractères, description
 // 72). L'identifiant revient tel quel par le webhook (list_reply.id).
@@ -23,6 +23,12 @@ export const MENU_ROWS: InteractiveListRow[] = [
     id: 'STATEMENT',
     title: 'Mon relevé',
     description: 'Vos 6 derniers mois de loyer (code demandé)',
+  },
+  {
+    id: 'AGENT',
+    // « Contacter mon gestionnaire » dépasse les 24 caractères du titre.
+    title: 'Mon gestionnaire',
+    description: 'Contacter mon gestionnaire : une personne vous répond',
   },
 ];
 export const MENU_BUTTON = 'Voir les options';
@@ -44,13 +50,35 @@ const KEYWORDS: ReadonlyMap<string, BotChoice> = new Map<string, BotChoice>([
     word,
     'STATEMENT',
   ]),
+  ...['gestionnaire', 'contacter mon gestionnaire', 'agence', '4'].map(
+    (word): [string, BotChoice] => [word, 'AGENT'],
+  ),
 ]);
 
+// Pendant un échange avec le gestionnaire (unité 48, décision 1), seules ces
+// commandes rendent la main au robot : « bonjour », « oui » ou un chiffre
+// sont des messages normaux destinés au gestionnaire.
+const HUMAN_EXIT_KEYWORDS: ReadonlyMap<string, BotChoice> = new Map<string, BotChoice>([
+  ['menu', 'MENU'],
+  ...['payer', 'payer mon loyer'].map((word): [string, BotChoice] => [word, 'PAY']),
+  ...['quittance', 'ma quittance', 'ma derniere quittance', 'derniere quittance'].map(
+    (word): [string, BotChoice] => [word, 'RECEIPT'],
+  ),
+  ...['releve', 'mon releve'].map((word): [string, BotChoice] => [word, 'STATEMENT']),
+]);
+const LIST_REPLY_IDS: ReadonlySet<string> = new Set(['PAY', 'RECEIPT', 'STATEMENT', 'AGENT']);
+
 export function parseBotChoice(text: string | null, replyId: string | null): BotChoice | null {
-  if (replyId && (replyId === 'PAY' || replyId === 'RECEIPT' || replyId === 'STATEMENT'))
-    return replyId;
+  if (replyId && LIST_REPLY_IDS.has(replyId)) return replyId as BotChoice;
   if (!text) return null;
   return KEYWORDS.get(normalizeKeywordText(text)) ?? null;
+}
+
+// Commande qui met fin à l'échange humain (choix dans la liste ou mot seul).
+export function parseHumanExit(text: string | null, replyId: string | null): BotChoice | null {
+  if (replyId && LIST_REPLY_IDS.has(replyId)) return replyId as BotChoice;
+  if (!text) return null;
+  return HUMAN_EXIT_KEYWORDS.get(normalizeKeywordText(text)) ?? null;
 }
 
 export const BOT_TEXTS = {
@@ -84,6 +112,20 @@ export const BOT_TEXTS = {
   statement: (lines: string[], remaining: string): string =>
     `Votre relevé des 6 derniers mois :\n\n${lines.join('\n')}\n\nReste à payer : ${remaining}`,
   technicalError: 'Un problème technique m’empêche de répondre. Réessayez dans quelques minutes.',
+  // Messagerie avec le gestionnaire (unité 48).
+  agentOpened:
+    '✅ C’est noté. Écrivez votre message ici, votre gestionnaire vous répondra. ' +
+    'Pour revenir au menu, tapez « menu ».',
+  agentAlreadyOpen:
+    'Votre gestionnaire reçoit déjà vos messages : écrivez-lui ici. Pour revenir au menu, tapez « menu ».',
+  mediaNotForwarded:
+    'Les photos et notes vocales ne sont pas encore transmises à votre gestionnaire. ' +
+    'Merci de décrire votre demande par écrit.',
+  relayLimit:
+    'Vous avez envoyé beaucoup de messages en peu de temps : les suivants ne seront pas transmis ' +
+    'à votre gestionnaire pendant une heure. Il lira ceux déjà reçus.',
+  agencyClosed:
+    'Votre gestionnaire a terminé l’échange. Tapez « menu » pour revenir au menu.',
 };
 
 export function formatFcfa(amount: number): string {

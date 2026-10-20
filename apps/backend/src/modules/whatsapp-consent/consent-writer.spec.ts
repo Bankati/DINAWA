@@ -14,7 +14,8 @@ describe('applyConsentCommand', () => {
     user: { findUnique: jest.Mock; updateMany: jest.Mock };
     whatsappConsentEvent: { create: jest.Mock };
     tenantProfile: { updateMany: jest.Mock };
-    whatsappConversation: { deleteMany: jest.Mock };
+    whatsappConversation: { deleteMany: jest.Mock; updateMany: jest.Mock };
+    whatsappThread: { updateMany: jest.Mock };
   };
 
   const baseUser = {
@@ -31,7 +32,11 @@ describe('applyConsentCommand', () => {
       user: { findUnique: jest.fn().mockResolvedValue(baseUser), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       whatsappConsentEvent: { create: jest.fn().mockResolvedValue({}) },
       tenantProfile: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      whatsappConversation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      whatsappConversation: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      whatsappThread: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
   });
 
@@ -138,6 +143,11 @@ describe('applyConsentCommand', () => {
     });
     // Conversation avec le robot fermée (unité 47).
     expect(tx.whatsappConversation.deleteMany).toHaveBeenCalledWith({ where: { userId: 'tenant-1' } });
+    // Échange avec le gestionnaire terminé, fil conservé (unité 48).
+    expect(tx.whatsappThread.updateMany).toHaveBeenCalledWith({
+      where: { tenantUserId: 'tenant-1', humanOpenedAt: { not: null }, humanClosedAt: null },
+      data: { humanClosedAt: NOW, closedReason: 'SYSTEM' },
+    });
   });
 
   it('un arrêt fixe la date d’arrêt une seule fois', async () => {
@@ -145,6 +155,25 @@ describe('applyConsentCommand', () => {
     await applyConsentCommand(tx as never, { userId: 'tenant-1', command: { type: 'TENANT_WITHDRAW' }, actorUserId: 'tenant-1' }, NOW);
     const [update] = tx.user.updateMany.mock.calls[0] as [{ data: Record<string, unknown> }];
     expect(update.data).toMatchObject({ whatsappConsent: 'STOPPED', whatsappStoppedAt: NOW });
+  });
+
+  it('STOP pendant un échange avec le gestionnaire : l’échange se termine tout de suite (unité 48)', async () => {
+    tx.user.findUnique.mockResolvedValue({ ...baseUser, whatsappConsent: 'ACCEPTED' });
+    await applyConsentCommand(tx as never, { userId: 'tenant-1', command: { type: 'TENANT_WITHDRAW' }, actorUserId: 'tenant-1' }, NOW);
+    expect(tx.whatsappThread.updateMany).toHaveBeenCalledWith({
+      where: { tenantUserId: 'tenant-1', humanOpenedAt: { not: null }, humanClosedAt: null },
+      data: { humanClosedAt: NOW, closedReason: 'STOP' },
+    });
+    expect(tx.whatsappConversation.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'tenant-1', state: 'HUMAN' },
+      data: { state: 'MENU', pendingAction: null, humanThreadId: null },
+    });
+  });
+
+  it('accord donné : aucun échange fermé', async () => {
+    tx.user.findUnique.mockResolvedValue({ ...baseUser, whatsappConsent: 'NOT_ASKED' });
+    await applyConsentCommand(tx as never, { userId: 'tenant-1', command: { type: 'TENANT_ACCEPT' }, actorUserId: 'tenant-1' }, NOW);
+    expect(tx.whatsappThread.updateMany).not.toHaveBeenCalled();
   });
 
   it('rien à faire : aucune écriture ni ligne d’historique', async () => {

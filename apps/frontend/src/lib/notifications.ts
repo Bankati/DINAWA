@@ -12,6 +12,7 @@ import {
   UserPlus,
   FileSignature,
   Handshake,
+  MessageSquare,
 } from "lucide-react";
 
 // Un seul point de vérité, importé par les 3 pages "Notifications"
@@ -36,6 +37,8 @@ export const NOTIFICATION_ICONS: Record<string, LucideIcon> = {
   "tenant-invitation": UserPlus,
   "lease-created": FileSignature,
   "mandate-created": Handshake,
+  // Message WhatsApp d'un locataire (backend unité 48).
+  "whatsapp-message": MessageSquare,
 };
 
 export const DEFAULT_NOTIFICATION_ICON = Bell;
