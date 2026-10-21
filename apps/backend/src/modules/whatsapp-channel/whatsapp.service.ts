@@ -3,18 +3,35 @@ import { Prisma, WhatsappMessageStatus, WhatsappMessageType } from '@prisma/clie
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappAccessRefusal, WhatsappAccessService } from './whatsapp-access.service';
-import { TemplateComponent, WhatsappCloudClient } from './whatsapp-cloud.client';
+import { InteractiveListRow, TemplateComponent, WhatsappCloudClient } from './whatsapp-cloud.client';
 import { MetaApiError, MetaErrorClassification, classifyMetaError } from './meta-error';
+import { isWithinReplyWindow } from './reply-window';
 
 // Modèles Meta de catégorie Utilité prévus pour la phase 12 (textes dans le
 // plan d'implémentation). Leur approbation se fait chez Meta, hors code.
-export type WhatsappTemplateName =
-  | 'rappel_loyer'
-  | 'paiement_recu'
-  | 'loyer_en_retard'
-  | 'bienvenue_locataire';
+// Pas de modèle de bienvenue : depuis l'unité 45, la bienvenue est la
+// réponse libre au « OUI » du locataire (décision 4).
+export type WhatsappTemplateName = 'rappel_loyer' | 'paiement_recu' | 'loyer_en_retard';
 
 const TEMPLATE_LANGUAGE = 'fr';
+
+// Réponses libres aux messages du locataire (unités 44-45) : jamais de
+// publicité, seulement le service.
+export const STOP_CONFIRMATION_SOURCE = 'stop-confirmation';
+export const STOP_CONFIRMATION_TEXT =
+  "C'est noté : vous ne recevrez plus de messages WARAH sur WhatsApp. " +
+  'Pour les réactiver, répondez REPRENDRE ou activez-les depuis votre espace WARAH.';
+export const CONSENT_WELCOME_SOURCE = 'consent-welcome';
+export const CONSENT_WELCOME_TEXT =
+  'Bienvenue sur WARAH ! Vous recevrez ici vos rappels de loyer, vos quittances et ' +
+  'les messages de service de votre logement. Écrivez « menu » pour payer votre loyer ou ' +
+  'recevoir une quittance. Pour arrêter à tout moment, répondez STOP.';
+export const RESUME_CONFIRMATION_SOURCE = 'resume-confirmation';
+// Invitation « répondez OUI » du robot (unité 47).
+export const BOT_INVITATION_SOURCE = 'bot-invitation';
+export const RESUME_CONFIRMATION_TEXT =
+  "C'est noté : vous recevez de nouveau les messages de service WARAH sur WhatsApp. " +
+  'Pour arrêter à tout moment, répondez STOP.';
 const ERROR_MESSAGE_MAX_LENGTH = 200;
 const MEDIA_UPLOAD_UNCERTAIN = 'MEDIA_UPLOAD_UNCERTAIN';
 
@@ -29,6 +46,12 @@ type SendContext = {
   source: string;
   scheduleEntryId?: string;
   paymentId?: string;
+  // Nouvel essai d'un envoi raté (tâche whatsapp-retry, unité 46) : numéro
+  // de la tentative et heure du premier envoi de la série.
+  retryOf?: { attempt: number; firstAttemptAt: Date };
+  // Messagerie (unité 48) : fil de l'échange et auteur d'une réponse.
+  threadId?: string;
+  sentByUserId?: string;
 };
 
 type TemplateParams = {
@@ -46,6 +69,8 @@ export type WhatsappDocumentInput = SendContext & {
   // Avec modèle : document en en-tête d'un modèle approuvé (obligatoire hors
   // de la fenêtre de 24 h). Sans : simple message document (robot, unité 47).
   template?: Omit<TemplateParams, 'buttonParam'>;
+  // Légende sous le document (message sans modèle seulement).
+  caption?: string;
 };
 
 export type WhatsappSendResult =
@@ -96,6 +121,125 @@ export class WhatsappService {
               callbackData: message.id,
             })
           : await this.client.sendText({ to: access.metaNumber, body: input.text, callbackData: message.id });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
+  }
+
+  // Réponse libre (sans modèle) à un message du locataire : bienvenue après
+  // son « OUI », confirmation de reprise (unité 45), puis le robot (unité
+  // 47). Mêmes contrôles que send() — revérifiés au moment de l'envoi, donc
+  // un STOP ou un changement de numéro arrivé entre-temps l'emporte — plus
+  // la fenêtre de 24 h.
+  async reply(input: SendContext & { text: string; inboundReceivedAt: Date }): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    return this.send({
+      userId: input.userId,
+      source: input.source,
+      threadId: input.threadId,
+      sentByUserId: input.sentByUserId,
+      kind: 'text',
+      text: input.text,
+    });
+  }
+
+  // Menu cliquable du robot (unité 47) : mêmes contrôles que reply()
+  // (accès revérifié à l'envoi + fenêtre de 24 h), un seul appel Meta.
+  async replyList(
+    input: SendContext & { body: string; buttonLabel: string; rows: InteractiveListRow[]; inboundReceivedAt: Date },
+  ): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    const access = await this.access.canUseWhatsapp(input.userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'INTERACTIVE',
+      templateName: null,
+      payload: { body: input.body, rows: input.rows.map((row) => row.id) },
+    });
+    let wamid: string;
+    try {
+      wamid = await this.client.sendInteractiveList({
+        to: access.metaNumber,
+        body: input.body,
+        buttonLabel: input.buttonLabel,
+        rows: input.rows,
+        callbackData: message.id,
+      });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
+  }
+
+  // Document en réponse (quittance du robot, unité 47) : PDF en mémoire,
+  // jamais stocké (invariant #5), fenêtre de 24 h vérifiée à l'envoi.
+  async replyDocument(
+    input: SendContext & {
+      document: WhatsappDocumentInput['document'];
+      caption?: string;
+      inboundReceivedAt: Date;
+    },
+  ): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    return this.sendDocument({
+      userId: input.userId,
+      source: input.source,
+      paymentId: input.paymentId,
+      document: input.document,
+      caption: input.caption,
+    });
+  }
+
+  // Invitation « répondez OUI » (unité 47, décision 1) : contrôlée par
+  // canSendInvitation (locataire sans accord, numéro vérifié, jamais après
+  // un STOP) et par la fenêtre de 24 h. La réservation « une par 24 h » est
+  // faite par l'appelant AVANT (WhatsappBotService).
+  async sendInvitation(userId: string, text: string, inboundReceivedAt: Date): Promise<WhatsappSendResult> {
+    const input: SendContext = { userId, source: BOT_INVITATION_SOURCE };
+    if (!isWithinReplyWindow(inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    const access = await this.access.canSendInvitation(userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'TEXT',
+      templateName: null,
+      payload: { body: text },
+    });
+    let wamid: string;
+    try {
+      wamid = await this.client.sendText({ to: access.metaNumber, body: text, callbackData: message.id });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
+  }
+
+  // Confirmation d'un STOP (unité 44) — même invariant d'appels que send()
+  // (un seul appel Meta), mais contrôlée par canSendStopConfirmation : c'est
+  // le seul message autorisé après un arrêt. Envoyée une seule fois, par la
+  // liste de travail des messages reçus (WhatsappInboundProcessor), et
+  // seulement dans la fenêtre de 24 h après le STOP (unité 45).
+  async sendStopConfirmation(userId: string, inboundReceivedAt: Date): Promise<WhatsappSendResult> {
+    const input: SendContext = { userId, source: STOP_CONFIRMATION_SOURCE };
+    if (!isWithinReplyWindow(inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    const access = await this.access.canSendStopConfirmation(userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'TEXT',
+      templateName: null,
+      payload: { body: STOP_CONFIRMATION_TEXT },
+    });
+
+    let wamid: string;
+    try {
+      wamid = await this.client.sendText({
+        to: access.metaNumber,
+        body: STOP_CONFIRMATION_TEXT,
+        callbackData: message.id,
+      });
     } catch (error) {
       return this.markFailure(message.id, input.source, error, classify(error));
     }
@@ -161,6 +305,7 @@ export class WhatsappService {
             to: access.metaNumber,
             mediaId,
             filename: input.document.filename,
+            caption: input.caption,
             callbackData: message.id,
           });
     } catch (error) {
@@ -193,6 +338,9 @@ export class WhatsappService {
         status: 'QUEUED',
         scheduleEntryId: input.scheduleEntryId,
         paymentId: input.paymentId,
+        threadId: input.threadId,
+        sentByUserId: input.sentByUserId,
+        ...(input.retryOf ? { attempt: input.retryOf.attempt, firstAttemptAt: input.retryOf.firstAttemptAt } : {}),
         ...content,
       },
       select: { id: true },

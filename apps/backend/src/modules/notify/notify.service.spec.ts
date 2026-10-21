@@ -1,5 +1,9 @@
 import { NotifyService, NotifyUserParams } from './notify.service';
 
+jest.mock('@sentry/nestjs', () => ({ captureMessage: jest.fn() }));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const Sentry = require('@sentry/nestjs') as { captureMessage: jest.Mock };
+
 describe('NotifyService', () => {
   let service: NotifyService;
   let prisma: {
@@ -8,6 +12,7 @@ describe('NotifyService', () => {
   };
   let push: { sendToUser: jest.Mock };
   let email: { sendEmail: jest.Mock };
+  let whatsapp: { send: jest.Mock; sendDocument: jest.Mock };
 
   const params: NotifyUserParams = {
     userId: 'user-1',
@@ -23,7 +28,12 @@ describe('NotifyService', () => {
     push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
     email = { sendEmail: jest.fn().mockResolvedValue(true) };
 
-    service = new NotifyService(prisma as never, push as never, email as never);
+    whatsapp = {
+      send: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'wa-1', wamid: 'w' }),
+      sendDocument: jest.fn().mockResolvedValue({ outcome: 'SENT', messageId: 'wa-2', wamid: 'w2' }),
+    };
+    jest.clearAllMocks();
+    service = new NotifyService(prisma as never, push as never, email as never, whatsapp as never);
   });
 
   it("n'envoie rien et ne persiste rien si l'utilisateur est introuvable", async () => {
@@ -185,6 +195,129 @@ describe('NotifyService', () => {
         status: 'SENT',
         payload: { inviterName: 'Jean Dupont', propertyAddress: '12 rue de Lomé' },
       },
+    });
+  });
+
+  describe('canal WhatsApp (unité 46)', () => {
+    const tenant = {
+      id: 'tenant-1',
+      email: 'ama@example.com',
+      role: 'TENANT',
+      notificationConsent: 'DECLINED',
+      _count: { pushSubscriptions: 0 },
+    };
+    const reminder: NotifyUserParams = {
+      userId: 'tenant-1',
+      event: 'payment-reminder',
+      relatedTo: { scheduleEntryId: 'entry-1' },
+      variables: {
+        tenantFirstName: 'Ama',
+        amount: 75000,
+        propertyAddress: 'Bè, Lomé',
+        dueDate: '2026-10-31',
+        period: '2026-10-01 — 2026-10-31',
+        payToken: 'jeton-secret',
+        payLinkUrl: 'https://warahcontact.com/payer/jeton-secret',
+      },
+    };
+
+    beforeEach(() => {
+      prisma.user.findUnique.mockResolvedValue(tenant);
+    });
+
+    it('s’ajoute à l’email : modèle rappel_loyer, trous dans l’ordre, jeton dans le bouton, échéance rattachée', async () => {
+      await service.notifyUser(reminder);
+
+      expect(email.sendEmail).toHaveBeenCalledTimes(1);
+      expect(whatsapp.send).toHaveBeenCalledWith({
+        userId: 'tenant-1',
+        source: 'payment-reminder',
+        scheduleEntryId: 'entry-1',
+        paymentId: undefined,
+        kind: 'template',
+        template: {
+          name: 'rappel_loyer',
+          bodyParams: ['Ama', (75000).toLocaleString('fr-FR'), 'Bè, Lomé', '31/10/2026'],
+          buttonParam: 'jeton-secret',
+        },
+      });
+    });
+
+    it('ne garde jamais le lien de paiement dans l’historique des notifications', async () => {
+      await service.notifyUser(reminder);
+      const [args] = prisma.notification.create.mock.calls[0] as [{ data: { payload: Record<string, unknown> } }];
+      expect(args.data.payload).not.toHaveProperty('payToken');
+      expect(args.data.payload).not.toHaveProperty('payLinkUrl');
+      expect(args.data.payload).toHaveProperty('tenantFirstName', 'Ama');
+    });
+
+    it('quittance : le PDF déjà généré part en en-tête du modèle paiement_recu', async () => {
+      const pdf = Buffer.from('%PDF-quittance');
+      await service.notifyUser({
+        userId: 'tenant-1',
+        event: 'receipt',
+        variables: { tenantFirstName: 'Ama', amount: 75000, period: '01/10/2026 — 31/10/2026' },
+        emailAttachments: [{ filename: 'quittance-warah.pdf', content: pdf }],
+        relatedTo: { paymentId: 'pay-1', scheduleEntryId: 'entry-1' },
+      });
+      expect(whatsapp.sendDocument).toHaveBeenCalledWith({
+        userId: 'tenant-1',
+        source: 'receipt',
+        scheduleEntryId: 'entry-1',
+        paymentId: 'pay-1',
+        document: { content: pdf, filename: 'quittance-warah.pdf', mimeType: 'application/pdf' },
+        template: { name: 'paiement_recu', bodyParams: ['Ama', (75000).toLocaleString('fr-FR'), '01/10/2026 — 31/10/2026'] },
+      });
+      expect(whatsapp.send).not.toHaveBeenCalled();
+    });
+
+    it('seulement pour un locataire : propriétaire et gestionnaire gardent push / email', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...tenant, role: 'OWNER' });
+      await service.notifyUser({ ...reminder, event: 'receipt', emailAttachments: [{ filename: 'q.pdf', content: Buffer.from('x') }] });
+      expect(email.sendEmail).toHaveBeenCalled();
+      expect(whatsapp.send).not.toHaveBeenCalled();
+      expect(whatsapp.sendDocument).not.toHaveBeenCalled();
+    });
+
+    it('événement sans modèle (null dans la table) : aucun WhatsApp', async () => {
+      await service.notifyUser({ userId: 'tenant-1', event: 'lease-created', variables: { propertyAddress: 'Bè' } });
+      expect(whatsapp.send).not.toHaveBeenCalled();
+    });
+
+    it('variable manquante : pas de WhatsApp, alerte sans les valeurs, l’email est parti', async () => {
+      const sansPrenom = { ...reminder.variables };
+      delete sansPrenom['tenantFirstName'];
+      await service.notifyUser({ ...reminder, variables: sansPrenom });
+      expect(email.sendEmail).toHaveBeenCalled();
+      expect(whatsapp.send).not.toHaveBeenCalled();
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(expect.stringContaining('tenantFirstName'), 'warning');
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(expect.stringContaining('jeton-secret'), expect.anything());
+    });
+
+    it('WhatsApp en erreur (base indisponible) : ne lève jamais, l’email reste envoyé', async () => {
+      whatsapp.send.mockRejectedValue(new Error('base indisponible'));
+      await expect(service.notifyUser(reminder)).resolves.toBeUndefined();
+      expect(email.sendEmail).toHaveBeenCalled();
+    });
+
+    it('WhatsApp refusé (pas d’accord) : cas normal, l’email part, rien d’autre', async () => {
+      whatsapp.send.mockResolvedValue({ outcome: 'REFUSED', reason: 'NO_CONSENT' });
+      await expect(service.notifyUser(reminder)).resolves.toBeUndefined();
+      expect(email.sendEmail).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
+
+    it('locataire sans email ni push : le WhatsApp part quand même', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...tenant, email: null });
+      await service.notifyUser(reminder);
+      expect(email.sendEmail).not.toHaveBeenCalled();
+      expect(whatsapp.send).toHaveBeenCalled();
+    });
+
+    it('un email raté ne bloque pas le WhatsApp (canaux indépendants)', async () => {
+      email.sendEmail.mockResolvedValue(false);
+      await service.notifyUser(reminder);
+      expect(whatsapp.send).toHaveBeenCalled();
     });
   });
 });

@@ -9,6 +9,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname, "../.."),
   },
+  // Pages du lien de paiement public (unité 43) : l'URL contient un jeton
+  // d'accès. Sans cet en-tête, le navigateur l'enverrait (en-tête Referer) à
+  // PayDunya et à tout site ouvert depuis la page.
+  async headers() {
+    return [
+      {
+        source: "/payer/:path*",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

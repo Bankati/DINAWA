@@ -58,6 +58,34 @@ describe('WhatsappCloudClient', () => {
     );
   });
 
+  it('envoie le menu cliquable au format liste de Meta (unité 47)', async () => {
+    post.mockResolvedValueOnce({ data: { messages: [{ id: 'wamid.list' }] } });
+    await expect(
+      client.sendInteractiveList({
+        to: '22890112233',
+        body: 'Que voulez-vous faire ?',
+        buttonLabel: 'Voir les options',
+        rows: [{ id: 'PAY', title: 'Payer mon loyer', description: 'Lien de paiement' }],
+        callbackData: 'msg-9',
+      }),
+    ).resolves.toBe('wamid.list');
+    expect(post).toHaveBeenCalledWith('/messages', {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '22890112233',
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: 'Que voulez-vous faire ?' },
+        action: {
+          button: 'Voir les options',
+          sections: [{ title: 'WARAH', rows: [{ id: 'PAY', title: 'Payer mon loyer', description: 'Lien de paiement' }] }],
+        },
+      },
+      biz_opaque_callback_data: 'msg-9',
+    });
+  });
+
   it('lève une MetaApiError sans code pour un 2xx sans wamid', async () => {
     post.mockResolvedValueOnce({ data: { messages: [] } });
     await expect(client.sendText({ to: '2289', body: 'x', callbackData: 'm' })).rejects.toMatchObject({

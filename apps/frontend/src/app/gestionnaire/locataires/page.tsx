@@ -5,8 +5,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Users, Check, UserCheck, UserX, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatFcfa, initiales } from '@/lib/format';
+import { whatsappBadge, type WhatsappConsent } from '@/lib/whatsapp';
+import { TenantWhatsappDialog } from '@/components/whatsapp/tenant-whatsapp-dialog';
 import {
-  PageHeader, Button, Card, EmptyState, Skeleton, StatCard,
+  PageHeader, Button, Card, Badge, EmptyState, Skeleton, StatCard,
   Dialog, DialogContent, DialogHeader, DialogTitle,
   Label, Input, Textarea,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
@@ -27,6 +29,7 @@ interface TenantSummary {
     startDate: string;
     property: { id: string; address: string | null; neighborhood: string; city: string };
   } | null;
+  whatsapp: { consent: WhatsappConsent; phoneVerified: boolean };
 }
 
 interface PropertyOption {
@@ -76,6 +79,7 @@ export default function GestionnaireLocatairesPage() {
   const revenuLocatifTotal = list.reduce((sum, t) => sum + (t.activeLease?.monthlyRent ?? 0), 0);
 
   const [managing, setManaging] = useState<ManagingTarget | null>(null);
+  const [whatsappTenant, setWhatsappTenant] = useState<TenantSummary | null>(null);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [linkForm, setLinkForm] = useState({ ...EMPTY_LINK_FORM });
@@ -250,6 +254,7 @@ export default function GestionnaireLocatairesPage() {
                 <TableHead>Bien loué</TableHead>
                 <TableHead>Depuis le</TableHead>
                 <TableHead>Loyer</TableHead>
+                <TableHead>WhatsApp</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -286,6 +291,19 @@ export default function GestionnaireLocatairesPage() {
                     {t.activeLease ? formatFcfa(t.activeLease.monthlyRent) : <span className="text-muted-foreground font-normal">—</span>}
                   </TableCell>
                   <TableCell>
+                    {/* WhatsApp exige un bail actif (unité 45) : sans bail, rien à gérer. */}
+                    {t.activeLease ? (
+                      <button
+                        type="button"
+                        onClick={() => setWhatsappTenant(t)}
+                        className="min-h-11 inline-flex items-center rounded-lg px-1 -mx-1 hover:bg-ds-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Gérer WhatsApp pour ${t.firstName} ${t.lastName}`}
+                      >
+                        <WhatsappBadge whatsapp={t.whatsapp} />
+                      </button>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell>
                     <Button variant="outline" size="sm" onClick={() => openManage(t)}>
                       {t.activeLease ? 'Gérer le bien' : 'Associer un bien'}
                     </Button>
@@ -296,6 +314,12 @@ export default function GestionnaireLocatairesPage() {
           </Table>
         )}
       </Card>
+
+      <TenantWhatsappDialog
+        tenant={whatsappTenant}
+        readOnly={false}
+        onClose={() => setWhatsappTenant(null)}
+      />
 
       {/* Modale gestion / invitation */}
       <Dialog open={!!managing} onOpenChange={(open) => !open && setManaging(null)}>
@@ -454,4 +478,9 @@ export default function GestionnaireLocatairesPage() {
       </Dialog>
     </div>
   );
+}
+
+function WhatsappBadge({ whatsapp }: { whatsapp: TenantSummary['whatsapp'] }) {
+  const { label, tone } = whatsappBadge(whatsapp);
+  return <Badge tone={tone} dot>{label}</Badge>;
 }

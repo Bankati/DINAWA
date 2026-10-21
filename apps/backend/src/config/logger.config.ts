@@ -1,4 +1,5 @@
 import type { Params } from 'nestjs-pino';
+import { maskSensitiveUrl } from '../common/utils/mask-sensitive-url';
 
 export const pinoConfig: Params = {
   pinoHttp: {
@@ -60,8 +61,10 @@ export const pinoConfig: Params = {
 
     // Sérialisation minimale des requêtes (pas de duplication de champs sensibles)
     serializers: {
+      // URL masquée : jetons de lien de paiement / d'invitation jamais en
+      // clair dans les journaux (unité 43, voir maskSensitiveUrl).
       req(req: { method: string; url: string; id: string }) {
-        return { method: req.method, url: req.url, id: req.id };
+        return { method: req.method, url: maskSensitiveUrl(req.url), id: req.id };
       },
       res(res: { statusCode: number }) {
         return { statusCode: res.statusCode };

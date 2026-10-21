@@ -15,6 +15,10 @@ type SendMessageResponse = { messages?: { id?: string }[] };
 type UploadMediaResponse = { id?: string };
 type GraphErrorBody = { error?: { message?: string; code?: number; error_subcode?: number } };
 
+// Ligne d'une liste interactive WhatsApp (robot, unité 47). Limites Meta :
+// 10 lignes au plus, titre 24 caractères, description 72.
+export type InteractiveListRow = { id: string; title: string; description?: string };
+
 // Seul point de contact HTTP avec l'API WhatsApp Cloud de Meta (unité 42).
 // NON exporté par WhatsappChannelModule : les services métier passent
 // toujours par WhatsappService, qui trace et classe chaque tentative.
@@ -73,12 +77,34 @@ export class WhatsappCloudClient {
     to: string;
     mediaId: string;
     filename: string;
+    caption?: string;
     callbackData: string;
   }): Promise<string> {
     return this.postMessage({
       to: params.to,
       type: 'document',
-      document: { id: params.mediaId, filename: params.filename },
+      document: { id: params.mediaId, filename: params.filename, ...(params.caption ? { caption: params.caption } : {}) },
+      biz_opaque_callback_data: params.callbackData,
+    });
+  }
+
+  // Menu cliquable du robot (unité 47) : un bouton (« Voir les options »)
+  // qui ouvre une liste. Le choix revient par le webhook (list_reply.id).
+  sendInteractiveList(params: {
+    to: string;
+    body: string;
+    buttonLabel: string;
+    rows: InteractiveListRow[];
+    callbackData: string;
+  }): Promise<string> {
+    return this.postMessage({
+      to: params.to,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: params.body },
+        action: { button: params.buttonLabel, sections: [{ title: 'WARAH', rows: params.rows }] },
+      },
       biz_opaque_callback_data: params.callbackData,
     });
   }

@@ -1,6 +1,6 @@
-import { randomBytes, randomInt, createHash } from 'node:crypto';
+import { randomBytes, randomInt, createHash, createHmac } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -40,24 +40,57 @@ export class TokenService {
     return bcrypt.compare(password, hash);
   }
 
-  // Code locataire à 6 chiffres du robot WhatsApp (unité 42) — bcrypt comme
-  // les mots de passe, d'où sa place ici. bcrypt protège le code stocké, PAS
-  // les essais répétés (1 000 000 de possibilités) : la limite de 5 essais
-  // puis 1 h de blocage (TenantProfile.pinFailedAttempts/pinLockedUntil) est
-  // appliquée par le robot (unité 47) avant tout appel à verifyPin(). Le code
-  // en clair ne doit jamais être journalisé ni stocké ailleurs.
+  // Code locataire à 6 chiffres du robot WhatsApp (unités 42 et 45) — bcrypt
+  // comme les mots de passe, d'où sa place ici. bcrypt protège le code
+  // stocké, PAS les essais répétés (1 000 000 de possibilités) : la limite de
+  // 5 essais puis 1 h de blocage (TenantProfile.pinFailedAttempts /
+  // pinLockedUntil) est appliquée par le robot (unité 47) avant tout appel à
+  // verifyPin(). Le code en clair, son HMAC et la clé ne doivent jamais être
+  // journalisés ni stockés ailleurs.
+  //
+  // Tiré au hasard, et retiré tant qu'il est trop simple à deviner (unité
+  // 45, décision 2) : 000000, 123456, 121212, 123123...
   generatePin(): string {
-    return randomInt(0, 10 ** PIN_LENGTH)
-      .toString()
-      .padStart(PIN_LENGTH, '0');
+    let pin: string;
+    do {
+      pin = randomInt(0, 10 ** PIN_LENGTH)
+        .toString()
+        .padStart(PIN_LENGTH, '0');
+    } while (isTrivialPin(pin));
+    return pin;
   }
 
-  hashPin(pin: string): Promise<string> {
-    return bcrypt.hash(pin, BCRYPT_ROUNDS);
+  // HMAC avec une clé gardée HORS de la base (WHATSAPP_PIN_PEPPER) avant
+  // bcrypt (unité 45, décision 2) : une copie volée de la base ne suffit pas
+  // pour essayer le million de codes possibles hors ligne.
+  // async : une clé manquante devient une promesse rejetée (503), jamais une
+  // exception levée avant même que l'appelant n'ait sa promesse.
+  async hashPin(pin: string): Promise<string> {
+    return bcrypt.hash(this.pepperPin(pin), BCRYPT_ROUNDS);
   }
 
-  verifyPin(pin: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(pin, hash);
+  async verifyPin(pin: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(this.pepperPin(pin), hash);
+  }
+
+  // Code tapé dans WhatsApp (robot, unité 47) : le webhook ne garde JAMAIS
+  // le code en clair, seulement cette empreinte HMAC (clé hors de la base),
+  // effacée dès la vérification. pinDigest() puis verifyPinDigest() donnent
+  // exactement le même résultat que verifyPin(pin, hash).
+  pinDigest(pin: string): string {
+    return this.pepperPin(pin);
+  }
+
+  async verifyPinDigest(digest: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(digest, hash);
+  }
+
+  private pepperPin(pin: string): string {
+    const pepper = this.config.get<string>('WHATSAPP_PIN_PEPPER');
+    // Obligatoire au démarrage quand WhatsApp est allumé (env.validation.ts) ;
+    // sans elle, aucun code n'est créé plutôt qu'un code mal protégé.
+    if (!pepper) throw new ServiceUnavailableException('Code WhatsApp indisponible pour le moment');
+    return createHmac('sha256', pepper).update(pin).digest('hex');
   }
 
   verifyAccessToken(token: string): AccessTokenPayload {
@@ -125,4 +158,16 @@ export class TokenService {
   private hashRefreshToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
+}
+
+// Code trop facile à deviner (unité 45, décision 2) : un seul chiffre
+// répété (000000), une suite qui monte ou descend (123456, 987654, 890123),
+// un motif de 2 ou 3 chiffres répété (121212, 123123).
+export function isTrivialPin(pin: string): boolean {
+  const digits = [...pin].map(Number);
+  // Écart entre chiffres voisins, en tournant (9 → 0 compte comme +1).
+  const steps = new Set(digits.slice(1).map((digit, i) => (digit - digits[i] + 10) % 10));
+  const [onlyStep] = [...steps];
+  if (steps.size === 1 && [0, 1, 9].includes(onlyStep)) return true;
+  return pin === pin.slice(0, 2).repeat(3) || pin === pin.slice(0, 3).repeat(2);
 }

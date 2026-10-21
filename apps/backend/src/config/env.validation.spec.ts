@@ -73,6 +73,8 @@ describe('validate (canal WhatsApp, phase 12)', () => {
     WHATSAPP_APP_SECRET: 'app-secret',
     WHATSAPP_VERIFY_TOKEN: 'verify',
     WHATSAPP_GRAPH_VERSION: 'v23.0',
+    WHATSAPP_PIN_PEPPER: 'a'.repeat(32),
+    WHATSAPP_BUSINESS_NUMBER: '22890000000',
   };
 
   it('est éteint par défaut et démarre sans aucune variable WHATSAPP_*', () => {
@@ -93,10 +95,20 @@ describe('validate (canal WhatsApp, phase 12)', () => {
     'WHATSAPP_APP_SECRET',
     'WHATSAPP_VERIFY_TOKEN',
     'WHATSAPP_GRAPH_VERSION',
+    'WHATSAPP_PIN_PEPPER',
+    'WHATSAPP_BUSINESS_NUMBER',
   ])('refuse de démarrer allumé sans %s', (missing) => {
     expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV, [missing]: undefined })).toThrow(
       new RegExp(missing),
     );
+  });
+
+  it('refuse une clé de code locataire trop courte (unité 45)', () => {
+    expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_PIN_PEPPER: 'courte' })).toThrow(/WHATSAPP_PIN_PEPPER/);
+  });
+
+  it.each(['+22890000000', '9000', 'wa.me/22890000000'])('refuse un numéro WARAH mal formé (%s)', (value) => {
+    expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_BUSINESS_NUMBER: value })).toThrow(/WHATSAPP_BUSINESS_NUMBER/);
   });
 
   it('refuse une version Graph mal formée', () => {
@@ -105,7 +117,7 @@ describe('validate (canal WhatsApp, phase 12)', () => {
     ).toThrow(/WHATSAPP_GRAPH_VERSION/);
   });
 
-  it('démarre sans PAY_LINK_SECRET tant que le lien de paiement n’existe pas (obligatoire à l’unité 43)', () => {
-    expect(() => validate({ ...BASE_ENV, PAY_LINK_SECRET: undefined })).not.toThrow();
+  it('refuse de démarrer sans PAY_LINK_SECRET (obligatoire depuis l’unité 43)', () => {
+    expect(() => validate({ ...BASE_ENV, PAY_LINK_SECRET: undefined })).toThrow(/PAY_LINK_SECRET/);
   });
 });

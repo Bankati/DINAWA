@@ -2,9 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
+import { PayLinksService } from '../pay-links/pay-links.service';
 import { withAdvisoryLock } from '../../common/utils/advisory-lock';
 import { formatPropertyLocation } from '../../common/utils/format-property-location';
 import { CRON_PAYMENT_REMINDERS } from '../../common/constants';
+import { isTenantNotificationHour } from '../../common/utils/tenant-notification-hours';
 
 const ADVISORY_LOCK_KEY = 'payment-reminders-task';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -25,6 +27,7 @@ export class RemindersTask {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notify: NotifyService,
+    private readonly payLinks: PayLinksService,
   ) {}
 
   @Cron(CRON_PAYMENT_REMINDERS)
@@ -51,7 +54,7 @@ export class RemindersTask {
         lease: {
           include: {
             owner: { select: { reminderDaysBefore: true } },
-            tenant: { select: { id: true } },
+            tenant: { select: { id: true, firstName: true } },
             property: { select: { address: true, neighborhood: true, city: true } },
           },
         },
@@ -60,15 +63,26 @@ export class RemindersTask {
     });
 
     for (const entry of candidates) {
+      // Plage 7 h – 21 h (heure de Lomé), vérifiée au moment de l'envoi :
+      // hors plage, les échéances restantes gardent reminderSentAt vide et
+      // le passage de 7 h les reprend (/review unité 46).
+      if (!isTenantNotificationHour()) break;
       try {
         const reminderDays = entry.lease.reminderDaysBefore ?? entry.lease.owner.reminderDaysBefore;
         const daysUntilDue = Math.floor((entry.dueDate.getTime() - now.getTime()) / MS_PER_DAY);
         if (daysUntilDue > reminderDays) continue;
 
+        // Lien de paiement sans connexion (unité 43) : bouton du WhatsApp et
+        // de l'email (unité 46). Jamais gardé dans l'historique (NotifyService).
+        const payLink = this.payLinks.payLinkFor(entry);
         await this.notify.notifyUser({
           userId: entry.lease.tenant.id,
           event: 'payment-reminder',
+          relatedTo: { scheduleEntryId: entry.id },
           variables: {
+            tenantFirstName: entry.lease.tenant.firstName,
+            payToken: payLink.token,
+            payLinkUrl: payLink.url,
             period: this.formatPeriod(entry.periodStart, entry.periodEnd),
             dueDate: entry.dueDate.toISOString().slice(0, 10),
             propertyAddress: formatPropertyLocation(entry.lease.property),

@@ -555,34 +555,48 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 43 Lien de paiement public
 
-**Logique :**
+**Plan validé (`/architect` 2026-10-09) puis durcissement après `/review` et revue technique du même jour — remplace la section Logique d'origine :**
 
-- `PAY_LINK_SECRET` devient **obligatoire** dans `env.validation.ts` (facultatif depuis l'unité 42) — le créer sur Railway (staging + production) et chez le binôme AVANT la fusion de l'unité 43, sinon le démarrage échoue
-- Extraction de `PaymentsService.initiateForEntry(entryId, tenantUserId)` depuis `initiate()` — mêmes règles (solde restant, frais, index unique partiel, 409)
-- Module `pay-links` : `GET /api/pay-links/:token` (montant dû, frais, période, nom du bien) et `POST /api/pay-links/:token/initiate` → `checkoutUrl` ; `@Public()`, rate limit strict
-- Frontend : pages publiques `/payer/[token]` et `/payer/[token]/merci`, hors `RequireRole`/`AppShell`, `disallow` dans `robots.ts`
+- **Pas de bouton « Copier le lien » côté agence** (plan d'origine conservé, travail en local) ; les liens seront distribués par les rappels (46) et le robot (47). Serveur ET pages construits dans l'unité.
+- `PaymentsService.initiateForEntry(entryId, options)` et `quoteEntry(entry)` extraits de `initiate()` / `getQuote()` — paiement de l'espace locataire inchangé (56 tests existants verts).
+- Module `pay-links` : `PayLinksService.createPayLink()` (jeton `signed-token.ts` usage `pay-link`, échéance + 30 j), `GET /api/pay-links/:token` (vue minimale : prénom, type/immeuble, quartier/ville, période, montants, état `PAYABLE`/`PAID`/`UNAVAILABLE`, paiement en cours), `POST /api/pay-links/:token/initiate` (opérateur indicatif → `checkoutUrl`, retour vers `/payer/<jeton>/merci`). Notification « numéro de reversement manquant » existante réutilisée (déjà limitée à une par jour).
+- `PAY_LINK_SECRET` obligatoire.
+- Durcissement : portier à deux niveaux (60/10 par minute pour l'ouverture, 20/5 pour le lancement, par adresse puis par adresse + empreinte du lien) ; `TRUST_PROXY_HOPS` (0 par défaut) + diagnostic temporaire `TRUST_PROXY_DIAGNOSTIC` ; jetons masqués dans Pino et Sentry (backend et frontend) ; `Referrer-Policy: no-referrer` sur `/payer/*`.
+- Frontend : `app/payer/[token]/page.tsx`, `app/payer/[token]/merci/page.tsx`, `app/payer/pay-link-ui.tsx`, `app/payer/payer.css`, `lib/pay-links.ts`, `lib/mask-sensitive-url.ts`, `robots.ts`.
+- Règles détaillées : `architecture.md`, section « Lien de paiement public ».
 
 ### 44 Webhook Meta
 
-**Logique :**
+**Plan validé (`/architect` 2026-10-13, 6 décisions relues par un tiers) — remplace la section Logique d'origine :**
 
-- `GET /api/webhooks/whatsapp` (poignée de main `hub.challenge`) et `POST /api/webhooks/whatsapp` (`@Public()`, `@SkipThrottle()`)
-- `main.ts` : corps brut conservé pour cette route (`bodyParser.json({ verify })`)
-- Statuts envoyé/livré/lu/échec idempotents par `wamid` unique ; `STOP`/`ARRET` → `whatsappConsent = STOPPED`
-- Messages entrants enregistrés puis émis en événement `whatsapp.inbound` (réponse 200 immédiate, invariant #15)
-- `AuditLogInterceptor` et redaction Pino : jamais le texte des messages ni le numéro en clair
+- Migration additive `add_whatsapp_webhook` : `deliveredAt`, `readAt`, `body` (texte effaçable), `inboundAction`, `processedAt`, `processingStartedAt`, `processingAttempts` sur `WhatsappMessage` ; types `INTERACTIVE`/`IMAGE`/`AUDIO`/`VIDEO`/`OTHER` ; statut `RECEIVED` ; index de la liste de travail. La migration de l'unité 42 n'est jamais modifiée.
+- Module `whatsapp-webhook` : `GET/POST /api/webhooks/whatsapp` (`@Public()`, `@SkipThrottle()`, `@SkipAuditLog()`, exclu de Swagger) ; corps brut gardé pour cette seule route (`common/middleware/raw-body.ts`) ; signature → enregistrement → 200 → traitement en arrière-plan ; 401 / 503 / 500 / 200 selon le cas ; webhook ouvert même interrupteur éteint.
+- Accusés : `applyStatusEvent()` (règles centralisées, aucune régression, « lu » ⇒ « livré », sortie des `UNKNOWN`, échec après « envoyé » enregistré, incohérences ignorées) + écriture conditionnelle unique (compare-and-swap).
+- Messages reçus : contenu gardé selon le type pour un locataire connu, rien pour un numéro inconnu ; jamais dans journaux / Sentry / `AuditLog`.
+- STOP (message entier `stop`/`arret`/`arreter`) : arrêt dans la transaction du message, confirmation unique au passage à `STOPPED` via `sendStopConfirmation()` / `canSendStopConfirmation()` ; réactivation à l'unité 45.
+- Liste de travail durable : `inboundAction` + signal `whatsapp.inbound` + `whatsapp-inbound-recovery.task.ts` (chaque minute, verrou Postgres, 3 essais puis mise de côté).
+- Anonymisation : textes WhatsApp effacés, `whatsappPhone` retiré, canal arrêté (source `SYSTEM`).
+- Masquage : `hub.verify_token` dans les URL journalisées, corps du webhook dans Sentry.
+- Règles détaillées : `architecture.md`, section « WhatsApp Cloud API (Meta) ».
 
 ### 45 Consentement WhatsApp et code locataire
 
-**Logique :**
+**Logique (révisée par `/architect` le 2026-10-16, 4 décisions relues par un tiers, voir `architecture.md` section « Consentement WhatsApp ») :**
 
-- `PATCH /api/tenants/:id/whatsapp-consent` (`OWNER`/`MANAGER`, `canActOnProperty()`), preuve date + auteur
-- Génération du code à 6 chiffres (hashé) à l'acceptation, régénérable ; envoi du modèle `bienvenue_locataire`
-- Frontend : case de consentement, badge d'état, affichage et régénération du code dans la fiche locataire et l'invitation
+- **Règle stricte** : aucun envoi sans accord valide ET numéro vérifié (le locataire a écrit à WARAH depuis ce numéro). Nouvel état `PENDING` ; seul le locataire fait passer à `ACCEPTED`.
+- Transitions : `decideConsent()` (fonction pure) + `applyConsentCommand()` (seul point d'écriture, compare-and-swap + historique dans la même transaction). Ordre des messages par l'heure Meta ; un STOP s'applique toujours.
+- Agence (`OWNER`/`MANAGER`, `canActOnProperty()` sur le bien du bail actif) : déclarer l'accord avec attestation et façon de le recueillir (→ `PENDING`, demande valable 7 jours), noter un refus (→ `STOPPED`), changer le numéro (remise à zéro), réinitialiser le code sans le voir.
+- Locataire (`/api/me/whatsapp*`) : activer / arrêter, changer de numéro, générer son code (affiché une fois, jamais trop simple, `bcrypt(HMAC(WHATSAPP_PIN_PEPPER, code))`).
+- Webhook : tout message reçu vérifie le numéro ; « OUI » (ou la phrase pré-remplie du QR code) et « REPRENDRE » reconnus comme message entier ; bienvenue et confirmation de reprise en réponse libre, avec fenêtre de 24 h vérifiée à l'envoi (aussi pour la confirmation de STOP). Le modèle `bienvenue_locataire` est supprimé.
+- Frontend : badge WhatsApp dans les deux pages « Locataires » (propriétaire, gestionnaire), fenêtre agence avec QR code « Écrire à WARAH » (`qrcode.react`), carte WhatsApp dans le profil du locataire.
+- Migration additive `20261016090000_add_whatsapp_consent_verification` ; nouvelles variables `WHATSAPP_PIN_PEPPER`, `WHATSAPP_BUSINESS_NUMBER` (obligatoires si WhatsApp allumé).
+- Reporté à l'unité 47 : vérification du code par le robot (5 essais / 1 h) et alerte Sentry si les échecs montent sur beaucoup de comptes ; fermer la conversation en cours sur un changement de numéro.
 
 ### 46 Canal WhatsApp dans NotifyService
 
-**Logique :**
+**Construite le 2026-10-16** (`/architect` du même jour) — détails et décisions dans `architecture.md`, section « Notifications WhatsApp » : table centrale typée `notify/whatsapp-templates.ts` (textes Meta de référence), WhatsApp pour les locataires seulement, `payLinkFor()` sans requête, relance unique réservée par écriture conditionnelle (`tenantOverdueSentAt`), nouveaux essais 3 tentatives au total / 1 h, jamais la quittance ni un `UNKNOWN`. Migration `20261016120000_add_whatsapp_notify`.
+
+**Logique (plan initial) :**
 
 - `NotifyService.notifyUser()` ajoute WhatsApp après push/email si l'événement a un modèle Meta et que le consentement est `ACCEPTED` — WhatsApp s'ajoute, ne remplace pas l'email
 - `reminders.task.ts` : variable `payToken` pour le bouton « Payer mon loyer »
@@ -592,7 +606,9 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ### 47 Robot à menu
 
-**Logique :**
+**Construite le 2026-10-17** (`/architect` du même jour, 2 décisions relues par un tiers) — détails dans `architecture.md`, section « Robot à menu WhatsApp » : robot réservé aux locataires avec bail actif ; invitation « répondez OUI » unique par 24 h pour un locataire sans accord ; code pour quittance et relevé seulement (jamais en clair, essai réservé avant comparaison, 30 jours liés au numéro) ; quittance en pièce jointe ; anti-abus 20 réponses / h. Migration `20261017160000_add_whatsapp_bot`.
+
+**Logique (plan initial) :**
 
 - Écouteur `whatsapp.inbound` → `BotService` : conversation par numéro, retour au menu après 30 min, aiguillage par état
 - `bot-identity.service.ts` : numéro d'un locataire avec bail actif + code à 6 chiffres (redemandé tous les 30 jours, blocage 1 h après 5 erreurs)
@@ -606,6 +622,7 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 - Handler « Parler à l'agence » : état `HUMAN`, notification au responsable (`resolveResponsibleUserId()`) via nouvel événement `whatsapp-message`
 - `GET /api/whatsapp/conversations`, `GET /api/whatsapp/conversations/:id/messages`, `POST .../reply` (409 si fenêtre de 24 h fermée), `POST .../close` — `OWNER`/`MANAGER`, `canActOnProperty()`, pagination ≤ 100
 - Frontend : pages Messages (propriétaire et gestionnaire), entrée de menu avec compteur de non lus
+- **Précisions `/architect` du 2026-10-18** (5 décisions, voir `architecture.md` « Messagerie avec le gestionnaire ») : bouton « Contacter mon gestionnaire » ; un fil par locataire + bien (`WhatsappThread`) ; trois sorties (commande seule, 24 h calculées, « Terminer l'échange ») + STOP prioritaire ; une notification par vague sans contenu ; texte seulement (fichiers signalés, affichage avec l'unité 39) ; nom du responsable ajouté par le serveur, 1 000 caractères ; droits recalculés à chaque accès. Alerte WhatsApp au gestionnaire (option 1) en attente de la confirmation du patron.
 
 ### 39 Signalements locataire (réactivée)
 
