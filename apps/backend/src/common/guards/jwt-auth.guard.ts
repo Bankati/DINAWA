@@ -53,6 +53,12 @@ export class JwtAuthGuard implements CanActivate {
 
     const user = cached ?? (await this.resolveUser(token, cacheKey));
 
+    // Compte supprimé (admin) ou anonymisé : refusé à chaque requête, même
+    // avec un badge encore valable (audit de sécurité du 2026-10-20, E3).
+    if (user.anonymizedAt) {
+      throw new UnauthorizedException('Compte supprimé');
+    }
+
     if (user.accountStatus === 'SUSPENDED_ADMIN') {
       throw new UnauthorizedException('Compte suspendu');
     }

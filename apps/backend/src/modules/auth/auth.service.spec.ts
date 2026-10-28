@@ -10,7 +10,11 @@ import { AuthService } from './auth.service';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
-import { createInvitationToken } from '../../common/utils/invitation-token';
+import {
+  createInvitationToken,
+  passwordFingerprint,
+  verifyInvitationTokenPayload,
+} from '../../common/utils/invitation-token';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -21,7 +25,9 @@ describe('AuthService', () => {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
+    session: { count: jest.Mock };
     property: { findUnique: jest.Mock };
     mandate: { findFirst: jest.Mock };
     tenantPropertyBlock: { findUnique: jest.Mock };
@@ -30,6 +36,7 @@ describe('AuthService', () => {
       create: jest.Mock;
       findFirst: jest.Mock;
       update: jest.Mock;
+      count: jest.Mock;
     };
   };
   let tx: {
@@ -48,6 +55,7 @@ describe('AuthService', () => {
     comparePassword: jest.Mock;
     issueTokenPair: jest.Mock;
     rotateRefreshToken: jest.Mock;
+    revokeAllSessions: jest.Mock;
   };
   let emailService: { sendEmail: jest.Mock };
   let notify: { notifyUser: jest.Mock };
@@ -93,13 +101,18 @@ describe('AuthService', () => {
       property: { update: jest.fn().mockResolvedValue({}) },
     };
     prisma = {
-      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(tx)),
+      // Deux formes de $transaction : fonction interactive, ou tableau de requêtes.
+      $transaction: jest.fn((arg: ((tx: unknown) => unknown) | Promise<unknown>[]) =>
+        Array.isArray(arg) ? Promise.all(arg) : arg(tx),
+      ),
       user: {
         findUniqueOrThrow: jest.fn(),
         findUnique: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      session: { count: jest.fn().mockResolvedValue(0) },
       property: { findUnique: jest.fn() },
       mandate: { findFirst: jest.fn().mockResolvedValue(null) },
       tenantPropertyBlock: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -108,6 +121,7 @@ describe('AuthService', () => {
         create: jest.fn().mockResolvedValue({}),
         findFirst: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(0),
       },
     };
     config = { getOrThrow: jest.fn((key: string) => CONFIG_VALUES[key]) };
@@ -120,6 +134,7 @@ describe('AuthService', () => {
       rotateRefreshToken: jest
         .fn()
         .mockResolvedValue({ accessToken: 'access-2', refreshToken: 'refresh-2' }),
+      revokeAllSessions: jest.fn().mockResolvedValue(undefined),
     };
     emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
     notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
@@ -253,6 +268,27 @@ describe('AuthService', () => {
       expect(result.message).toContain('Si un compte existe');
     });
 
+    it.each([
+      ['3 codes dans la dernière heure', 3, 3],
+      ['10 codes dans la journée', 0, 10],
+    ])(
+      'plafond par compte atteint (%s) : même message, mais ni nouveau code ni email',
+      async (_cas, parHeure, parJour) => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'jean.dupont@warah.tg' });
+        prisma.passwordResetOtp.count
+          .mockResolvedValueOnce(parHeure)
+          .mockResolvedValueOnce(parJour);
+
+        const result = await service.requestPasswordReset({ email: 'jean.dupont@warah.tg' });
+
+        expect(result.message).toContain('Si un compte existe');
+        expect(prisma.passwordResetOtp.create).not.toHaveBeenCalled();
+        // Le dernier code envoyé reste valable pour le vrai titulaire.
+        expect(prisma.passwordResetOtp.updateMany).not.toHaveBeenCalled();
+        expect(emailService.sendEmail).not.toHaveBeenCalled();
+      },
+    );
+
     it("renvoie le même message générique si aucun compte ne correspond, sans envoyer d'email", async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
@@ -265,38 +301,122 @@ describe('AuthService', () => {
 
   describe('confirmPasswordReset', () => {
     const confirmDto = { email: 'jean.dupont@warah.tg', code: '123456', newPassword: 'newpass123' };
+    const MESSAGE = 'Code invalide ou expiré. Après 5 essais, demandez un nouveau code.';
+    const otp = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+      id: 'otp-1',
+      code: '123456',
+      attempts: 0,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      ...over,
+    });
 
-    it('hash le nouveau mot de passe et marque le code comme utilisé', async () => {
+    beforeEach(() => {
       prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
-      prisma.passwordResetOtp.findFirst.mockResolvedValue({ id: 'otp-1' });
+      prisma.passwordResetOtp.updateMany.mockResolvedValue({ count: 1 });
+    });
+
+    it('réserve un essai, consomme le code une seule fois, pose le mot de passe et coupe toutes les sessions dans une même transaction', async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp());
       tokens.hashPassword.mockResolvedValue('new-hashed-password');
 
       const result = await service.confirmPasswordReset(confirmDto);
 
-      const [otpUpdateArgs] = prisma.passwordResetOtp.update.mock.calls[0] as [
-        { where: { id: string }; data: { usedAt: Date } },
-      ];
-      expect(otpUpdateArgs.where).toEqual({ id: 'otp-1' });
-      expect(otpUpdateArgs.data.usedAt).toBeInstanceOf(Date);
+      const calls = prisma.passwordResetOtp.updateMany.mock.calls as [
+        { where: Record<string, unknown>; data: Record<string, unknown> },
+      ][];
+      // 1) réservation de l'essai, plafonnée en base ; 2) consommation unique.
+      expect(calls[0][0]).toEqual({
+        where: { id: 'otp-1', usedAt: null, attempts: { lt: 5 } },
+        data: { attempts: { increment: 1 } },
+      });
+      expect(calls[1][0].where).toEqual({ id: 'otp-1', usedAt: null });
+      expect(calls[1][0].data['usedAt']).toBeInstanceOf(Date);
       expect(tokens.hashPassword).toHaveBeenCalledWith(confirmDto.newPassword);
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         data: { passwordHash: 'new-hashed-password' },
       });
+      expect(tokens.revokeAllSessions).toHaveBeenCalledWith('user-1');
+      const [operations] = prisma.$transaction.mock.calls[0] as [unknown[]];
+      expect(operations).toHaveLength(2);
       expect(result.message).toContain('mis à jour');
     });
 
-    it('rejette avec 400 si le code est invalide, expiré ou déjà utilisé', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+    it('ne regarde que le DERNIER code créé, quel que soit son état, sans filtrer sur le code saisi', async () => {
       prisma.passwordResetOtp.findFirst.mockResolvedValue(null);
 
-      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(MESSAGE);
+
+      const [findArgs] = prisma.passwordResetOtp.findFirst.mock.calls[0] as [
+        { where: Record<string, unknown>; orderBy: unknown },
+      ];
+      expect(findArgs.where).toEqual({ userId: 'user-1' });
+      expect(findArgs.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
       expect(tokens.hashPassword).not.toHaveBeenCalled();
     });
 
-    it('rejette avec 400 si aucun compte ne correspond à cet email', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+    it("dernier code brûlé : refus, même si un code plus ancien est encore valable (demandes simultanées, relecture Viviane G1)", async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp({ usedAt: new Date(), attempts: 5 }));
+
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(MESSAGE);
+      expect(prisma.passwordResetOtp.updateMany).not.toHaveBeenCalled();
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
+    });
+
+    it('dernier code expiré : refus sans compter d’essai', async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp({ expiresAt: new Date(Date.now() - 1000) }));
+
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(MESSAGE);
+      expect(prisma.passwordResetOtp.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('mauvais code : 400, essai compté, brûlage seulement si le plafond est atteint en base, mot de passe inchangé', async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp({ code: '999999', attempts: 1 }));
+
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(MESSAGE);
+
+      const [, [burnArgs]] = prisma.passwordResetOtp.updateMany.mock.calls as [
+        unknown,
+        [{ where: Record<string, unknown>; data: { usedAt: Date } }],
+      ];
+      // Condition évaluée par la base, pas sur le compteur lu plus haut (M2).
+      expect(burnArgs.where).toEqual({ id: 'otp-1', usedAt: null, attempts: { gte: 5 } });
+      expect(burnArgs.data.usedAt).toBeInstanceOf(Date);
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("plus d'essai disponible (réservation refusée en base) : refus même avec le BON code, même message", async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp({ attempts: 5 }));
+      prisma.passwordResetOtp.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(MESSAGE);
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
+    });
+
+    it('deux confirmations simultanées avec le bon code : la seconde est refusée', async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp());
+      // Réservation acceptée, mais le code a été consommé entre-temps par l'autre requête.
+      prisma.passwordResetOtp.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+
       await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(BadRequestException);
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
+      expect(tokens.revokeAllSessions).not.toHaveBeenCalled();
+    });
+
+    it("échec de la transaction (mot de passe + sessions) : l'erreur remonte, rien n'est annoncé comme réussi", async () => {
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(otp());
+      prisma.$transaction.mockRejectedValueOnce(new Error('DB down'));
+
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow('DB down');
+    });
+
+    it('aucun compte pour cet email : même message que pour un mauvais code (pas de fuite)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.confirmPasswordReset(confirmDto)).rejects.toThrow(MESSAGE);
     });
   });
 
@@ -477,6 +597,19 @@ describe('AuthService', () => {
       });
     });
 
+    it("le lien porte l'empreinte du mot de passe provisoire, même si Prisma ne renvoie pas le hash (audit sécurité E2)", async () => {
+      tokens.hashPassword.mockResolvedValue('placeholder-hash');
+      // Comme le vrai PrismaService : `create` ne renvoie jamais passwordHash.
+      tx.user.create.mockResolvedValue({ id: 'tenant-1', role: 'TENANT' });
+
+      const result = await service.inviteTenant(owner as never, inviteDto);
+
+      const token = new URL(result.invitationUrl as string).searchParams.get('token');
+      const payload = verifyInvitationTokenPayload(token as string, 'test-secret');
+      expect(payload.userId).toBe('tenant-1');
+      expect(payload.pwd).toBe(passwordFingerprint('placeholder-hash'));
+    });
+
     it('ne fait pas échouer la création si la notification lease-created échoue', async () => {
       notify.notifyUser.mockRejectedValueOnce(new Error('push down'));
       await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toBeDefined();
@@ -655,19 +788,87 @@ describe('AuthService', () => {
   });
 
   describe('completeTenantSignup', () => {
-    it('hash et pose le mot de passe du compte déjà créé', async () => {
-      const token = createInvitationToken('tenant-1', 'test-secret');
-      prisma.user.findUnique.mockResolvedValue({ id: 'tenant-1', role: 'TENANT' });
+    const tenant = { id: 'tenant-1', role: 'TENANT', passwordHash: 'placeholder-hash', anonymizedAt: null };
+
+    it('hash et pose le mot de passe du compte déjà créé, par une écriture conditionnelle', async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret', 'placeholder-hash');
+      prisma.user.findUnique.mockResolvedValue(tenant);
       tokens.hashPassword.mockResolvedValue('hashed-tenant-password');
 
       const result = await service.completeTenantSignup(token, { password: 'newpassword123' });
 
-      expect(tokens.hashPassword).toHaveBeenCalledWith('newpassword123');
-      expect(prisma.user.update).toHaveBeenCalledWith({
+      // PrismaService omet passwordHash partout : la lecture doit le réactiver.
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'tenant-1' },
+        omit: { passwordHash: false },
+      });
+      expect(tokens.hashPassword).toHaveBeenCalledWith('newpassword123');
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'tenant-1', passwordHash: 'placeholder-hash' },
         data: { passwordHash: 'hashed-tenant-password' },
       });
       expect(result).toEqual({ userId: 'tenant-1' });
+    });
+
+    it('lien déjà utilisé (mot de passe provisoire déjà remplacé) : refusé', async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret', 'placeholder-hash');
+      prisma.user.findUnique.mockResolvedValue({ ...tenant, passwordHash: 'vrai-mot-de-passe-hash' });
+
+      await expect(
+        service.completeTenantSignup(token, { password: 'autre-mot-de-passe' }),
+      ).rejects.toThrow('déjà été utilisé');
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('deux activations simultanées avec le même lien : la seconde est refusée', async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret', 'placeholder-hash');
+      prisma.user.findUnique.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.completeTenantSignup(token, { password: 'newpassword123' }),
+      ).rejects.toThrow('déjà été utilisé');
+    });
+
+    it("ancien lien sans empreinte (émis avant le correctif) : accepté si le locataire ne s'est jamais connecté", async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret');
+      prisma.user.findUnique.mockResolvedValue(tenant);
+      prisma.session.count.mockResolvedValue(0);
+
+      await expect(
+        service.completeTenantSignup(token, { password: 'newpassword123' }),
+      ).resolves.toEqual({ userId: 'tenant-1' });
+    });
+
+    it("ancien lien sans empreinte : refusé si le locataire s'est déjà connecté", async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret');
+      prisma.user.findUnique.mockResolvedValue(tenant);
+      prisma.session.count.mockResolvedValue(2);
+
+      await expect(
+        service.completeTenantSignup(token, { password: 'newpassword123' }),
+      ).rejects.toThrow('déjà été utilisé');
+      expect(tokens.hashPassword).not.toHaveBeenCalled();
+    });
+
+    it('mot de passe illisible (champ omis par Prisma) : refus par défaut, jamais une acceptation', async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret', 'placeholder-hash');
+      prisma.user.findUnique.mockResolvedValue({ id: 'tenant-1', role: 'TENANT', anonymizedAt: null });
+
+      await expect(
+        service.completeTenantSignup(token, { password: 'newpassword123' }),
+      ).rejects.toThrow("Lien d'invitation invalide");
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('compte supprimé ou anonymisé : lien invalide', async () => {
+      const token = createInvitationToken('tenant-1', 'test-secret', 'placeholder-hash');
+      prisma.user.findUnique.mockResolvedValue({ ...tenant, anonymizedAt: new Date() });
+
+      await expect(
+        service.completeTenantSignup(token, { password: 'newpassword123' }),
+      ).rejects.toThrow("Lien d'invitation invalide");
     });
 
     it('rejette avec 400 si le token est invalide', async () => {

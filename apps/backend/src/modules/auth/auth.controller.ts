@@ -9,6 +9,7 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import {
   THROTTLE_LOGIN,
   THROTTLE_SIGNUP,
+  THROTTLE_PASSWORD_RESET_CONFIRM,
   THROTTLE_PASSWORD_RESET_REQUEST,
 } from '../../common/constants';
 import {
@@ -131,6 +132,8 @@ export class AuthController {
 
   @Post('password-reset/confirm')
   @Public()
+  // Audit de sécurité du 2026-10-20 (E1) : en plus des 5 essais par code.
+  @Throttle(THROTTLE_PASSWORD_RESET_CONFIRM)
   @ApiOperation({ summary: 'Confirme la réinitialisation avec le code reçu par email' })
   async confirmPasswordReset(@Body() dto: ConfirmPasswordResetDto): Promise<{ message: string }> {
     return this.authService.confirmPasswordReset(dto);

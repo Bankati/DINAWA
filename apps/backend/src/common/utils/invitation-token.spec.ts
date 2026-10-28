@@ -1,6 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
-import { createInvitationToken, verifyInvitationToken } from './invitation-token';
+import {
+  createInvitationToken,
+  passwordFingerprint,
+  verifyInvitationToken,
+  verifyInvitationTokenPayload,
+} from './invitation-token';
 
 describe('invitation-token', () => {
   const secret = 'test-secret';
@@ -46,5 +51,23 @@ describe('invitation-token', () => {
     expect(() => verifyInvitationToken(`${payload}.${signature}`, secret)).toThrow(
       BadRequestException,
     );
+  });
+});
+
+// Audit de sécurité du 2026-10-20 (E2) : le lien porte une empreinte du mot
+// de passe provisoire, jamais le hash lui-même.
+describe('invitation-token — empreinte du mot de passe provisoire', () => {
+  it("embarque l'empreinte, qui change dès que le mot de passe change", () => {
+    const token = createInvitationToken('tenant-1', 'secret', '$2b$10$hash-provisoire');
+    const payload = verifyInvitationTokenPayload(token, 'secret');
+
+    expect(payload.pwd).toBe(passwordFingerprint('$2b$10$hash-provisoire'));
+    expect(payload.pwd).not.toBe(passwordFingerprint('$2b$10$vrai-mot-de-passe'));
+    expect(Buffer.from(token.split('.')[0], 'base64url').toString('utf8')).not.toContain('hash-provisoire');
+  });
+
+  it('sans mot de passe fourni, aucun champ pwd (liens émis avant le correctif)', () => {
+    const token = createInvitationToken('tenant-1', 'secret');
+    expect(verifyInvitationTokenPayload(token, 'secret').pwd).toBeUndefined();
   });
 });
