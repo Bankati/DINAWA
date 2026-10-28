@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
+import { UNREAD_REFRESH_MS, getUnreadConversations } from '@/lib/whatsapp-inbox';
 import { initiales } from '@/lib/format';
 import {
   Search, LayoutDashboard, Home, Users, CreditCard, Megaphone, User, UserCircle2,
@@ -22,7 +23,8 @@ type NavIcon =
   | 'profil' | 'notifications' | 'export' | 'identite' | 'delegation'
   | 'portefeuille' | 'rapports' | 'profil-public' | 'gestionnaires' | 'audit-logs' | 'guide' | 'reversements' | 'parametres' | 'messages';
 
-interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; }
+// messages : compteur des conversations WhatsApp non lues (unité 48).
+interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; messages?: boolean; }
 interface NavSection { label?: string; items: NavItem[]; }
 
 const OWNER_NAV: NavSection[] = [
@@ -33,6 +35,7 @@ const OWNER_NAV: NavSection[] = [
       { icon: 'biens', label: 'Mes biens', route: '/dashboard/biens' },
       { icon: 'locataires', label: 'Locataires', route: '/dashboard/locataires' },
       { icon: 'paiements', label: 'Paiements', route: '/dashboard/paiements' },
+      { icon: 'messages', label: 'Messages', route: '/dashboard/messages', messages: true },
       { icon: 'annonces', label: 'Annonces', route: '/dashboard/annonces' },
     ],
   },
@@ -57,6 +60,7 @@ const MANAGER_NAV: NavSection[] = [
       { icon: 'biens', label: 'Biens gérés', route: '/gestionnaire/biens' },
       { icon: 'locataires', label: 'Locataires', route: '/gestionnaire/locataires' },
       { icon: 'paiements', label: 'Paiements', route: '/gestionnaire/paiements' },
+      { icon: 'messages', label: 'Messages', route: '/gestionnaire/messages', messages: true },
       { icon: 'annonces', label: 'Annonces', route: '/gestionnaire/annonces' },
     ],
   },
@@ -331,6 +335,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadConversations, setUnreadConversations] = useState(0);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [notificationConsent, setNotificationConsent] = useState<'NOT_ASKED' | 'ACCEPTED' | 'DECLINED'>();
   // null = pas encore connu (masque le bandeau), sinon true/false.
@@ -366,6 +371,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     api.get<{ count: number }>('/notifications/unread-count').then((d) => setUnreadCount(d.count)).catch(() => {});
   }, [pathname]);
+
+  // Filet de sécurité de la messagerie : visible même si une notification
+  // push/email n'est pas arrivée. Rafraîchi à chaque page et chaque minute.
+  const showsMessages = isOwner || isManager;
+  useEffect(() => {
+    if (!showsMessages) return;
+    const refresh = () => {
+      getUnreadConversations().then((d) => setUnreadConversations(d.count)).catch(() => {});
+    };
+    refresh();
+    const timer = setInterval(refresh, UNREAD_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [pathname, showsMessages]);
 
   // Récupérée à chaque montage (jamais mise en cache dans localStorage) — les
   // URLs signées Supabase expirent après 15 min, une valeur persistée irait
@@ -423,6 +441,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       <span className="nav-icon-wrap">
                         <Icon className="nav-icon" strokeWidth={2} />
                         {item.notif && unreadCount > 0 && <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+                        {item.messages && unreadConversations > 0 && (
+                          <span className="notif-badge" aria-label={`${unreadConversations} conversation(s) non lue(s)`}>
+                            {unreadConversations > 9 ? '9+' : unreadConversations}
+                          </span>
+                        )}
                       </span>
                       <span className="nav-label">{item.label}</span>
                     </Link>

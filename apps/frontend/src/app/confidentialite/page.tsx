@@ -3,7 +3,10 @@ import PublicNavbar from '@/components/public-navbar';
 import PublicFooter from '@/components/public-footer';
 import './page.css';
 
-export const metadata = { title: 'Politique de confidentialité — WARAH' };
+export const metadata = {
+  title: 'Politique de confidentialité — WARAH',
+  alternates: { canonical: '/confidentialite' },
+};
 
 const SECTIONS = [
   { id: 'preambule', label: '1. Préambule et champ d’application' },

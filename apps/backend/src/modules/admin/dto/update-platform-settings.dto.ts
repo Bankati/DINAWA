@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { SubscriptionTier } from '@prisma/client';
+import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional } from 'class-validator';
 
 export class UpdatePlatformSettingsDto {
   @ApiPropertyOptional({
@@ -15,4 +16,19 @@ export class UpdatePlatformSettingsDto {
   @IsOptional()
   @IsBoolean()
   subscriptionBillingEnabled?: boolean;
+
+  // Liste vide autorisée : la direction peut retirer WhatsApp de tous les
+  // forfaits sans couper l'interrupteur technique WHATSAPP_ENABLED.
+  @ApiPropertyOptional({
+    description:
+      'Forfaits dont les locataires ont accès à WhatsApp (forfait du responsable du bien : ' +
+      'gestionnaire du mandat actif, sinon propriétaire)',
+    enum: SubscriptionTier,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(SubscriptionTier, { each: true })
+  whatsappEnabledTiers?: SubscriptionTier[];
 }

@@ -49,7 +49,28 @@ export async function resolveResponsibleUserId(
   const activeMandate = await prisma.mandate.findFirst({
     where: { propertyId: property.id, status: 'ACTIVE' },
   });
+  return responsibleUserIdFor(property, activeMandate);
+}
+
+// Même règle, sans requête, quand le mandat actif est déjà chargé (listes,
+// messagerie unité 48 — pas de N+1).
+export function responsibleUserIdFor(
+  property: { ownerId: string },
+  activeMandate: { managerId: string } | null | undefined,
+): string {
   return activeMandate?.managerId ?? property.ownerId;
+}
+
+// Biens dont l'utilisateur est le RESPONSABLE (gestionnaire mandaté actif,
+// sinon propriétaire sans mandat actif) — filtre Prisma équivalent à
+// resolveResponsibleUserId() === userId, pour un comptage en une requête.
+export function propertyResponsibleWhere(userId: string): Prisma.PropertyWhereInput {
+  return {
+    OR: [
+      { mandates: { some: { managerId: userId, status: 'ACTIVE' } } },
+      { ownerId: userId, mandates: { none: { status: 'ACTIVE' } } },
+    ],
+  };
 }
 
 // Équivalent de canActOnProperty().canRead, mais exprimé comme filtre

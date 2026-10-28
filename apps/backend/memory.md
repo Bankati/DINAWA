@@ -1,65 +1,67 @@
-# Mémoire — Refonte frontend intégrale + corrections mandats + recommandations "référence"
+# Mémoire — Phase 12 WhatsApp et chatbot : cadrage + unité 42 (fondations)
 
-Dernière mise à jour : 2026-08-10
+Dernière mise à jour : 2026-10-08
 
-## Ce qui a été fait (cette session, en plusieurs vagues)
+## Ce qui a été créé
 
-**Vague 1-3 — Refonte visuelle complète + parité gestionnaire + notifications push :**
+**Planification phase 12 (2026-10-07)** — commits `4068c4d`, `6e8d83b` :
+- `contexte/build-plan.md` : nouvelle « Phase 12 — WhatsApp et chatbot locataire », unités 42 à 49 + **réactivation de l'unité 39** (signalements locataire via WhatsApp, qui lui donnent enfin une source d'entrée réelle).
+- `contexte/progress-tracker.md` : statut courant, cases de la phase 12 avec leur jour prévu, décisions de cadrage, questions ouvertes.
+- Documents de référence hors dépôt (Claude Docs, propriétaire ADOM) : « Plan d'implémentation WhatsApp et chatbot », « Architecture : intégration WhatsApp et chatbot », « Plan de travail (2 semaines) », « Ce que la direction doit faire » (compte Meta, puce, juridique).
 
-- Notifications push construites côté frontend (`lib/push.ts`, `public/sw.js`, composant `NotificationToggle`) — le backend était prêt depuis l'unité 06, jamais intégré côté client.
-- Parité gestionnaire terminée : `gestionnaire/biens` (CRUD complet, miroir de `dashboard/biens`), `gestionnaire/locataires` (inviter/associer/gérer, miroir de `dashboard/locataires`), `gestionnaire/paiements/manual` (nouveau fichier). A nécessité d'élargir `TenantsService.listInvitedTenants()` pour inclure les locataires dont le bail actif porte sur un bien sous mandat `ACTIVE`.
-- Toutes les pages restantes (~35) migrées vers la bibliothèque `components/ui/*` construite en Vague 0 : owner, gestionnaire, locataire, **et le panel admin** — dont la coquille (`admin/layout.tsx`) était dupliquée depuis le début, maintenant réalignée sur `AppShell` partagé (nouvel `ADMIN_NAV`/`isAdmin`).
-- `lib/admin.ts` nettoyé (~280 lignes de mocks morts hérités de l'ancien frontend Angular, jamais utilisés).
-- Bugs réels corrigés en cours de route : faux positif "email déjà utilisé" (`AuthService.inviteTenant()` scopé par erreur à `role: TENANT`), KPI "impayés" toujours à 0 (deuxième occurrence non couverte en Vague 0), page orpheline `dashboard/identite` supprimée, liens morts retirés.
-- UI construite pour 2 endpoints à 0% de couverture frontend : `blockTenant()` (bandeau post-résiliation dans la modale "Gérer le bien", `dashboard/locataires`/`gestionnaire/locataires`) et aperçu PDF du rapport mensuel gestionnaire (`gestionnaire/portefeuille`, téléchargement authentifié).
-
-**Bugs réels majeurs trouvés en construisant l'UI blockTenant/rapport (invisibles avec des tests mockés) :**
-
-- `GET /mandates/received` **n'a jamais existé côté backend** — `gestionnaire/dashboard`/`gestionnaire/portefeuille` échouaient silencieusement (404 avalé par `useApi`) depuis leur création (unités 31-32). Corrigé : appel à `GET /mandates` (existe, bidirectionnel), filtré côté client sur `managerId === user.id`.
-- `MandatesService.findAllForUser()` ne posait `include: { property: true }`, **jamais `owner`/`manager`** — cassait aussi `dashboard/delegation` (crash React sur `m.manager.id` undefined). Corrigé : nouveau type `MandateWithParties` + `include` étendu (`mandates.service.ts`).
-- Bouton "Révoquer" de `dashboard/delegation` appelait `DELETE /mandates/:id` (inexistant) au lieu de `POST /mandates/:id/revoke`. Corrigé.
-- `dashboard/delegation` traitait aussi les mandats `REVOKED`/`EXPIRED` comme des délégations actives (jamais filtrés) — trouvé en migrant vers les types partagés. Corrigé.
-
-**Vague 4 — 3 des 4 recommandations "référence" retenues par le développeur (Sentry, tests e2e, types partagés ; vérification domaine `warah.tg`/Resend écartée, nécessite un accès externe que l'agent n'a pas) :**
-
-1. **Sentry frontend câblé** (`apps/frontend/src/instrumentation-client.ts`, `instrumentation.ts`, `app/global-error.tsx`) — le backend avait en fait déjà `@sentry/node` avec un vrai DSN en `.env` (découvert en cours de route). `NEXT_PUBLIC_SENTRY_DSN` ajouté vide dans `.env.local` (Sentry inactif tant que non renseigné). `docs/DEPLOYMENT.md` mis à jour.
-2. **Types partagés backend↔frontend — démontré sur `GET /mandates` uniquement**, pas toute l'API (découverte : aucun endpoint n'avait de schéma de réponse Swagger avant cette passe). Nouveaux DTOs (`mandate-party.dto.ts`, `property-summary.dto.ts`, `mandate-with-parties.dto.ts`), `@ApiOkResponse` sur `MandatesController.findAll()`, `scripts/generate-openapi.ts` (`npm run swagger:generate`), `openapi-typescript` côté frontend (`npm run types:generate` → `src/lib/api-types.generated.ts`, ré-exporté via `src/lib/api-types.ts`). `npm run types:sync` à la racine enchaîne les deux. 3 pages migrées.
-3. **Premiers tests e2e du projet** (`apps/backend/test/mandates.e2e-spec.ts`) — vrai boot NestJS + vrai Postgres jetable (`testcontainers`/`@testcontainers/postgresql`), migrations Prisma réelles appliquées à chaud. `npm run test:e2e` (nécessite Docker Desktop démarré localement).
+**Unité 42 — Fondations WhatsApp (2026-10-08)** — commit `1c4a538`, branche `feat/whatsapp-42-fondations`, **PR #66 ouverte vers `dev`, pas encore fusionnée** :
+- Migration `prisma/migrations/20261008090000_add_whatsapp_foundations/` (additive).
+- `src/common/utils/phone.ts`, `signed-token.ts`, `meta-signature.ts` (+ specs).
+- `TokenService.generatePin()/hashPin()/verifyPin()` (+ `token.service.spec.ts`, premier test de ce service).
+- `src/modules/whatsapp-channel/` : `whatsapp-cloud.client.ts`, `meta-error.ts`, `meta-error-grid.ts`, `whatsapp-access.service.ts`, `whatsapp.service.ts`, `whatsapp-channel.module.ts` (+ specs). Importé dans `AppModule`, appelé par aucun service (branchement à l'unité 46).
+- `PlatformSettings.whatsappEnabledTiers` + `UpdatePlatformSettingsDto` + `PlatformSettingsService.whatsappEnabledTiers()`.
+- `env.validation.ts` (`WHATSAPP_*`, `PAY_LINK_SECRET`), `logger.config.ts` (masquage), `.env.example`, `architecture.md` (invariant #8 précisé + section « WhatsApp Cloud API (Meta) »).
 
 ## Décisions prises
 
-- Panel admin n'a plus sa propre coquille — toujours passer par `AppShell` partagé pour tout nouveau rôle/page.
-- Types partagés : pattern à étendre endpoint par endpoint (ajouter `@ApiOkResponse` + DTO de réponse), jamais une migration globale d'un coup — voir commentaires dans `scripts/generate-openapi.ts`/`lib/api-types.ts`.
-- e2e NestJS : **`overrideGuard()` ne fonctionne pas** pour un guard enregistré uniquement via `{provide: APP_GUARD, useClass}` (vérifié dans `@nestjs/core/injector/module.js` — `replace()` ne cherche que dans `_injectables`, jamais peuplé pour les APP_GUARD). Pattern correct : `overrideProvider()` sur la dépendance externe du guard (ici `SupabaseAdminService` → `test/support/fake-supabase-admin.service.ts`) — le vrai guard tourne, seul l'appel réseau est simulé. **Réutiliser ce pattern pour tout futur test e2e.**
-- Recherche de gestionnaire par nom (demande du développeur) : ne pas toucher `GET /managers/search` (exact email/téléphone, décision délibérée anti-annuaire) — construire plutôt un filtre nom sur `/public/managers` (existe côté backend, unité 34, aucune page frontend ne le consomme). Plan détaillé dans la mémoire dédiée `manager_directory_search_plan.md` (auto-memory, pas dans ce fichier) — non implémenté, en attente de priorisation.
+Les règles techniques de l'unité 42 sont dans `architecture.md` (section WhatsApp) et `build-plan.md` (unité 42) — ne pas les redécouvrir. En plus :
+
+- **Méthode de travail phase 12** : une branche par unité (`feat/whatsapp-<n>-<nom>`), cycle `/remember restore` → `/architect` (jusqu'au « Blueprint ready » + validation explicite) → code + tests → `tsc`/`eslint`/`jest` → `/review` → corrections → PR vers `dev` relue par le binôme → `/remember save`. Si l'unité dépend d'une PR non fusionnée, brancher depuis la branche de cette PR.
+- **Le développeur fait relire chaque plan/revue par un tiers** et colle ses remarques : elles ont été justes à chaque fois (statut `UNKNOWN`, anti-force-brute du code, historique du consentement, `markSent` hors du `try`, 5xx = `UNKNOWN`). Les traiter sérieusement, point par point, avec un avis argumenté.
+- **Une migration par unité** (pas une migration unique de phase).
+- **Le développeur veut des explications en français simple**, avec exemples concrets, avant de valider une décision technique.
+- Décisions de cadrage (2026-10-07) : société porteuse du compte Meta **pas encore créée** ; puce dédiée ; formules incluant WhatsApp **à définir plus tard** (d'où le réglage admin) ; fonctionnalité pour **tous** les locataires (sans gestionnaire, le propriétaire répond) ; délai annoncé « sous 24 h » ; lien de paiement valable jusqu'à l'échéance + 30 jours.
+
+Décisions antérieures toujours valables (session du 2026-08-10) :
+- Frontend : tout nouveau rôle/page passe par `AppShell` partagé (le panel admin n'a plus sa propre coquille).
+- Types partagés backend↔frontend : à étendre endpoint par endpoint (`@ApiOkResponse` + DTO de réponse), jamais d'un coup.
+- Tests e2e NestJS : `overrideGuard()` ne marche pas pour un guard enregistré via `APP_GUARD` — utiliser `overrideProvider()` sur la dépendance externe du guard.
 
 ## Problèmes résolus
 
-- **Corruption `.next`** : lancer `next build` (prod) pendant qu'un `next dev` tourne sur le même dossier casse le cache Turbopack du dev server (`Cannot find module '../chunks/ssr/[turbopack]_runtime.js'`) — toujours redémarrer proprement le dev server (`rm -rf .next` + relancer) après tout `next build` de vérification.
-- `apps/backend/tsconfig.json` n'avait pas d'`exclude` — `scripts/generate-openapi.ts` (hors `rootDir: src`) faisait échouer `tsc --noEmit` (TS6059). Exclu `scripts/`+`test/`, chacun avec son propre tsconfig dédié (`scripts/tsconfig.json`, `test/tsconfig-e2e.json` avec `include` explicite couvrant `../src/**` — un tsconfig dans un sous-dossier n'inclut par défaut que ce sous-dossier, pas `rootDir`).
-- Import supertest : `import request from 'supertest'` (défaut), pas `import * as request` (namespace non appelable avec ce typage).
+- **`WHATSAPP_ENABLED=false` lu comme `true`** : avec `enableImplicitConversion`, `@Transform` reçoit `value` déjà converti (`Boolean("false") === true`). Lire la valeur brute via `({ obj, key }) => obj[key]`. Valable pour tout futur booléen de configuration.
+- **Créer une migration sans base « shadow »** (Supabase) : `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/<horodatage>_<nom>/migration.sql`, puis `npx prisma migrate deploy` et `npx prisma generate`. Après une modification de commentaire seulement, la même commande doit répondre « empty migration ».
+- **Le backend ne démarre pas en local** sans `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `CONTACT_RECIPIENT_EMAIL` (absents du `.env`, à demander au binôme). Pour vérifier un câblage de module malgré tout : script jetable `NestFactory.createApplicationContext(AppModule)` lancé avec des valeurs factices passées en variables de commande (jamais écrites dans `.env`), puis supprimé.
+- **Jest est très lent sur ce dossier OneDrive** (3 à 6 min pour quelques fichiers, plus pour toute la suite) : lancer la suite complète en arrière-plan.
+- **ESLint sur les specs** : accéder aux `mock.calls` via un helper typé (`as [{ data: ... }][]`), espionner `axios.create` avec `jest.spyOn` plutôt qu'un `jest.mock` (règle `unbound-method`).
+- Toujours valables (2026-08-10) : ne jamais lancer `next build` pendant que `next dev` tourne sur le même dossier (cache Turbopack corrompu → `rm -rf .next` + relancer) ; import supertest par défaut (`import request from 'supertest'`).
 
 ## État actuel
 
-- Backend : `tsc`/`eslint` propres, **357 tests unitaires + 3 tests e2e**, tous passants.
-- Frontend : `tsc` propre, `next build` propre (39 routes).
-- Rien n'est commité — le développeur n'a pas encore demandé de commit pour ce lot de travail.
-- Serveur de dev frontend tourne sur `localhost:3000` (relancé proprement en fin de session).
-- Sentry frontend câblé mais **inactif** (DSN vide, projet `warah-frontend` pas encore créé sur Sentry).
-- Comptes de test réutilisés pendant les vérifications réelles (`e2e-bob-...@warah-test.local` manager, `photo-test-...@warah-test.local` owner) ont eu leur mot de passe réinitialisé via l'API admin Supabase — laissés dans cet état, pas remis à leur mot de passe d'origine (inconnu).
+- `dev` = `df1cd38` (dernier commit du binôme, 2026-10-07 : messages de contact pour le super-admin), aligné avec GitHub.
+- Unité 42 terminée et vérifiée : **698 tests verts** (64 fichiers), `tsc`/`eslint` propres, démarrage vérifié. **PR #66 en attente de relecture par le binôme.** Après fusion, le binôme doit lancer `npx prisma generate`.
+- ⚠️ **Migration `20261008090000_add_whatsapp_foundations` déjà appliquée sur la base Supabase du `.env`** (projet « ADOMGNOYAROU ») avant fusion — **ne plus jamais la modifier**, toute correction passe par une nouvelle migration.
+- `PAY_LINK_SECRET` présent dans le `.env` local (généré), facultatif jusqu'à l'unité 43. `WHATSAPP_ENABLED` absent = éteint.
+- Test réel Meta (`hello_world`) **non fait** : le compte développeur Meta n'existe pas encore.
+- Synchro automatique `WARAH-sync-binome` (tâche planifiée Windows, toutes les 5 min, `C:\Users\adomg\warah-sync\sync.js`) : n'agit que sur la branche `dev`, en pause pendant le travail sur une branche d'unité.
 
 ## La prochaine session commencera par
 
-Pas de tâche en cours à reprendre à chaud — tout ce qui était planifié pour cette session est terminé et vérifié. Si le développeur revient sur ce chantier :
-
-1. Demander s'il veut committer ce lot de travail (probablement à découper : redesign frontend / corrections mandats / les 3 chantiers "référence", plutôt qu'un seul commit monolithique — jamais commité sans demande explicite).
-2. S'il évoque la recherche de gestionnaire par nom → lire `manager_directory_search_plan.md` (auto-memory) avant de recommencer l'analyse.
-3. S'il veut avancer sur la vérification du domaine `warah.tg`/Resend (recommandation faite, pas retenue faute d'accès externe côté agent) → lui demander l'accès DNS/Resend ou le guider pas à pas.
+1. `/remember restore`, puis vérifier si la PR #66 a été fusionnée (`gh pr view 66 --repo Bankati/DINAWA`).
+2. Unité 43 « Lien de paiement public » : créer `feat/whatsapp-43-lien-paiement` depuis `dev` si #66 est fusionnée, sinon depuis `feat/whatsapp-42-fondations`, puis `/architect` sur l'unité 43. Elle rend `PAY_LINK_SECRET` **obligatoire** : le faire créer sur Railway (staging + production) et chez le binôme **avant** de fusionner la 43.
 
 ## Questions en suspens
 
-- Domaine `warah.tg` toujours pas vérifié sur Resend (hérité de longue date, bloquant tout envoi email réel hors test).
-- Projet Sentry `warah-frontend` pas encore créé → `NEXT_PUBLIC_SENTRY_DSN` vide, Sentry inactif côté frontend.
-- Tests e2e pas branchés dans `.github/workflows/ci.yml` (les runners GitHub Actions ont Docker nativement, contrairement à cet environnement local où Docker Desktop doit être démarré manuellement) — à faire si souhaité.
-- Pas de suite de tests frontend automatisée (Vitest/React Testing Library) — toujours absente, mentionnée comme piste mais pas construite.
-- 1 erreur ESLint (`account.controller.spec.ts:14`) + 4 warnings module admin, trouvés le 2026-08-06, toujours non corrigés (mineur, non bloquant).
+- **La base Supabase du `.env` est-elle aussi celle de la production Railway ?** À demander au binôme. Si oui : séparer développement et production. (La migration 42 est additive : sans risque pour le code en production dans les deux cas.)
+- Clés `RESEND_API_KEY` / `RESEND_FROM_EMAIL` (et `CONTACT_RECIPIENT_EMAIL`) à obtenir du binôme pour démarrer le backend en local.
+- Compte Meta : société à créer, compte développeur + numéro de test à obtenir (voir document « Ce que la direction doit faire »).
+- Durée de conservation de `WhatsappMessage` (décision direction).
+- Exigence d'un bail actif dans `canUseWhatsapp` (quittance après résiliation) — à trancher au `/architect` de l'unité 46.
+- Coût en requêtes de `canUseWhatsapp` dans les boucles des crons — à traiter à l'unité 46 (invariant #12).
+- Validation juridique de la case de consentement + déclaration IPDCP (bloquant pour la production, hors code).
+- `AGENTS.md` du backend est daté (parle encore de Supabase Auth et de Cashpay) — la référence à jour est `contexte/architecture.md`.

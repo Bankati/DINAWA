@@ -35,6 +35,12 @@ import { ManagerReviewsModule } from './modules/manager-reviews/manager-reviews.
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContactModule } from './modules/contact/contact.module';
+import { WhatsappChannelModule } from './modules/whatsapp-channel/whatsapp-channel.module';
+import { PayLinksModule } from './modules/pay-links/pay-links.module';
+import { WhatsappWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
+import { WhatsappInboxModule } from './modules/whatsapp-inbox/whatsapp-inbox.module';
+import { WhatsappConsentModule } from './modules/whatsapp-consent/whatsapp-consent.module';
+import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -70,6 +76,9 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
         ttl: 60_000,
         limit: 300,
       },
+      // Portier du lien de paiement public (unité 43) — ignoré hors de ses
+      // routes, voir common/throttle/pay-link-throttlers.ts.
+      ...PAY_LINK_THROTTLERS,
     ]),
 
     // Cron jobs (fuseau Africa/Lomé = UTC+0, pas de DST)
@@ -164,6 +173,27 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Formulaire de contact public — endpoint minimal appelant EmailService,
     // aucune persistance en base
     ContactModule,
+
+    // Canal WhatsApp (phase 12, unité 42) — fondations seules : aucun service
+    // ne l'appelle encore (branchement dans NotifyModule à l'unité 46).
+    // Importé dès maintenant pour que le démarrage valide son câblage.
+    WhatsappChannelModule,
+
+    // Lien de paiement public sans connexion (phase 12, unité 43) —
+    // GET/POST /api/pay-links/:token, @Public() + limites de débit strictes.
+    PayLinksModule,
+
+    // Webhook Meta WhatsApp (phase 12, unité 44) — GET/POST
+    // /api/webhooks/whatsapp : messages reçus, accusés de livraison, STOP.
+    WhatsappWebhookModule,
+
+    // Consentement WhatsApp, numéro vérifié et code locataire (phase 12,
+    // unité 45) — /api/tenants/:id/whatsapp* (agence) et /api/me/whatsapp*.
+    WhatsappConsentModule,
+
+    // Messagerie avec le locataire (phase 12, unité 48) —
+    // /api/whatsapp/conversations* (propriétaire et gestionnaire).
+    WhatsappInboxModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout

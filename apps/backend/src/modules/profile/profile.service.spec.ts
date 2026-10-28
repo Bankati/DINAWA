@@ -11,8 +11,13 @@ jest.mock('../storage/image-processor', () => ({
 describe('ProfileService', () => {
   let service: ProfileService;
   let prisma: {
-    user: { update: jest.Mock; findUniqueOrThrow: jest.Mock };
+    user: { update: jest.Mock; updateMany: jest.Mock; findUniqueOrThrow: jest.Mock; findUnique: jest.Mock };
     session: { updateMany: jest.Mock };
+    whatsappMessage: { updateMany: jest.Mock };
+    whatsappConsentEvent: { create: jest.Mock; updateMany: jest.Mock };
+    tenantProfile: { updateMany: jest.Mock };
+    whatsappConversation: { deleteMany: jest.Mock; updateMany: jest.Mock };
+    whatsappThread: { deleteMany: jest.Mock; updateMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let storage: { upload: jest.Mock; remove: jest.Mock; getSignedUrl: jest.Mock };
@@ -35,9 +40,38 @@ describe('ProfileService', () => {
       user: {
         update: jest.fn().mockResolvedValue({}),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'user-1', passwordHash: 'old-hash' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        // Lu par le rédacteur du consentement (anonymisation, unité 45) —
+        // numéros déjà retirés par l'update qui précède.
+        findUnique: jest.fn().mockResolvedValue({
+          phone: null,
+          whatsappPhone: null,
+          whatsappConsent: 'ACCEPTED',
+          whatsappConsentChangedAt: null,
+          whatsappConsentRequestId: null,
+          whatsappConsentRequestExpiresAt: null,
+        }),
       },
       session: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
+      whatsappMessage: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
+      tenantProfile: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      whatsappConversation: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      whatsappThread: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      whatsappConsentEvent: {
+        create: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      // Tableau d'opérations (changement de mot de passe) ou transaction
+      // interactive (anonymisation) : le client de transaction est le mock.
+      $transaction: jest.fn((arg: unknown) =>
+        typeof arg === 'function' ? (arg as (tx: unknown) => Promise<unknown>)(prisma) : Promise.all(arg as unknown[]),
+      ),
     };
     storage = {
       upload: jest.fn().mockResolvedValue('path'),
@@ -120,6 +154,49 @@ describe('ProfileService', () => {
       await expect(service.updateProfile(tenant, { phone: '+22890000000' })).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    describe('locataire sans numéro WhatsApp dédié (/review unité 45)', () => {
+      const legacyTenant = {
+        ...tenant,
+        phone: '90111111',
+        whatsappPhone: null,
+        whatsappConsent: 'ACCEPTED',
+      } as AuthenticatedUser;
+
+      it('changer le numéro principal remet WhatsApp à zéro, dans la même transaction', async () => {
+        prisma.user.findUnique.mockResolvedValue({
+          phone: '99222222',
+          whatsappPhone: null,
+          whatsappConsent: 'ACCEPTED',
+          whatsappConsentChangedAt: null,
+          whatsappConsentRequestId: null,
+          whatsappConsentRequestExpiresAt: null,
+        });
+
+        await service.updateProfile(legacyTenant, { phone: '99222222' });
+
+        expect(prisma.$transaction).toHaveBeenCalled();
+        const [resetArgs] = prisma.user.updateMany.mock.calls[0] as [{ data: Record<string, unknown> }];
+        expect(resetArgs.data).toMatchObject({ whatsappConsent: 'NOT_ASKED', whatsappPhone: null, whatsappVerifiedPhone: null });
+        const [eventArgs] = prisma.whatsappConsentEvent.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+        expect(eventArgs.data).toMatchObject({ kind: 'PHONE_CHANGE', source: 'TENANT_PORTAL', phoneLast2: '22' });
+      });
+
+      it('même numéro écrit autrement (+228…) : rien n’est remis à zéro', async () => {
+        await service.updateProfile(legacyTenant, { phone: '+22890111111' });
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('aucun accord en cours : rien à remettre à zéro', async () => {
+        await service.updateProfile({ ...legacyTenant, whatsappConsent: 'NOT_ASKED' }, { phone: '99222222' });
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('numéro WhatsApp dédié : le numéro principal ne le déplace pas', async () => {
+        await service.updateProfile({ ...legacyTenant, whatsappPhone: '90111111' }, { phone: '99222222' });
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      });
     });
 
     describe('numéro de réception des loyers (OWNER/MANAGER)', () => {
@@ -404,6 +481,48 @@ describe('ProfileService', () => {
     it("ne touche pas au Storage si l'utilisateur n'avait pas de photo de profil", async () => {
       await service.anonymize(user);
       expect(storage.remove).not.toHaveBeenCalled();
+    });
+
+    it('efface textes, contenus et numéros des messages WhatsApp, et arrête le canal (unités 44-45)', async () => {
+      await service.anonymize(user);
+
+      expect(prisma.whatsappMessage.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        data: { body: null, payload: Prisma.DbNull, recipientPhone: '[anonymisé]' },
+      });
+      const [updateArgs] = prisma.user.update.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(updateArgs.data).toMatchObject({ whatsappPhone: null, whatsappVerifiedPhone: null, whatsappPhoneVerifiedAt: null });
+      // Arrêt par le rédacteur unique : écriture conditionnée + historique.
+      const [stopArgs] = prisma.user.updateMany.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(stopArgs.data).toMatchObject({ whatsappConsent: 'STOPPED' });
+      const [eventArgs] = prisma.whatsappConsentEvent.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(eventArgs.data).toMatchObject({
+        userId: 'user-1',
+        previousConsent: 'ACCEPTED',
+        newConsent: 'STOPPED',
+        source: 'SYSTEM',
+        actorUserId: null,
+        phoneLast2: null,
+      });
+      // Les 2 chiffres gardés dans l'historique sont effacés.
+      expect(prisma.whatsappConsentEvent.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        data: { phoneLast2: null },
+      });
+    });
+
+    it("n'ajoute pas d'événement de consentement si le canal était déjà arrêté", async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        phone: null,
+        whatsappPhone: null,
+        whatsappConsent: 'STOPPED',
+        whatsappConsentChangedAt: null,
+        whatsappConsentRequestId: null,
+        whatsappConsentRequestExpiresAt: null,
+      });
+      await service.anonymize(user);
+      expect(prisma.whatsappConsentEvent.create).not.toHaveBeenCalled();
+      expect(prisma.whatsappMessage.updateMany).toHaveBeenCalled();
     });
   });
 });

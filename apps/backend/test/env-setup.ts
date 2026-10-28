@@ -27,3 +27,6 @@ process.env['VAPID_SUBJECT'] ??= 'mailto:contact@warah.tg';
 process.env['FRONTEND_URL'] ??= 'https://placeholder.vercel.app';
 process.env['INVITATION_TOKEN_SECRET'] ??= 'e2e-test-invitation-token-secret';
 process.env['JWT_SECRET'] ??= 'e2e-test-jwt-secret';
+// Obligatoire depuis l'unité 43 (lien de paiement public), distinct
+// d'INVITATION_TOKEN_SECRET.
+process.env['PAY_LINK_SECRET'] ??= 'e2e-test-pay-link-secret';

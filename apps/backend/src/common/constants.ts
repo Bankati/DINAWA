@@ -79,6 +79,21 @@ export const THROTTLE_LOGIN = { default: { limit: 10, ttl: 60_000 } };
 export const THROTTLE_SIGNUP = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_PASSWORD_RESET_REQUEST = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
+// Lien de paiement public (unité 43) : portier à deux niveaux, voir
+// common/throttle/pay-link-throttlers.ts. Les valeurs « ouverture de page »
+// sont les limites par défaut des throttlers nommés ; le lancement du
+// paiement les resserre route par route. À confirmer en staging (CGNAT).
+export const PAY_LINK_VIEW_LIMIT_PER_IP = 60;
+export const PAY_LINK_VIEW_LIMIT_PER_LINK = 10;
+export const THROTTLE_PAY_LINK_INITIATE = {
+  payLinkIp: { limit: 20, ttl: 60_000 },
+  payLinkToken: { limit: 5, ttl: 60_000 },
+};
+
+// Un lien de paiement reste valable jusqu'à la date d'échéance + 30 jours
+// (décision de cadrage phase 12, 2026-10-07) ; au-delà le locataire en
+// redemande un (robot WhatsApp, unité 47).
+export const PAY_LINK_VALID_DAYS_AFTER_DUE = 30;
 
 // Annonces publiques (public/listings) : route anonyme, donc forcément
 // suivie par IP (AppThrottlerGuard ne peut pas attribuer de clé par
@@ -103,6 +118,93 @@ export const CACHE_TTL_LIST = 15_000;
 // au webhook normal d'arriver en premier). Au-delà de
 // PAYDUNYA_ABANDON_AFTER_MS sans confirmation, le paiement est basculé en
 // REJECTED pour permettre au locataire de relancer proprement.
+// Liste de travail durable des messages WhatsApp reçus (unité 44,
+// /architect 2026-10-13) : le traitement normal part dès l'enregistrement ;
+// cette tâche reprend chaque minute ce qu'un redémarrage a interrompu. Un
+// message n'est repris qu'après WHATSAPP_INBOUND_RETRY_AFTER_MS (laisse le
+// traitement normal finir), et mis de côté après
+// WHATSAPP_INBOUND_MAX_ATTEMPTS échecs pour ne pas bloquer les suivants.
+export const CRON_WHATSAPP_INBOUND_RECOVERY = '* * * * *';
+export const WHATSAPP_INBOUND_RETRY_AFTER_MS = 2 * 60 * 1000;
+export const WHATSAPP_INBOUND_MAX_ATTEMPTS = 3;
+export const WHATSAPP_INBOUND_RECOVERY_BATCH = 50;
+
+// Nouveaux essais des notifications WhatsApp (unité 46, /architect
+// 2026-10-16, décision 2) : seulement les modèles déclarés `retry: true`
+// (rappel, relance — jamais la quittance), seulement un refus temporaire de
+// Meta (FAILED réessayable, jamais UNKNOWN), 3 tentatives AU TOTAL (premier
+// envoi compris) et au plus une heure après le premier envoi.
+export const CRON_WHATSAPP_RETRY = '*/10 * * * *';
+export const WHATSAPP_MAX_ATTEMPTS = 3;
+export const WHATSAPP_RETRY_WINDOW_MS = 60 * 60 * 1000;
+export const WHATSAPP_RETRY_BATCH = 50;
+
+// Consentement WhatsApp (unité 45, /architect 2026-10-16). Version du texte
+// attesté par l'agence, montré dans l'espace locataire et pré-rempli dans le
+// lien « Écrire à WARAH » — à incrémenter à chaque changement de texte (la
+// version est gardée dans l'historique comme preuve). Une demande d'accord
+// de l'agence attend le « OUI » du locataire au plus 7 jours ; au-delà,
+// l'agence relance une nouvelle demande.
+export const WHATSAPP_CONSENT_NOTICE_VERSION = 'consentement-v1';
+// Textes de la version ci-dessus — seule source : le frontend les affiche
+// tels que renvoyés par l'API (WhatsappStatusView.notice), pour que la
+// version gardée en preuve corresponde toujours au texte montré.
+export const WHATSAPP_AGENCY_ATTESTATION_TEXT =
+  "J'atteste que le locataire a accepté de recevoir les messages de service WARAH sur WhatsApp " +
+  '(rappels de loyer, quittances, relances, assistance). Jamais de publicité.';
+export const WHATSAPP_TENANT_NOTICE_TEXT =
+  'En activant WhatsApp, vous acceptez de recevoir les messages de service WARAH sur ce numéro : ' +
+  'rappels de loyer, quittances, relances et assistance. Jamais de publicité. ' +
+  'Vous pouvez arrêter à tout moment ici ou en répondant STOP.';
+export const WHATSAPP_CONSENT_REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Transactions du consentement (agence, espace locataire, webhook, profil) :
+// 6 à 8 allers-retours vers la base. Le délai Prisma par défaut (5 s) est
+// dépassé avec une base distante lente — constaté à l'essai réel du
+// 2026-10-17 (« Transaction not found » → 500). maxWait : attente d'une
+// connexion libre ; timeout : durée maximale de la transaction.
+export const CONSENT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 15_000 } as const;
+// Invitation du robot à un locataire sans accord (unité 47, décision 1) :
+// une par 24 h au plus, et un « OUI » ne vaut accord que dans les 24 h qui
+// suivent l'invitation.
+export const WHATSAPP_INVITATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Robot WhatsApp (unité 47, /architect 2026-10-17). Retour au menu après 30
+// min sans message ; anti-abus : 20 réponses par locataire et par heure au
+// plus (au-delà, silence jusqu'à l'heure suivante).
+export const BOT_CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000;
+export const BOT_MAX_REPLIES_PER_HOUR = 20;
+export const BOT_REPLY_WINDOW_MS = 60 * 60 * 1000;
+// Code locataire demandé par le robot (décision 2) : 5 erreurs → blocage
+// 1 h ; un bon code ouvre les actions protégées 30 jours, sur ce numéro.
+// Alerte Sentry si les échecs dépassent le seuil sur tous les comptes en 1 h.
+export const PIN_MAX_ATTEMPTS = 5;
+export const PIN_LOCK_MS = 60 * 60 * 1000;
+export const PIN_VERIFICATION_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
+export const PIN_FAILURE_ALERT_THRESHOLD = 50;
+// Relevé du robot : 6 derniers mois (mois en cours compris).
+export const BOT_STATEMENT_MONTHS = 6;
+// Phrase pré-remplie par le lien / QR code « Écrire à WARAH » : reconnue
+// comme un « OUI » par le webhook (consent-keyword.ts).
+export const WHATSAPP_CONSENT_PREFILL_TEXT =
+  "OUI, j'accepte de recevoir les messages de service WARAH sur WhatsApp";
+
+// Une réponse libre (sans modèle validé par Meta) n'est possible que dans
+// les 24 h qui suivent le dernier message du locataire. Marge de 5 minutes
+// pour ne jamais tenter un envoi à la limite, que Meta refuserait.
+// « Sans modèle » ne veut pas dire gratuit : tarifs Meta à vérifier.
+export const WHATSAPP_REPLY_WINDOW_MS = 24 * 60 * 60 * 1000 - 5 * 60 * 1000;
+// Messagerie avec le responsable du bien (unité 48). L'échange humain prend
+// fin avec la fenêtre de réponse (WHATSAPP_REPLY_WINDOW_MS) : au-delà, le
+// responsable ne peut plus écrire, le robot reprend la main.
+export const WHATSAPP_AGENCY_REPLY_MAX_LENGTH = 1000;
+export const WHATSAPP_AGENCY_REPLY_SOURCE = 'agency-reply';
+export const WHATSAPP_AGENCY_CLOSE_SOURCE = 'agency-close';
+export const WHATSAPP_INBOX_MESSAGES_PAGE = 50;
+// Plafond des messages transmis au gestionnaire par locataire (correctif
+// /review unité 48) : large pour un vrai échange, bloque un envoi en rafale.
+export const WHATSAPP_RELAY_MAX_PER_HOUR = 60;
+export const WHATSAPP_RELAY_WINDOW_MS = 60 * 60 * 1000;
+
 export const CRON_PAYDUNYA_RECONCILIATION = '*/15 * * * *';
 export const PAYDUNYA_RECONCILE_AFTER_MS = 15 * 60 * 1000;
 export const PAYDUNYA_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
