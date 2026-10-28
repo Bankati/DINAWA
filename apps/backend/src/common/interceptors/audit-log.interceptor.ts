@@ -15,10 +15,17 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // session en clair dans AuditLog.metadata, y compris via un DTO futur non
 // encore écrit au moment où cet interceptor a été construit.
 const SENSITIVE_KEY_FRAGMENTS = ['password', 'token', 'secret', 'otp', 'authorization'];
+// Clés masquées seulement si elles portent exactement ce nom : en fragment,
+// « code » masquerait aussi postalCode, countryCode… (audit de sécurité :
+// le code de réinitialisation ne doit pas rester en clair).
+const SENSITIVE_EXACT_KEYS = new Set(['code', 'pin']);
 
 function isSensitiveKey(key: string): boolean {
   const lower = key.toLowerCase();
-  return SENSITIVE_KEY_FRAGMENTS.some((fragment) => lower.includes(fragment));
+  return (
+    SENSITIVE_EXACT_KEYS.has(lower) ||
+    SENSITIVE_KEY_FRAGMENTS.some((fragment) => lower.includes(fragment))
+  );
 }
 
 function redact(value: unknown, depth = 0): unknown {

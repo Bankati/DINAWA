@@ -78,6 +78,21 @@ export const SUBSCRIPTION_SUSPENSION_DAYS = 7;
 export const THROTTLE_LOGIN = { default: { limit: 10, ttl: 60_000 } };
 export const THROTTLE_SIGNUP = { default: { limit: 5, ttl: 3_600_000 } };
 export const THROTTLE_PASSWORD_RESET_REQUEST = { default: { limit: 5, ttl: 3_600_000 } };
+// Audit de sécurité du 2026-10-20 (E1) : confirmation du code limitée par
+// adresse (10 par quart d'heure) ET par code (5 essais, puis code annulé).
+export const THROTTLE_PASSWORD_RESET_CONFIRM = { default: { limit: 10, ttl: 900_000 } };
+export const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+// Codes envoyés à un même compte, quelle que soit l'adresse qui les demande :
+// changer d'IP ne donne pas plus d'essais. Seul le dernier code créé peut être
+// confirmé, donc 5 × 10 = 50 essais par jour et par compte au plus.
+export const PASSWORD_RESET_MAX_CODES_PER_HOUR = 3;
+export const PASSWORD_RESET_MAX_CODES_PER_DAY = 10;
+export const PASSWORD_RESET_CODES_HOUR_WINDOW_MS = 60 * 60 * 1000;
+export const PASSWORD_RESET_CODES_DAY_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Un seul message pour un mauvais code, un code expiré ou trop d'essais : un
+// message différent révélerait qu'un compte existe pour cet email.
+export const PASSWORD_RESET_INVALID_MESSAGE =
+  'Code invalide ou expiré. Après 5 essais, demandez un nouveau code.';
 export const THROTTLE_CONTACT = { default: { limit: 5, ttl: 3_600_000 } };
 // Lien de paiement public (unité 43) : portier à deux niveaux, voir
 // common/throttle/pay-link-throttlers.ts. Les valeurs « ouverture de page »

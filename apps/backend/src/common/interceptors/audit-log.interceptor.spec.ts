@@ -140,6 +140,24 @@ describe('AuditLogInterceptor', () => {
     expect(callArgs.data.metadata['email']).toBe('a@a.com');
   });
 
+  it('masque le code de réinitialisation (clé « code » exacte), sans masquer postalCode', async () => {
+    const req = {
+      method: 'POST',
+      route: { path: '/api/auth/password-reset/confirm' },
+      params: {},
+      body: { email: 'a@a.com', code: '123456', newPassword: 'x', postalCode: 'BP 123' },
+    };
+
+    interceptor.intercept(makeContext(req), makeHandler({ message: 'ok' })).subscribe();
+    await flush();
+
+    const [callArgs] = prisma.auditLog.create.mock.calls[0] as [
+      { data: { metadata: Record<string, unknown> } },
+    ];
+    expect(callArgs.data.metadata['code']).toBe('[REDACTED]');
+    expect(callArgs.data.metadata['postalCode']).toBe('BP 123');
+  });
+
   it("n'échoue jamais la requête si l'écriture de l'audit log échoue", async () => {
     prisma.auditLog.create.mockRejectedValueOnce(new Error('db down'));
     const req = {

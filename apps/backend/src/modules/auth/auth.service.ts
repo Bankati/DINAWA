@@ -15,13 +15,25 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { canActOnProperty } from '../../common/permissions/property-access';
 import { assertTenantNotBlocked } from '../../common/permissions/tenant-block';
-import { createInvitationToken, verifyInvitationToken } from '../../common/utils/invitation-token';
+import {
+  createInvitationToken,
+  passwordFingerprint,
+  verifyInvitationTokenPayload,
+} from '../../common/utils/invitation-token';
 import { TokenService } from './token.service';
 import { EmailService } from '../email/email.service';
 import { NotifyService } from '../notify/notify.service';
 import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
 import { ListingsService } from '../listings/listings.service';
-import { BETA_FREE_MONTHS } from '../../common/constants';
+import {
+  BETA_FREE_MONTHS,
+  PASSWORD_RESET_MAX_ATTEMPTS,
+  PASSWORD_RESET_CODES_DAY_WINDOW_MS,
+  PASSWORD_RESET_CODES_HOUR_WINDOW_MS,
+  PASSWORD_RESET_INVALID_MESSAGE,
+  PASSWORD_RESET_MAX_CODES_PER_DAY,
+  PASSWORD_RESET_MAX_CODES_PER_HOUR,
+} from '../../common/constants';
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
@@ -194,6 +206,33 @@ export class AuthService {
       return genericMessage;
     }
 
+    // Plafond par compte (audit de sécurité, E1) : même réponse qu'en temps
+    // normal, mais ni nouveau code ni email — l'attaquant ne sait pas qu'il
+    // est bloqué. Le dernier code envoyé reste valable jusqu'à son expiration
+    // (10 minutes) ; ensuite le titulaire attend la fin de la fenêtre.
+    const now = Date.now();
+    const [codesLastHour, codesLastDay] = await Promise.all([
+      this.prisma.passwordResetOtp.count({
+        where: {
+          userId: user.id,
+          createdAt: { gt: new Date(now - PASSWORD_RESET_CODES_HOUR_WINDOW_MS) },
+        },
+      }),
+      this.prisma.passwordResetOtp.count({
+        where: {
+          userId: user.id,
+          createdAt: { gt: new Date(now - PASSWORD_RESET_CODES_DAY_WINDOW_MS) },
+        },
+      }),
+    ]);
+    if (
+      codesLastHour >= PASSWORD_RESET_MAX_CODES_PER_HOUR ||
+      codesLastDay >= PASSWORD_RESET_MAX_CODES_PER_DAY
+    ) {
+      this.logger.warn(`[password-reset] plafond de codes atteint pour user=${user.id}`);
+      return genericMessage;
+    }
+
     // Toute nouvelle demande invalide les codes précédents non utilisés
     // (voir build-plan.md unité 10).
     await this.prisma.passwordResetOtp.updateMany({
@@ -222,31 +261,54 @@ export class AuthService {
   }
 
   async confirmPasswordReset(dto: ConfirmPasswordResetDto): Promise<{ message: string }> {
+    const invalid = (): BadRequestException =>
+      new BadRequestException(PASSWORD_RESET_INVALID_MESSAGE);
+
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user) {
-      throw new BadRequestException('Code invalide ou expiré');
-    }
+    if (!user) throw invalid();
 
+    // Seul le DERNIER code créé compte, même s'il est déjà annulé ou expiré :
+    // un code plus ancien ne « réapparaît » jamais quand le dernier est brûlé
+    // (sinon des demandes simultanées donneraient 5 essais par code créé).
+    // Chaque essai est RÉSERVÉ avant la comparaison, par une écriture
+    // conditionnelle : au plus PASSWORD_RESET_MAX_ATTEMPTS comparaisons par
+    // code, même avec des requêtes simultanées (audit de sécurité, E1).
     const otp = await this.prisma.passwordResetOtp.findFirst({
-      where: {
-        userId: user.id,
-        code: dto.code,
-        usedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
+      where: { userId: user.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
-    if (!otp) {
-      throw new BadRequestException('Code invalide ou expiré');
+    if (!otp || otp.usedAt || otp.expiresAt <= new Date()) throw invalid();
+
+    const reserved = await this.prisma.passwordResetOtp.updateMany({
+      where: { id: otp.id, usedAt: null, attempts: { lt: PASSWORD_RESET_MAX_ATTEMPTS } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (reserved.count === 0) throw invalid();
+
+    if (otp.code !== dto.code) {
+      // Brûlé en base dès que le plafond est atteint (le compteur lu plus
+      // haut peut être périmé si des essais arrivent en même temps).
+      await this.prisma.passwordResetOtp.updateMany({
+        where: { id: otp.id, usedAt: null, attempts: { gte: PASSWORD_RESET_MAX_ATTEMPTS } },
+        data: { usedAt: new Date() },
+      });
+      throw invalid();
     }
 
-    await this.prisma.passwordResetOtp.update({
-      where: { id: otp.id },
+    // Usage unique, même si deux confirmations arrivent en même temps.
+    const consumed = await this.prisma.passwordResetOtp.updateMany({
+      where: { id: otp.id, usedAt: null },
       data: { usedAt: new Date() },
     });
+    if (consumed.count === 0) throw invalid();
 
     const passwordHash = await this.tokens.hashPassword(dto.newPassword);
-    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    // Nouveau mot de passe et coupure de toutes les sessions ensemble : jamais
+    // un mot de passe changé avec la session de l'intrus encore ouverte.
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+      this.tokens.revokeAllSessions(user.id),
+    ]);
 
     return { message: 'Mot de passe mis à jour' };
   }
@@ -465,7 +527,10 @@ export class AuthService {
       }
 
       const secret = this.config.getOrThrow<string>('INVITATION_TOKEN_SECRET');
-      const token = createInvitationToken(user.id, secret);
+      // Empreinte du mot de passe provisoire : le lien ne sert qu'une fois (E2).
+      // Jamais `user.passwordHash` : PrismaService l'omet de toutes les
+      // lectures, `create` compris (il serait vide ici).
+      const token = createInvitationToken(user.id, secret, placeholderPasswordHash);
       invitationUrl = `${this.config.getOrThrow<string>('FRONTEND_URL')}/auth/activate?token=${token}`;
     }
 
@@ -553,15 +618,39 @@ export class AuthService {
     dto: SetTenantPasswordDto,
   ): Promise<{ userId: string }> {
     const secret = this.config.getOrThrow<string>('INVITATION_TOKEN_SECRET');
-    const userId = verifyInvitationToken(token, secret);
+    const payload = verifyInvitationTokenPayload(token, secret);
+    const alreadyUsed = (): BadRequestException =>
+      new BadRequestException('Ce lien a déjà été utilisé : connectez-vous avec votre mot de passe.');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.role !== 'TENANT') {
+    // omit: { passwordHash: false } réactive le champ omis globalement par
+    // PrismaService : sans lui, l'empreinte ne peut pas être comparée.
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.userId },
+      omit: { passwordHash: false },
+    });
+    // Hash absent : on refuse plutôt que d'accepter un lien qu'on ne peut pas vérifier.
+    if (!user || user.role !== 'TENANT' || user.anonymizedAt || !user.passwordHash) {
       throw new BadRequestException("Lien d'invitation invalide");
     }
 
+    // Lien à usage unique (audit de sécurité du 2026-10-20, E2) : il ne vaut
+    // que tant que le mot de passe provisoire n'a pas été remplacé. Un lien
+    // émis avant ce correctif (sans empreinte, 7 jours au plus) est refusé
+    // si le locataire s'est déjà connecté.
+    if (payload.pwd !== undefined) {
+      if (payload.pwd !== passwordFingerprint(user.passwordHash)) throw alreadyUsed();
+    } else if ((await this.prisma.session.count({ where: { userId: user.id } })) > 0) {
+      throw alreadyUsed();
+    }
+
     const passwordHash = await this.tokens.hashPassword(dto.password);
-    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    // Écriture conditionnelle : deux activations simultanées avec le même
+    // lien → une seule réussit.
+    const { count } = await this.prisma.user.updateMany({
+      where: { id: user.id, passwordHash: user.passwordHash },
+      data: { passwordHash },
+    });
+    if (count === 0) throw alreadyUsed();
 
     return { userId: user.id };
   }

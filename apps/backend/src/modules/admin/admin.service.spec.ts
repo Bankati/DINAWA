@@ -16,6 +16,8 @@ describe('AdminService', () => {
     mandate: { groupBy: jest.Mock };
     subscription: { findMany: jest.Mock };
     auditLog: { findMany: jest.Mock; count: jest.Mock };
+    session: { updateMany: jest.Mock };
+    $transaction: jest.Mock;
   };
   let notify: { notifyUser: jest.Mock };
 
@@ -40,8 +42,10 @@ describe('AdminService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
+      session: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
-    notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
+    notify ={ notifyUser: jest.fn().mockResolvedValue(undefined) };
     service = new AdminService(prisma as never, {} as never, notify as never);
   });
 
@@ -249,6 +253,18 @@ describe('AdminService', () => {
       expect(callArgs.where).toEqual({ id: 'u1' });
       expect(callArgs.data).not.toHaveProperty('reason');
       expect(callArgs.data['anonymizedAt']).toBeInstanceOf(Date);
+    });
+
+    it('coupe toutes les sessions encore ouvertes du compte supprimé (audit sécurité E3)', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({ id: 'u1', supabaseId: null, email: 'a@warah.test' });
+
+      await service.deleteUser('u1', 'demande du titulaire');
+
+      const [args] = prisma.session.updateMany.mock.calls[0] as [
+        { where: Record<string, unknown>; data: { revokedAt: Date } },
+      ];
+      expect(args.where).toEqual({ userId: 'u1', revokedAt: null });
+      expect(args.data.revokedAt).toBeInstanceOf(Date);
     });
   });
 

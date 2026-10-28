@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -59,5 +59,46 @@ describe('isTrivialPin', () => {
 
   it.each(['048213', '583920', '112358', '120000', '135790', '246802', '102938'])('accepte %s', (pin) => {
     expect(isTrivialPin(pin)).toBe(false);
+  });
+});
+
+// Audit de sécurité du 2026-10-20 (E3) : un compte supprimé ne doit plus
+// jamais obtenir de nouveau badge, et toutes ses sessions peuvent être coupées.
+describe('TokenService — sessions', () => {
+  function serviceWithPrisma(prisma: unknown): TokenService {
+    return new TokenService({} as JwtService, prisma as PrismaService, {
+      get: () => undefined,
+    } as unknown as ConfigService);
+  }
+
+  it('refuse de renouveler la session d’un compte supprimé ou anonymisé', async () => {
+    const prisma = {
+      session: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 's1',
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 86_400_000),
+          user: { id: 'u1', anonymizedAt: new Date() },
+        }),
+        update: jest.fn(),
+      },
+    };
+    const service = serviceWithPrisma(prisma);
+
+    await expect(service.rotateRefreshToken('ancien-refresh')).rejects.toThrow(UnauthorizedException);
+    expect(prisma.session.update).not.toHaveBeenCalled();
+  });
+
+  it('revokeAllSessions coupe toutes les sessions encore ouvertes du compte', async () => {
+    const prisma = { session: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) } };
+    const service = serviceWithPrisma(prisma);
+
+    await service.revokeAllSessions('u1');
+
+    const [args] = prisma.session.updateMany.mock.calls[0] as [
+      { where: Record<string, unknown>; data: { revokedAt: Date } },
+    ];
+    expect(args.where).toEqual({ userId: 'u1', revokedAt: null });
+    expect(args.data.revokedAt).toBeInstanceOf(Date);
   });
 });
