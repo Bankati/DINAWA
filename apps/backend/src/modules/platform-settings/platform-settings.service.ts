@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, PlatformSettings } from '@prisma/client';
+import { Prisma, PlatformSettings, SubscriptionTier } from '@prisma/client';
 import { addMonths } from 'date-fns';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -48,6 +48,7 @@ export class PlatformSettingsService {
   async update(data: {
     subscriptionQuotasSuspended?: boolean;
     subscriptionBillingEnabled?: boolean;
+    whatsappEnabledTiers?: SubscriptionTier[];
   }): Promise<PlatformSettings> {
     const current = await this.get(); // garantit que la ligne singleton existe avant l'update
 
@@ -76,5 +77,12 @@ export class PlatformSettingsService {
 
   async billingEnabled(): Promise<boolean> {
     return (await this.get()).subscriptionBillingEnabled;
+  }
+
+  // Forfaits ouvrant WhatsApp aux locataires (unité 42) — lu frais à chaque
+  // envoi, comme les autres réglages : un forfait décoché par l'admin doit
+  // s'appliquer dès le message suivant.
+  async whatsappEnabledTiers(): Promise<SubscriptionTier[]> {
+    return (await this.get()).whatsappEnabledTiers;
   }
 }

@@ -105,6 +105,18 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: 'Votre abonnement {tierLabel} pour {periodLabel} est à régler.',
     url: '/profil',
   },
+  'tenant-overdue': {
+    title: 'Loyer en attente',
+    body: "Votre loyer pour {propertyAddress} n'est pas encore réglé.",
+    url: '/locataire',
+  },
+  // Messagerie (unité 48) : jamais le contenu du message. /messages
+  // redirige vers la page du rôle connecté (propriétaire ou gestionnaire).
+  'whatsapp-message': {
+    title: 'Nouveau message WhatsApp',
+    body: '{tenantName} vous a écrit sur WhatsApp ({propertyAddress}). Répondez depuis WARAH.',
+    url: '/messages',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {

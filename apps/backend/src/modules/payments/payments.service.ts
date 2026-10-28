@@ -23,7 +23,7 @@ import { NotifyService } from '../notify/notify.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
 import { RejectPaymentDto } from './dto/reject-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
-import { InitiatePaymentDto } from './dto/initiate-payment.dto';
+import { InitiatePaymentDto, PaydunyaPaymentMethod } from './dto/initiate-payment.dto';
 import { PAYMENT_CONFIRMED } from './payment.events';
 import { PaydunyaService, PaydunyaInvoiceStatus, PaydunyaError } from './paydunya.service';
 import { PAYDUNYA_ABANDON_AFTER_MS, PAYDUNYA_MIN_INVOICE_FCFA } from '../../common/constants';
@@ -66,6 +66,18 @@ export type PaymentWithAccess = Prisma.PaymentGetPayload<{
 }>;
 
 export type PaginatedPayments = { data: Payment[]; page: number; limit: number; total: number };
+
+export type EntryWithProperty = Prisma.PaymentScheduleEntryGetPayload<{
+  include: { lease: { include: { property: true } } };
+}>;
+
+// Seuls l'opérateur (préférence indicative) et les pages de retour PayDunya
+// changent entre l'espace locataire et le lien de paiement public.
+export type PaydunyaPaymentOptions = {
+  paymentMethod: PaydunyaPaymentMethod;
+  returnUrl: string;
+  cancelUrl: string;
+};
 
 // Recalcule le statut d'une échéance à partir des montants — jamais dérivé
 // ailleurs (voir build-plan.md unité 16 : "dérivé en temps réel"). OVERDUE
@@ -157,17 +169,46 @@ export class PaymentsService {
     user: AuthenticatedUser,
     dto: InitiatePaymentDto,
   ): Promise<{ paymentId: string; checkoutUrl: string }> {
+    const scheduleEntry = await this.findEntryForPayment(dto.scheduleEntryId);
+    if (user.role !== 'TENANT' || user.id !== scheduleEntry.lease.tenantUserId) {
+      throw new ForbiddenException('Vous ne pouvez payer que votre propre bail');
+    }
+
+    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+    return this.startPaydunyaPayment(scheduleEntry, {
+      paymentMethod: dto.paymentMethod,
+      returnUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=success`,
+      cancelUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=cancelled`,
+    });
+  }
+
+  // Même paiement PayDunya que initiate(), sans utilisateur connecté — pour
+  // le lien de paiement public (PayLinksService, unité 43). L'appelant a déjà
+  // prouvé son droit d'agir sur cette échéance (jeton signé vérifié) ; toutes
+  // les règles métier (solde restant, frais, numéro de reversement, un seul
+  // paiement en cours) restent ici, partagées, jamais dupliquées.
+  async initiateForEntry(
+    scheduleEntryId: string,
+    options: PaydunyaPaymentOptions,
+  ): Promise<{ paymentId: string; checkoutUrl: string }> {
+    return this.startPaydunyaPayment(await this.findEntryForPayment(scheduleEntryId), options);
+  }
+
+  private async findEntryForPayment(scheduleEntryId: string): Promise<EntryWithProperty> {
     const scheduleEntry = await this.prisma.paymentScheduleEntry.findUnique({
-      where: { id: dto.scheduleEntryId },
+      where: { id: scheduleEntryId },
       include: { lease: { include: { property: true } } },
     });
     if (!scheduleEntry) {
       throw new NotFoundException('Échéance introuvable');
     }
-    if (user.role !== 'TENANT' || user.id !== scheduleEntry.lease.tenantUserId) {
-      throw new ForbiddenException('Vous ne pouvez payer que votre propre bail');
-    }
+    return scheduleEntry;
+  }
 
+  private async startPaydunyaPayment(
+    scheduleEntry: EntryWithProperty,
+    options: PaydunyaPaymentOptions,
+  ): Promise<{ paymentId: string; checkoutUrl: string }> {
     const remaining = scheduleEntry.expectedAmount - scheduleEntry.paidAmount;
     if (remaining <= 0) {
       throw new ConflictException('Cette échéance est déjà réglée');
@@ -225,7 +266,7 @@ export class PaymentsService {
         where: { id: existing.id },
         data: {
           paidAmount: remaining,
-          paymentMethod: dto.paymentMethod,
+          paymentMethod: options.paymentMethod,
           feeAmount,
           beneficiaryUserId,
         },
@@ -241,7 +282,7 @@ export class PaymentsService {
             leaseId: scheduleEntry.leaseId,
             source: 'PAYDUNYA_API',
             status: 'PENDING',
-            paymentMethod: dto.paymentMethod,
+            paymentMethod: options.paymentMethod,
             paidAmount: remaining,
             feeAmount,
             beneficiaryUserId,
@@ -258,7 +299,6 @@ export class PaymentsService {
     }
 
     const apiBaseUrl = this.config.getOrThrow<string>('API_BASE_URL');
-    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
 
     let invoice: { token: string; checkoutUrl: string };
     try {
@@ -269,8 +309,8 @@ export class PaymentsService {
         description: `WARAH — ${formatPropertyLocation(scheduleEntry.lease.property)}`,
         paymentId: payment.id,
         callbackUrl: `${apiBaseUrl}/payments/webhooks/paydunya?paymentId=${payment.id}`,
-        returnUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=success`,
-        cancelUrl: `${frontendUrl}/locataire/paiements/historique?paydunya=cancelled`,
+        returnUrl: options.returnUrl,
+        cancelUrl: options.cancelUrl,
       });
     } catch (error) {
       // Aucune facture créée chez PayDunya — le Payment reste PENDING sans
@@ -321,7 +361,12 @@ export class PaymentsService {
     if (user.role !== 'TENANT' || user.id !== scheduleEntry.lease.tenantUserId) {
       throw new ForbiddenException('Vous ne pouvez consulter que votre propre bail');
     }
+    return this.quoteEntry(scheduleEntry);
+  }
 
+  // Calcul du devis partagé avec le lien de paiement public (unité 43) —
+  // l'autorisation est vérifiée par l'appelant, jamais ici.
+  async quoteEntry(scheduleEntry: EntryWithProperty): Promise<PaymentQuote> {
     const rentAmount = Math.max(0, scheduleEntry.expectedAmount - scheduleEntry.paidAmount);
     const feeAmount = rentAmount > 0 ? this.computeFee(rentAmount) : 0;
     const beneficiaryUserId = await resolveResponsibleUserId(

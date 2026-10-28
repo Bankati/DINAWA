@@ -27,6 +27,14 @@ export class CacheService {
     this.store.delete(key);
   }
 
+  // Toutes les pages mises en cache pour un utilisateur (même préfixe que
+  // CacheInterceptor). Sert quand un changement vient d'un AUTRE acteur que
+  // celui qui consulte (ex. le locataire répond « OUI » : la liste de
+  // l'agence doit se mettre à jour, unité 45).
+  invalidateUser(userId: string): void {
+    this.delByPrefix(userCachePrefix(userId));
+  }
+
   delByPrefix(prefix: string): void {
     for (const k of this.store.keys()) {
       if (k.startsWith(prefix)) this.store.delete(k);
@@ -41,4 +49,8 @@ export class CacheService {
     this.set(key, value, ttlMs);
     return value;
   }
+}
+
+export function userCachePrefix(userId: string): string {
+  return `cache:${userId}:`;
 }

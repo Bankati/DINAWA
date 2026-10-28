@@ -51,6 +51,14 @@ describe('PaymentConfirmedListener', () => {
     }
   });
 
+  it('donne le prénom du locataire et rattache paiement et échéance (WhatsApp, unité 46)', async () => {
+    prisma.payment.findUnique.mockResolvedValue({ ...makePayment(), scheduleEntryId: 'entry-1' });
+    await listener.handle({ paymentId: 'payment-1' });
+    const [params] = notify.notifyUser.mock.calls[0] as [{ variables: Record<string, unknown>; relatedTo: unknown }];
+    expect(params.variables).toMatchObject({ tenantFirstName: 'Ama', amount: 55000 });
+    expect(params.relatedTo).toEqual({ paymentId: 'payment-1', scheduleEntryId: 'entry-1' });
+  });
+
   it("n'échoue jamais même si notifyUser rejette", async () => {
     notify.notifyUser.mockRejectedValue(new Error('down'));
     await expect(listener.handle({ paymentId: 'payment-1' })).resolves.toBeUndefined();

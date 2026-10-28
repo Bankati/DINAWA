@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { scrubSentryEvent } from "@/lib/mask-sensitive-url";
 
 // Convention Next.js (instrumentation.ts, stable depuis v15) — register()
 // tourne une fois au démarrage du serveur, dans le runtime Node ET Edge.
@@ -11,6 +12,9 @@ export function register(): void {
     environment: process.env.NODE_ENV ?? "development",
     enableLogs: true,
     tracesSampleRate: 0.1,
+    // Jetons du lien de paiement / d'invitation jamais envoyés (unité 43).
+    beforeSend: (event) => scrubSentryEvent(event),
+    beforeSendTransaction: (event) => scrubSentryEvent(event),
   });
 }
 

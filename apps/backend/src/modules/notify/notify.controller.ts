@@ -33,6 +33,7 @@ const EVENT_LABELS: Record<string, string> = {
   'tenant-invitation': 'Invitation envoyée',
   'lease-created': 'Nouveau bail',
   'mandate-created': 'Proposition de mandat',
+  'whatsapp-message': 'Nouveau message WhatsApp',
 };
 
 @ApiTags('Notifications')
