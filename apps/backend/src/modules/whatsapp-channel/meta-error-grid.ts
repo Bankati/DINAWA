@@ -81,12 +81,14 @@ export const META_ERROR_GRID: Readonly<Record<string, MetaErrorRule>> = {
   '130403': REJECTED, // destinataire bloqué
   '130472': REJECTED, // exclu par une expérimentation Meta
   '132000': REJECTED, // nombre de variables du modèle incorrect
-  '132001': REJECTED, // modèle inexistant ou non approuvé dans cette langue
+  // Modèle absent, en pause ou désactivé chez Meta : TOUS les envois de ce
+  // modèle échoueront tant qu'un humain ne l'a pas (re)fait approuver.
+  '132001': CONFIG_ERROR, // modèle inexistant ou non approuvé dans cette langue
   '132005': REJECTED, // texte traduit trop long
   '132007': REJECTED, // contenu du modèle contraire à la politique WhatsApp
   '132012': REJECTED, // format d'une variable incorrect
-  '132015': REJECTED, // modèle en pause (qualité faible)
-  '132016': REJECTED, // modèle désactivé définitivement
+  '132015': CONFIG_ERROR, // modèle en pause (qualité faible)
+  '132016': CONFIG_ERROR, // modèle désactivé définitivement
   '132018': REJECTED, // erreur de validation des paramètres du modèle
   '135000': REJECTED, // erreur inconnue dans les paramètres de la requête
 };
