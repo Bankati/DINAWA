@@ -208,7 +208,7 @@ export interface paths {
     put?: never;
     /**
      * Invite un locataire sur un bien
-     * @description Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.
+     * @description Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe. Renvoie aussi le numéro WhatsApp du robot WARAH (null si WhatsApp est éteint), à transmettre au locataire.
      */
     post: operations["AuthController_inviteTenant"];
     delete?: never;
@@ -703,6 +703,301 @@ export interface paths {
     put?: never;
     /** Relance un reversement en échec (super admin) */
     post: operations["PayoutsController_retry"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/pay-links/{token}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Informations minimales du loyer à payer (page publique /payer) */
+    get: operations["PayLinksController_getView"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/pay-links/{token}/initiate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Lance (ou reprend) le paiement PayDunya du loyer — renvoie checkoutUrl */
+    post: operations["PayLinksController_initiate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/tenants/{tenantUserId}/whatsapp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** État WhatsApp du locataire (accord, numéro vérifié, code créé) */
+    get: operations["TenantWhatsappController_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/tenants/{tenantUserId}/whatsapp-consent": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Déclare l’accord recueilli par l’agence (attestation)
+     * @description Le canal passe « en attente » : seul le locataire l’active (réponse « OUI », espace locataire).
+     */
+    patch: operations["TenantWhatsappController_request"];
+    trace?: never;
+  };
+  "/tenants/{tenantUserId}/whatsapp-consent/refusal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Note un refus ou un retrait exprimé par le locataire (seul lui pourra réactiver) */
+    post: operations["TenantWhatsappController_refusal"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/tenants/{tenantUserId}/whatsapp-phone": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Change le numéro WhatsApp (remet accord, vérification et code à zéro) */
+    patch: operations["TenantWhatsappController_changePhone"];
+    trace?: never;
+  };
+  "/tenants/{tenantUserId}/whatsapp-pin/reset": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Réinitialise le code locataire sans le voir */
+    post: operations["TenantWhatsappController_resetPin"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me/whatsapp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Mon état WhatsApp */
+    get: operations["MyWhatsappController_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me/whatsapp-consent": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Active ou arrête les messages WhatsApp de service */
+    patch: operations["MyWhatsappController_setConsent"];
+    trace?: never;
+  };
+  "/me/whatsapp-phone": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Change mon numéro WhatsApp */
+    patch: operations["MyWhatsappController_changePhone"];
+    trace?: never;
+  };
+  "/me/whatsapp-pin": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Génère mon code WhatsApp (affiché une seule fois) */
+    post: operations["MyWhatsappController_generatePin"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/whatsapp/conversations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Conversations des biens visibles, les plus récentes d’abord */
+    get: operations["WhatsappInboxController_list"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/whatsapp/conversations/unread-count": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Nombre de conversations avec des messages non lus (responsable du bien) */
+    get: operations["WhatsappInboxController_unreadCount"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/whatsapp/conversations/{id}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Messages d’une conversation (ne marque rien comme lu) */
+    get: operations["WhatsappInboxController_messages"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/whatsapp/conversations/{id}/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Marque la conversation comme lue (responsable du bien seulement) */
+    post: operations["WhatsappInboxController_markRead"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/whatsapp/conversations/{id}/reply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Répond au locataire sur WhatsApp
+     * @description 409 si la fenêtre de 24 h est fermée ou si le locataire ne reçoit plus de messages.
+     */
+    post: operations["WhatsappInboxController_reply"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/whatsapp/conversations/{id}/close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Termine l’échange : le robot reprend la main */
+    post: operations["WhatsappInboxController_close"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1651,6 +1946,21 @@ export interface components {
       /** @description Fenêtre (en jours) de l'alerte de retard après échéance — omis = pas d'alerte configurée */
       overdueAlertWindowDays?: number;
     };
+    InviteTenantResponseDto: {
+      user: {
+        [key: string]: unknown;
+      };
+      lease: {
+        [key: string]: unknown;
+      };
+      /** @description Lien d'activation du compte — null quand le locataire existait déjà (nouveau bail, pas de nouvelle invitation). */
+      invitationUrl: string | null;
+      /**
+       * @description Numéro WhatsApp du robot WARAH, international sans « + » — null si WhatsApp est éteint ou le numéro non configuré.
+       * @example 22899327312
+       */
+      whatsappBotNumber: string | null;
+    };
     SetTenantPasswordDto: {
       password: string;
     };
@@ -1718,6 +2028,48 @@ export interface components {
        * @enum {string}
        */
       tier: "STARTER" | "PRO" | "PREMIUM" | "AGENCE";
+    };
+    InitiatePayLinkDto: {
+      /**
+       * @description Préférence indicative — ne restreint pas le choix réel sur la page PayDunya
+       * @enum {string}
+       */
+      paymentMethod: "TMONEY" | "FLOOZ";
+    };
+    AgencyConsentRequestDto: {
+      /**
+       * @description Numéro WhatsApp du locataire
+       * @example 90330557
+       */
+      whatsappPhone: string;
+      /**
+       * @description Façon dont l’accord a été recueilli
+       * @enum {string}
+       */
+      collectionMethod: "IN_PERSON" | "PHONE" | "WRITTEN";
+      /** @description Case cochée par l’agent : « J’atteste que le locataire a accepté de recevoir les messages de service WARAH sur WhatsApp » */
+      attestation: boolean;
+    };
+    AgencyConsentRefusalDto: {
+      /** @enum {string} */
+      collectionMethod: "IN_PERSON" | "PHONE" | "WRITTEN";
+    };
+    WhatsappPhoneDto: {
+      /** @example 90330557 */
+      whatsappPhone: string;
+    };
+    TenantConsentDto: {
+      /** @enum {string} */
+      action: "ACCEPT" | "WITHDRAW";
+      /**
+       * @description Numéro WhatsApp, si différent de celui enregistré
+       * @example 90330557
+       */
+      whatsappPhone?: string;
+    };
+    ReplyToConversationDto: {
+      /** @description Texte envoyé tel quel au locataire */
+      text: string;
     };
     CreatePropertyDto: {
       /** @enum {string} */
@@ -1822,6 +2174,8 @@ export interface components {
       subscriptionQuotasSuspended?: boolean;
       /** @description Active la facturation mensuelle automatique des abonnements */
       subscriptionBillingEnabled?: boolean;
+      /** @description Forfaits dont les locataires ont accès à WhatsApp (forfait du responsable du bien : gestionnaire du mandat actif, sinon propriétaire) */
+      whatsappEnabledTiers?: ("STARTER" | "PRO" | "PREMIUM" | "AGENCE")[];
     };
     CreateManagerReviewDto: {
       /** @description Note sur 5 étoiles */
@@ -2259,7 +2613,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["InviteTenantResponseDto"];
+        };
       };
     };
   };
@@ -2836,6 +3192,354 @@ export interface operations {
     requestBody?: never;
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PayLinksController_getView: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PayLinksController_initiate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InitiatePayLinkDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  TenantWhatsappController_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenantUserId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  TenantWhatsappController_request: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenantUserId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgencyConsentRequestDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  TenantWhatsappController_refusal: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenantUserId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgencyConsentRefusalDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  TenantWhatsappController_changePhone: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenantUserId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WhatsappPhoneDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  TenantWhatsappController_resetPin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenantUserId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  MyWhatsappController_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  MyWhatsappController_setConsent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TenantConsentDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  MyWhatsappController_changePhone: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WhatsappPhoneDto"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  MyWhatsappController_generatePin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WhatsappInboxController_list: {
+    parameters: {
+      query?: {
+        /** @description Échanges en cours ou terminés */
+        status?: "open" | "closed";
+        page?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WhatsappInboxController_unreadCount: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WhatsappInboxController_messages: {
+    parameters: {
+      query?: {
+        /** @description Identifiant du plus ancien message déjà affiché (page précédente) */
+        before?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WhatsappInboxController_markRead: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WhatsappInboxController_reply: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplyToConversationDto"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  WhatsappInboxController_close: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };

@@ -7,7 +7,8 @@ import { api } from '@/lib/api';
 import { formatFcfa, initiales } from '@/lib/format';
 import { whatsappBadge, type WhatsappConsent } from '@/lib/whatsapp';
 import { TenantWhatsappDialog } from '@/components/whatsapp/tenant-whatsapp-dialog';
-import type { MandateWithParties } from '@/lib/api-types';
+import { formatWhatsappNumber, tenantInvitationWhatsappLink, whatsappBotLink } from '@/lib/tenant-invitation';
+import type { InviteTenantResult, MandateWithParties } from '@/lib/api-types';
 import {
   PageHeader, Button, Card, Badge, EmptyState, Skeleton, StatCard,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -57,15 +58,6 @@ function formatDate(s: string) {
   return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-// Même formule que la page publique d'annonce (annonces/[slug]/page.tsx) —
-// numéro togolais à 8 chiffres préfixé 228, sinon laissé tel quel.
-function whatsappLink(phone: string, firstName: string, invitationUrl: string): string {
-  const digits = phone.replace(/\D/g, '');
-  const international = digits.length === 8 ? `228${digits}` : digits;
-  const message = `Bonjour ${firstName}, voici votre lien pour activer votre compte locataire WARAH : ${invitationUrl}`;
-  return `https://wa.me/${international}?text=${encodeURIComponent(message)}`;
-}
-
 export default function LocatairesPage() {
   const queryClient = useQueryClient();
   const { data: tenants, isLoading } = useQuery({
@@ -104,7 +96,9 @@ export default function LocatairesPage() {
   const [blockReason, setBlockReason] = useState('');
   const [blocking, setBlocking] = useState(false);
 
-  const [inviteResult, setInviteResult] = useState<{ invitationUrl: string; phone: string; firstName: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<{
+    invitationUrl: string; phone: string; firstName: string; whatsappBotNumber: string | null;
+  } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
   function copyInvitationLink() {
@@ -205,7 +199,7 @@ export default function LocatairesPage() {
     }
     setLinkSaving(true); setLinkErr('');
     try {
-      const result = await api.post<{ invitationUrl: string | null }>('/auth/invite/tenant', {
+      const result = await api.post<InviteTenantResult>('/auth/invite/tenant', {
         propertyId: linkForm.propertyId,
         ...identity,
         paymentFrequency: linkForm.paymentFrequency,
@@ -218,7 +212,12 @@ export default function LocatairesPage() {
       invalidateTenants();
       setManaging(null);
       if (result.invitationUrl) {
-        setInviteResult({ invitationUrl: result.invitationUrl, phone: identity.phone, firstName: identity.firstName });
+        setInviteResult({
+          invitationUrl: result.invitationUrl,
+          phone: identity.phone,
+          firstName: identity.firstName,
+          whatsappBotNumber: result.whatsappBotNumber,
+        });
       }
     } catch (err: unknown) {
       setLinkErr(err instanceof Error ? err.message : "Erreur lors de l'association");
@@ -484,10 +483,22 @@ export default function LocatairesPage() {
                   {linkCopied ? <><Check className="w-3.5 h-3.5" />Copié</> : 'Copier'}
                 </Button>
               </div>
+              {inviteResult.whatsappBotNumber && (
+                <p className="text-sm text-muted-foreground mb-4">
+                  Le message WhatsApp contient aussi le numéro de l&apos;assistant WhatsApp WARAH :{' '}
+                  <a
+                    href={whatsappBotLink(inviteResult.whatsappBotNumber)}
+                    target="_blank" rel="noopener"
+                    className="font-semibold text-foreground underline"
+                  >
+                    {formatWhatsappNumber(inviteResult.whatsappBotNumber)}
+                  </a>
+                </p>
+              )}
               <div className="flex gap-2.5 justify-end">
                 <Button variant="secondary" onClick={() => setInviteResult(null)}>Fermer</Button>
                 <a
-                  href={whatsappLink(inviteResult.phone, inviteResult.firstName, inviteResult.invitationUrl)}
+                  href={tenantInvitationWhatsappLink(inviteResult)}
                   target="_blank" rel="noopener"
                   className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold text-white no-underline"
                   style={{ background: '#25D366' }}
