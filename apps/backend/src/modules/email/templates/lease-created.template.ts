@@ -1,5 +1,6 @@
 import { escapeHtml, renderAmountBox, renderButton, renderLayout } from './layout';
 import { TemplateVariables } from './types';
+import { renderWhatsappBotParagraph } from './whatsapp-bot-contact';
 
 export function subject(): string {
   return 'Votre nouveau bail WARAH';
@@ -23,6 +24,7 @@ export function render(variables: TemplateVariables): string {
          <p style="font-size:13px;color:#6B7280;">Ce lien expire dans 7 jours.</p>`
         : `<p>Vous pouvez suivre vos échéances, déclarer vos paiements et retrouver vos quittances directement sur WARAH.</p>`
     }
+    ${renderWhatsappBotParagraph(variables)}
   `;
 
   return renderLayout(body, { preheader: `Nouveau bail pour ${propertyAddress}.` });

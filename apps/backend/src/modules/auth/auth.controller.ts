@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -23,6 +23,7 @@ import {
 import { SignupOwnerDto } from './dto/signup-owner.dto';
 import { SignupManagerDto } from './dto/signup-manager.dto';
 import { InviteTenantDto } from './dto/invite-tenant.dto';
+import { InviteTenantResponseDto } from './dto/invite-tenant-response.dto';
 import { SetTenantPasswordDto } from './dto/set-tenant-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
@@ -65,8 +66,10 @@ export class AuthController {
     description:
       'Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée ' +
       "immédiatement le compte locataire et envoie le lien d'activation par email — le " +
-      "locataire n'aura plus qu'à poser un mot de passe.",
+      "locataire n'aura plus qu'à poser un mot de passe. Renvoie aussi le numéro WhatsApp " +
+      'du robot WARAH (null si WhatsApp est éteint), à transmettre au locataire.',
   })
+  @ApiCreatedResponse({ type: InviteTenantResponseDto })
   async inviteTenant(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: InviteTenantDto,

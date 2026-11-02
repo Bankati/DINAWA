@@ -1,5 +1,6 @@
 import { escapeHtml, renderButton, renderLayout } from './layout';
 import { TemplateVariables } from './types';
+import { renderWhatsappBotParagraph } from './whatsapp-bot-contact';
 
 export function subject(variables: TemplateVariables): string {
   const inviterName = String(variables['inviterName'] ?? 'Votre propriétaire');
@@ -17,6 +18,7 @@ export function render(variables: TemplateVariables): string {
     <p>Sur WARAH, vous pourrez suivre votre loyer, déclarer vos paiements et recevoir vos quittances automatiquement.</p>
     ${renderButton('Créer mon compte', invitationUrl)}
     <p style="font-size:13px;color:#6B7280;">Ce lien d'invitation expire dans 7 jours.</p>
+    ${renderWhatsappBotParagraph(variables)}
   `;
 
   return renderLayout(body, { preheader: `${inviterName} vous invite sur WARAH.` });
