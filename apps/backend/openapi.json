@@ -383,7 +383,7 @@
     },
     "/auth/invite/tenant": {
       "post": {
-        "description": "Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe.",
+        "description": "Réservé au propriétaire du bien ou au gestionnaire mandaté (canActOnProperty). Crée immédiatement le compte locataire et envoie le lien d'activation par email — le locataire n'aura plus qu'à poser un mot de passe. Renvoie aussi le numéro WhatsApp du robot WARAH (null si WhatsApp est éteint), à transmettre au locataire.",
         "operationId": "AuthController_inviteTenant",
         "parameters": [],
         "requestBody": {
@@ -398,7 +398,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteTenantResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1260,6 +1267,520 @@
         ],
         "summary": "Relance un reversement en échec (super admin)",
         "tags": ["Admin"]
+      }
+    },
+    "/pay-links/{token}": {
+      "get": {
+        "operationId": "PayLinksController_getView",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Informations minimales du loyer à payer (page publique /payer)",
+        "tags": ["pay-links"]
+      }
+    },
+    "/pay-links/{token}/initiate": {
+      "post": {
+        "operationId": "PayLinksController_initiate",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiatePayLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Lance (ou reprend) le paiement PayDunya du loyer — renvoie checkoutUrl",
+        "tags": ["pay-links"]
+      }
+    },
+    "/tenants/{tenantUserId}/whatsapp": {
+      "get": {
+        "operationId": "TenantWhatsappController_get",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "État WhatsApp du locataire (accord, numéro vérifié, code créé)",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/tenants/{tenantUserId}/whatsapp-consent": {
+      "patch": {
+        "description": "Le canal passe « en attente » : seul le locataire l’active (réponse « OUI », espace locataire).",
+        "operationId": "TenantWhatsappController_request",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgencyConsentRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Déclare l’accord recueilli par l’agence (attestation)",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/tenants/{tenantUserId}/whatsapp-consent/refusal": {
+      "post": {
+        "operationId": "TenantWhatsappController_refusal",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgencyConsentRefusalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Note un refus ou un retrait exprimé par le locataire (seul lui pourra réactiver)",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/tenants/{tenantUserId}/whatsapp-phone": {
+      "patch": {
+        "operationId": "TenantWhatsappController_changePhone",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsappPhoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change le numéro WhatsApp (remet accord, vérification et code à zéro)",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/tenants/{tenantUserId}/whatsapp-pin/reset": {
+      "post": {
+        "operationId": "TenantWhatsappController_resetPin",
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Réinitialise le code locataire sans le voir",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/me/whatsapp": {
+      "get": {
+        "operationId": "MyWhatsappController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mon état WhatsApp",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/me/whatsapp-consent": {
+      "patch": {
+        "operationId": "MyWhatsappController_setConsent",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Active ou arrête les messages WhatsApp de service",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/me/whatsapp-phone": {
+      "patch": {
+        "operationId": "MyWhatsappController_changePhone",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsappPhoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change mon numéro WhatsApp",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/me/whatsapp-pin": {
+      "post": {
+        "operationId": "MyWhatsappController_generatePin",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Génère mon code WhatsApp (affiché une seule fois)",
+        "tags": ["WhatsApp"]
+      }
+    },
+    "/whatsapp/conversations": {
+      "get": {
+        "operationId": "WhatsappInboxController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Échanges en cours ou terminés",
+            "schema": {
+              "enum": ["open", "closed"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Conversations des biens visibles, les plus récentes d’abord",
+        "tags": ["WhatsApp — Messages"]
+      }
+    },
+    "/whatsapp/conversations/unread-count": {
+      "get": {
+        "operationId": "WhatsappInboxController_unreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Nombre de conversations avec des messages non lus (responsable du bien)",
+        "tags": ["WhatsApp — Messages"]
+      }
+    },
+    "/whatsapp/conversations/{id}/messages": {
+      "get": {
+        "operationId": "WhatsappInboxController_messages",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "Identifiant du plus ancien message déjà affiché (page précédente)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Messages d’une conversation (ne marque rien comme lu)",
+        "tags": ["WhatsApp — Messages"]
+      }
+    },
+    "/whatsapp/conversations/{id}/read": {
+      "post": {
+        "operationId": "WhatsappInboxController_markRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marque la conversation comme lue (responsable du bien seulement)",
+        "tags": ["WhatsApp — Messages"]
+      }
+    },
+    "/whatsapp/conversations/{id}/reply": {
+      "post": {
+        "description": "409 si la fenêtre de 24 h est fermée ou si le locataire ne reçoit plus de messages.",
+        "operationId": "WhatsappInboxController_reply",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyToConversationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Répond au locataire sur WhatsApp",
+        "tags": ["WhatsApp — Messages"]
+      }
+    },
+    "/whatsapp/conversations/{id}/close": {
+      "post": {
+        "operationId": "WhatsappInboxController_close",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Termine l’échange : le robot reprend la main",
+        "tags": ["WhatsApp — Messages"]
       }
     },
     "/properties": {
@@ -3520,6 +4041,31 @@
           "securityDeposit"
         ]
       },
+      "InviteTenantResponseDto": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "lease": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "invitationUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Lien d'activation du compte — null quand le locataire existait déjà (nouveau bail, pas de nouvelle invitation)."
+          },
+          "whatsappBotNumber": {
+            "type": "string",
+            "nullable": true,
+            "example": "22899327312",
+            "description": "Numéro WhatsApp du robot WARAH, international sans « + » — null si WhatsApp est éteint ou le numéro non configuré."
+          }
+        },
+        "required": ["user", "lease", "invitationUrl", "whatsappBotNumber"]
+      },
       "SetTenantPasswordDto": {
         "type": "object",
         "properties": {
@@ -3680,6 +4226,83 @@
           }
         },
         "required": ["tier"]
+      },
+      "InitiatePayLinkDto": {
+        "type": "object",
+        "properties": {
+          "paymentMethod": {
+            "type": "string",
+            "enum": ["TMONEY", "FLOOZ"],
+            "description": "Préférence indicative — ne restreint pas le choix réel sur la page PayDunya"
+          }
+        },
+        "required": ["paymentMethod"]
+      },
+      "AgencyConsentRequestDto": {
+        "type": "object",
+        "properties": {
+          "whatsappPhone": {
+            "type": "string",
+            "example": "90330557",
+            "description": "Numéro WhatsApp du locataire"
+          },
+          "collectionMethod": {
+            "type": "string",
+            "enum": ["IN_PERSON", "PHONE", "WRITTEN"],
+            "description": "Façon dont l’accord a été recueilli"
+          },
+          "attestation": {
+            "type": "boolean",
+            "description": "Case cochée par l’agent : « J’atteste que le locataire a accepté de recevoir les messages de service WARAH sur WhatsApp »"
+          }
+        },
+        "required": ["whatsappPhone", "collectionMethod", "attestation"]
+      },
+      "AgencyConsentRefusalDto": {
+        "type": "object",
+        "properties": {
+          "collectionMethod": {
+            "type": "string",
+            "enum": ["IN_PERSON", "PHONE", "WRITTEN"]
+          }
+        },
+        "required": ["collectionMethod"]
+      },
+      "WhatsappPhoneDto": {
+        "type": "object",
+        "properties": {
+          "whatsappPhone": {
+            "type": "string",
+            "example": "90330557"
+          }
+        },
+        "required": ["whatsappPhone"]
+      },
+      "TenantConsentDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["ACCEPT", "WITHDRAW"]
+          },
+          "whatsappPhone": {
+            "type": "string",
+            "example": "90330557",
+            "description": "Numéro WhatsApp, si différent de celui enregistré"
+          }
+        },
+        "required": ["action"]
+      },
+      "ReplyToConversationDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Texte envoyé tel quel au locataire"
+          }
+        },
+        "required": ["text"]
       },
       "CreatePropertyDto": {
         "type": "object",
@@ -3906,6 +4529,14 @@
           "subscriptionBillingEnabled": {
             "type": "boolean",
             "description": "Active la facturation mensuelle automatique des abonnements"
+          },
+          "whatsappEnabledTiers": {
+            "type": "array",
+            "description": "Forfaits dont les locataires ont accès à WhatsApp (forfait du responsable du bien : gestionnaire du mandat actif, sinon propriétaire)",
+            "items": {
+              "type": "string",
+              "enum": ["STARTER", "PRO", "PREMIUM", "AGENCE"]
+            }
           }
         }
       },
