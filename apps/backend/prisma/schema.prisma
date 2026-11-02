@@ -950,11 +950,11 @@ model PlatformSettings {
   // puisse jamais afficher une promesse que le quota réel ne tient pas.
   freePromotionEndsAt         DateTime?          @db.Timestamptz(6)
   // Forfaits dont les locataires ont accès à WhatsApp (unité 42) — réglable
-  // par le super-admin sans changement de code ; les trois par défaut tant
-  // que la direction n'a pas défini les formules (décision 2026-10-07). Le
+  // par le super-admin sans changement de code ; tous les forfaits par
+  // défaut, Agence compris (décision de la direction, 2026-11-02). Le
   // forfait regardé est celui du responsable du bien
   // (resolveResponsibleUserId), jamais celui du locataire.
-  whatsappEnabledTiers        SubscriptionTier[] @default([STARTER, PRO, PREMIUM])
+  whatsappEnabledTiers        SubscriptionTier[] @default([STARTER, PRO, PREMIUM, AGENCE])
   updatedAt                   DateTime           @updatedAt @db.Timestamptz(6)
 
   @@map("platform_settings")
