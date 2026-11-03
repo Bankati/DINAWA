@@ -101,9 +101,28 @@ export const BOT_TEXTS = {
     `Code incorrect. Il vous reste ${remaining} essai${remaining > 1 ? 's' : ''} avant un blocage d’une heure.`,
   locked: (minutes: number): string =>
     `Trop d’essais : le code est bloqué. Réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.`,
-  noPin:
-    'Pour voir vos quittances et votre relevé, créez d’abord votre code dans votre espace WARAH ' +
-    '(Profil → Messages WhatsApp). « Payer mon loyer » fonctionne sans code.',
+  askPinFlowBody: 'Pour votre sécurité, entrez votre code WARAH à 6 chiffres.',
+  // Création du code depuis WhatsApp (unité 50) : formulaire, ou simple
+  // message si le formulaire n'est pas disponible.
+  createPinFlowBody:
+    'Pour protéger vos quittances, créez votre code secret WARAH à 6 chiffres. ' +
+    'Touchez « Créer mon code ». Ne le donnez à personne.',
+  createPinAsk:
+    'Pour protéger vos quittances, choisissez un code secret à 6 chiffres et envoyez-le ici. ' +
+    'Évitez 123456, 000000 ou votre date de naissance.',
+  confirmPinAsk: 'Renvoyez le même code pour confirmer.',
+  askNewPinAgain: 'J’attends votre nouveau code à 6 chiffres. Écrivez « menu » pour revenir au menu.',
+  pinMismatch: 'Les deux codes sont différents.',
+  pinTooSimple: 'Ce code est trop facile à deviner.',
+  pinCreated: 'Code créé ✅ Gardez-le pour vous.',
+  pinCreatedDeleteTip:
+    'Code créé ✅ Pour votre sécurité, supprimez vos messages contenant le code ' +
+    '(appui long → Supprimer pour moi).',
+  pinAlreadySet:
+    'Vous avez déjà un code. Code oublié ? Demandez à votre agence de le réinitialiser, ' +
+    'puis recréez-le ici.',
+  pinFlowExpired: 'Ce formulaire a expiré, en voici un nouveau.',
+  pinFlowLate: 'Code bien reçu, mais la demande a expiré. Choisissez à nouveau dans le menu.',
   pinUnavailable: 'Le code ne peut pas être vérifié pour le moment. Réessayez un peu plus tard.',
   noReceipt:
     'Vous n’avez pas encore de quittance : elle sera disponible après votre premier paiement confirmé.',

@@ -21,6 +21,7 @@ import * as payoutFailedAdmin from './payout-failed-admin.template';
 import * as subscriptionInvoiceDue from './subscription-invoice-due.template';
 import * as tenantOverdue from './tenant-overdue.template';
 import * as whatsappMessage from './whatsapp-message.template';
+import * as whatsappPinCreated from './whatsapp-pin-created.template';
 import { TemplateModule, TemplateVariables } from './types';
 
 export type EmailTemplate =
@@ -46,7 +47,8 @@ export type EmailTemplate =
   | 'payout-failed-admin'
   | 'subscription-invoice-due'
   | 'tenant-overdue'
-  | 'whatsapp-message';
+  | 'whatsapp-message'
+  | 'whatsapp-pin-created';
 
 const registry: Record<EmailTemplate, TemplateModule> = {
   'signup-confirmation': signupConfirmation,
@@ -72,6 +74,7 @@ const registry: Record<EmailTemplate, TemplateModule> = {
   'subscription-invoice-due': subscriptionInvoiceDue,
   'tenant-overdue': tenantOverdue,
   'whatsapp-message': whatsappMessage,
+  'whatsapp-pin-created': whatsappPinCreated,
 };
 
 export function subjectFor(template: EmailTemplate, variables: TemplateVariables): string {

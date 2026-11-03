@@ -485,6 +485,7 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
       | Alerte WhatsApp au gestionnaire (option 1) | ⏳ confirmation du patron, puis modèle Meta à faire valider |
       | `/review` | ✅ 2026-10-19 — 5 points, tous corrigés : 🟠 un ancien bailleur pouvait écrire à son ex-locataire (fenêtre ouverte par un message pour son nouveau logement) → réponse seulement avec un bail actif sur le logement, fil en lecture seule sinon ; 🟢 aucune limite aux messages transmis → 60 par heure, un seul avertissement ; 🟢 « Terminer » sur un échange expiré écrasait la raison « 24 h » → gardée ; 🟢 panne entre l'accusé et l'ouverture → échange ouvert avant l'accusé, refermé si l'accusé ne part pas ; 🟢 filtres annoncés comme des onglets incomplets → boutons `aria-pressed`. Modules touchés 407/407, `tsc`/`eslint` des deux côtés, `next build` |
 - [ ] 39 Signalements locataire (réactivée) — prévu mar. 20 ; photo reportable en semaine 3 si retard constaté le 19
+- [ ] 50 Code locataire créé dans WhatsApp — **construite le 2026-11-03** (demande du client, plan de Viviane, feu vert du patron), branche `feat/whatsapp-50-code-dans-whatsapp` (depuis `dev`). Voir `build-plan.md` unité 50. Reste : publier le formulaire chez Meta (`contexte/whatsapp-flow-code.json`), essai en brouillon, relecture sécurité (Naffi), essai sur de vieux téléphones (Esther).
 - [ ] 49 Recette et documentation WhatsApp — jeu. 22 et ven. 23
 
 ### Performance — signalement client (2026-08-13, hors numérotation build-plan)

@@ -232,10 +232,14 @@ enum WhatsappConsentMethod {
 // robot vient de demander le code pour une action protégée (pendingAction).
 // HUMAN (unité 48) : échange avec le responsable du bien en cours, le robot
 // se tait et relaie les messages (WhatsappConversation.humanThreadId).
+// AWAITING_NEW_PIN / AWAITING_NEW_PIN_CONFIRM (unité 50) : le locataire sans
+// code est en train d'en créer un depuis WhatsApp (formulaire ou message).
 enum WhatsappBotState {
   MENU
   AWAITING_PIN
   HUMAN
+  AWAITING_NEW_PIN
+  AWAITING_NEW_PIN_CONFIRM
 }
 
 // Pourquoi un échange humain s'est terminé (unité 48). TIMEOUT : 24 h sans
@@ -1169,6 +1173,10 @@ model WhatsappConversation {
   // Fil de l'échange humain en cours (état HUMAN, unité 48).
   humanThreadId    String?
   humanThread      WhatsappThread?    @relation(fields: [humanThreadId], references: [id], onDelete: SetNull)
+  // Premier code tapé en message (unité 50, secours sans formulaire), en
+  // attente de confirmation : haché comme le code définitif, effacé à la
+  // réponse suivante.
+  pendingPinHash   String?
   createdAt        DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime           @updatedAt @db.Timestamptz(6)
 

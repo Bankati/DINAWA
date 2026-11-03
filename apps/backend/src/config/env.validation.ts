@@ -261,6 +261,23 @@ class EnvironmentVariables {
   @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)
   @Matches(/^\d{8,15}$/, { message: 'WHATSAPP_BUSINESS_NUMBER doit être un numéro international sans + (ex. 22890000000)' })
   WHATSAPP_BUSINESS_NUMBER?: string;
+
+  // Formulaire WhatsApp « Créer / entrer mon code » (unité 50) : identifiant
+  // du Flow publié dans le WhatsApp Manager. Absent : le robot demande le
+  // code par simple message, le serveur démarre normalement.
+  @IsOptional()
+  @Matches(/^\d+$/, { message: "WHATSAPP_PIN_FLOW_ID doit être l'identifiant numérique du Flow Meta" })
+  WHATSAPP_PIN_FLOW_ID?: string;
+
+  // true tant que le Flow n'est pas publié (mode « draft » de Meta, pour les
+  // essais). Même lecture de la valeur brute que WHATSAPP_ENABLED.
+  @Transform(({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+    const raw = obj[key];
+    return raw === true || raw === 'true';
+  })
+  @IsBoolean()
+  @IsOptional()
+  WHATSAPP_PIN_FLOW_DRAFT?: boolean = false;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {

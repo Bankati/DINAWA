@@ -1,5 +1,6 @@
 import { WhatsappMessageType } from '@prisma/client';
 import { MetaDeliveryStatus } from './status-transition';
+import { PIN_FLOW_ACTIONS, PinFlowKind } from '../whatsapp-bot/pin-flow';
 
 // Limites de WhatsApp lui-même : un message normal n'est jamais tronqué, la
 // coupe ne protège que contre un contenu anormal (unité 44, décision 1).
@@ -18,6 +19,16 @@ export type InboundMessage = {
   // Uniquement des champs choisis un par un selon le type (jamais l'objet
   // Meta tel quel) — voir buildPayload.
   payload: Record<string, string>;
+  // Réponse du formulaire WhatsApp du code (unité 50). JAMAIS persisté ni
+  // journalisé : le webhook n'en garde que l'empreinte (pinPayload).
+  secret?: PinFlowSecret;
+};
+
+export type PinFlowSecret = {
+  kind: PinFlowKind;
+  code: string | null;
+  confirmation: string | null;
+  flowToken: string | null;
 };
 
 export type InboundStatus = {
@@ -98,7 +109,7 @@ function parseMessage(raw: unknown): InboundMessage | null {
 function buildContent(
   metaType: string,
   raw: Record<string, unknown>,
-): Pick<InboundMessage, 'type' | 'text' | 'payload'> {
+): Pick<InboundMessage, 'type' | 'text' | 'payload' | 'secret'> {
   if (metaType === 'text') {
     const text = isRecord(raw['text']) ? asString(raw['text']['body']) : null;
     return { type: 'TEXT', text: truncate(text, TEXT_MAX_LENGTH), payload: {} };
@@ -112,6 +123,7 @@ function buildContent(
         ? interactive['list_reply']
         : null;
     if (reply) return interactivePayload(asString(reply['id']), asString(reply['title']));
+    if (interactive['type'] === 'nfm_reply') return flowReply(interactive['nfm_reply']);
   }
 
   // Bouton de réponse rapide d'un modèle (ex. « Payer mon loyer »).
@@ -146,6 +158,36 @@ function interactivePayload(
   if (replyId) payload['replyId'] = replyId.slice(0, LABEL_MAX_LENGTH);
   if (title) payload['title'] = title.slice(0, LABEL_MAX_LENGTH);
   return { type: 'INTERACTIVE', text: null, payload };
+}
+
+// Réponse d'un formulaire WhatsApp (Flow). Seul le formulaire du code est
+// reconnu, et seules ses clés sont lues : rien d'autre de response_json
+// n'est recopié. Illisible ou inconnu : seul le type est gardé.
+function flowReply(raw: unknown): Pick<InboundMessage, 'type' | 'text' | 'payload' | 'secret'> {
+  const unknownFlow = { type: 'OTHER' as const, text: null, payload: { metaType: 'nfm_reply' } };
+  const json = isRecord(raw) ? asString(raw['response_json']) : null;
+  if (!json) return unknownFlow;
+  let response: unknown;
+  try {
+    response = JSON.parse(json);
+  } catch {
+    return unknownFlow;
+  }
+  if (!isRecord(response)) return unknownFlow;
+  const action = asString(response['action']);
+  const kind = action ? PIN_FLOW_ACTIONS.get(action) : undefined;
+  if (!kind) return unknownFlow;
+  return {
+    type: 'INTERACTIVE',
+    text: null,
+    payload: {},
+    secret: {
+      kind,
+      code: asString(response['code']),
+      confirmation: kind === 'CREATE' ? asString(response['confirmation']) : null,
+      flowToken: asString(response['flow_token']),
+    },
+  };
 }
 
 function parseStatus(raw: unknown): InboundStatus | null {

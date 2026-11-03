@@ -18,6 +18,7 @@ describe('WhatsappService', () => {
     uploadMedia: jest.Mock;
     sendDocumentMessage: jest.Mock;
     sendInteractiveList?: jest.Mock;
+    sendFlow?: jest.Mock;
   };
   let service: WhatsappService;
 
@@ -333,6 +334,28 @@ describe('WhatsappService', () => {
       expect(access.canUseWhatsapp).toHaveBeenCalledWith('tenant-1');
       expect(createdData()).toMatchObject({ messageType: 'INTERACTIVE', source: 'bot-menu', payload: { body: 'Bonjour', rows: ['PAY'] } });
       expect(client.sendInteractiveList).toHaveBeenCalledTimes(1);
+    });
+
+    const flow = { id: '123456789', token: 'jeton-secret', cta: 'Créer mon code', screen: 'CREER_CODE', draft: false };
+
+    it('formulaire du code (unité 50) : accès revérifié, ligne INTERACTIVE SANS le jeton, un seul appel Meta', async () => {
+      client.sendFlow = jest.fn().mockResolvedValue('wamid.flow');
+      await expect(
+        service.replyFlow({ userId: 'tenant-1', source: 'bot-pin-flow', body: 'Créez votre code', flow, inboundReceivedAt: justNow() }),
+      ).resolves.toMatchObject({ outcome: 'SENT' });
+      expect(access.canUseWhatsapp).toHaveBeenCalledWith('tenant-1');
+      expect(createdData()).toMatchObject({ messageType: 'INTERACTIVE', source: 'bot-pin-flow', payload: { body: 'Créez votre code', flow: 'CREER_CODE' } });
+      expect(JSON.stringify(createdData())).not.toContain('jeton-secret');
+      expect(client.sendFlow).toHaveBeenCalledTimes(1);
+      expect(client.sendFlow).toHaveBeenCalledWith(expect.objectContaining({ flowToken: 'jeton-secret', screen: 'CREER_CODE' }));
+    });
+
+    it('formulaire hors fenêtre de 24 h : refus, aucun appel', async () => {
+      client.sendFlow = jest.fn();
+      await expect(
+        service.replyFlow({ userId: 'tenant-1', source: 'bot-pin-flow', body: 'B', flow, inboundReceivedAt: yesterday() }),
+      ).resolves.toEqual({ outcome: 'REFUSED', reason: 'REPLY_WINDOW_CLOSED' });
+      expect(client.sendFlow).not.toHaveBeenCalled();
     });
 
     it('menu hors fenêtre de 24 h : refus, aucun appel', async () => {

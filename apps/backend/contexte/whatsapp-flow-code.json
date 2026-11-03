@@ -1,0 +1,91 @@
+{
+  "version": "7.3",
+  "screens": [
+    {
+      "id": "CREER_CODE",
+      "title": "Mon code WARAH",
+      "terminal": true,
+      "sensitive": ["code", "confirmation"],
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "Choisissez un code secret à 6 chiffres. Il protège vos quittances et votre relevé. Ne le donnez à personne."
+          },
+          {
+            "type": "TextInput",
+            "name": "code",
+            "label": "Code à 6 chiffres",
+            "input-type": "passcode",
+            "required": true,
+            "min-chars": 6,
+            "max-chars": 6,
+            "pattern": "^[0-9]{6}$",
+            "helper-text": "6 chiffres. Évitez 123456, 000000, 121212."
+          },
+          {
+            "type": "TextInput",
+            "name": "confirmation",
+            "label": "Retapez le code",
+            "input-type": "passcode",
+            "required": true,
+            "min-chars": 6,
+            "max-chars": 6,
+            "pattern": "^[0-9]{6}$",
+            "helper-text": "Le même code, pour confirmer."
+          },
+          {
+            "type": "Footer",
+            "label": "Créer mon code",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "action": "PIN_CREATE",
+                "code": "${form.code}",
+                "confirmation": "${form.confirmation}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "ENTRER_CODE",
+      "title": "Mon code WARAH",
+      "terminal": true,
+      "sensitive": ["code"],
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "Entrez votre code secret WARAH à 6 chiffres."
+          },
+          {
+            "type": "TextInput",
+            "name": "code",
+            "label": "Votre code",
+            "input-type": "passcode",
+            "required": true,
+            "min-chars": 6,
+            "max-chars": 6,
+            "pattern": "^[0-9]{6}$",
+            "helper-text": "Les 6 chiffres que vous avez choisis."
+          },
+          {
+            "type": "Footer",
+            "label": "Valider",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "action": "PIN_ENTER",
+                "code": "${form.code}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

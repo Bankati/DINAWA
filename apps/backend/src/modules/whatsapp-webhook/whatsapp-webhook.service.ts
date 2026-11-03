@@ -14,7 +14,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { verifyMetaSignature } from '../../common/utils/meta-signature';
 import { fromWhatsappNumber, storedPhoneVariants } from '../../common/utils/phone';
 import { classifyMetaError } from '../whatsapp-channel/meta-error';
-import { InboundMessage, InboundStatus, parseMetaNotification } from './meta-webhook-payload';
+import {
+  InboundMessage,
+  InboundStatus,
+  PinFlowSecret,
+  parseMetaNotification,
+} from './meta-webhook-payload';
 import { DeliveryState, StatusEvent, applyStatusEvent } from './status-transition';
 import {
   CONSENT_TRANSACTION_OPTIONS,
@@ -22,7 +27,8 @@ import {
 } from '../../common/constants';
 import { applyConsentCommand } from '../whatsapp-consent/consent-writer';
 import { WhatsappConsentService } from '../whatsapp-consent/whatsapp-consent.service';
-import { TokenService } from '../auth/token.service';
+import { TokenService, isTrivialPin } from '../auth/token.service';
+import { isPinFlowTokenValid } from '../whatsapp-bot/pin-flow';
 import { ConsentKeyword, parseConsentKeyword } from './consent-keyword';
 import {
   InboundAction,
@@ -40,6 +46,7 @@ type KnownSender = { id: string; role: UserRole };
 // Un message qui n'est QUE 6 chiffres est presque toujours le code
 // locataire tapé pour le robot (unité 47) : jamais gardé en clair.
 const PIN_MESSAGE = /^\s*(\d{6})\s*$/;
+const PIN_CODE = /^\d{6}$/;
 
 // statusChangedFor : locataire dont l'état affiché à l'agence a changé
 // (numéro vérifié ou consentement), pour vider le cache de ses listes.
@@ -266,10 +273,10 @@ export class WhatsappWebhookService {
     const sender = local ? await this.findSender(local) : null;
     const keyword =
       sender !== null && message.type === 'TEXT' ? parseConsentKeyword(message.text) : null;
-    // Code locataire tapé (unité 47) : ni le texte ni le code en clair ne
-    // sont gardés, seulement son empreinte HMAC, effacée par le robot dès la
-    // vérification.
-    const pinPayload = sender && message.type === 'TEXT' ? this.pinPayload(message.text) : null;
+    // Code locataire tapé (unité 47) ou saisi dans le formulaire WhatsApp
+    // (unité 50) : ni le texte ni le code en clair ne sont gardés, seulement
+    // son empreinte HMAC, effacée par le robot dès le traitement.
+    const pinPayload = sender ? this.pinPayload(message, sender.id) : null;
 
     const data = {
       userId: sender?.id ?? null,
@@ -360,15 +367,41 @@ export class WhatsappWebhookService {
     return count === 1;
   }
 
-  private pinPayload(text: string | null): Prisma.InputJsonObject | null {
-    const match = text ? PIN_MESSAGE.exec(text) : null;
+  // La clé pinDigest est TOUJOURS présente (même null) : c'est elle qui
+  // déclenche l'effacement par le robot après traitement. Les contrôles qui
+  // ont besoin du code en clair (trop simple, confirmation différente, jeton
+  // du formulaire) sont faits ICI et ne voyagent que sous forme de booléens.
+  private pinPayload(message: InboundMessage, senderId: string): Prisma.InputJsonObject | null {
+    if (message.secret) return this.flowPinPayload(message.secret, senderId);
+    if (message.type !== 'TEXT') return null;
+    const match = message.text ? PIN_MESSAGE.exec(message.text) : null;
     if (!match) return null;
+    return { pinDigest: this.digestOrNull(match[1]), pinTrivial: isTrivialPin(match[1]) };
+  }
+
+  private flowPinPayload(secret: PinFlowSecret, senderId: string): Prisma.InputJsonObject {
+    const code = secret.code && PIN_CODE.test(secret.code) ? secret.code : null;
+    return {
+      pinDigest: code ? this.digestOrNull(code) : null,
+      pinFlow: secret.kind,
+      pinFlowValid: isPinFlowTokenValid(
+        secret.flowToken,
+        senderId,
+        secret.kind,
+        this.config.get<string>('PAY_LINK_SECRET'),
+      ),
+      pinTrivial: code ? isTrivialPin(code) : false,
+      ...(secret.kind === 'CREATE' ? { pinMismatch: secret.confirmation !== secret.code } : {}),
+    };
+  }
+
+  private digestOrNull(code: string): string | null {
     try {
-      return { pinDigest: this.tokens.pinDigest(match[1]) };
+      return this.tokens.pinDigest(code);
     } catch {
       // Clé du code absente : le code ne pourra pas être vérifié, mais il
       // n'est pas gardé non plus.
-      return { pinDigest: null };
+      return null;
     }
   }
 

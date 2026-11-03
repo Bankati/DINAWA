@@ -115,6 +115,40 @@ export class BotIdentityService {
     return { result: 'WRONG', remaining: PIN_MAX_ATTEMPTS - attempt };
   }
 
+  // Code choisi dans WhatsApp (unité 50) : haché comme un code créé sur le
+  // site (hashPinDigest(pinDigest(c)) équivaut à hashPin(c)).
+  hashNewPin(digest: string): Promise<string> {
+    return this.tokens.hashPinDigest(digest);
+  }
+
+  // Confirmation du code tapé en message : même code que le premier ?
+  matchesPendingPin(digest: string, pendingHash: string): Promise<boolean> {
+    return this.tokens.verifyPinDigest(digest, pendingHash);
+  }
+
+  // Création SEULEMENT s'il n'existe aucun code (écriture conditionnelle) :
+  // un code existant n'est jamais remplacé depuis WhatsApp — un oubli passe
+  // par la réinitialisation de l'agence. Deux créations simultanées : une
+  // seule gagne. Créer vaut vérifier, sur ce numéro.
+  async createPin(
+    userId: string,
+    hash: string,
+    verifiedPhone: string,
+    now: Date,
+  ): Promise<'CREATED' | 'ALREADY_SET'> {
+    const { count } = await this.prisma.tenantProfile.updateMany({
+      where: { userId, whatsappPinHash: null },
+      data: {
+        whatsappPinHash: hash,
+        pinFailedAttempts: 0,
+        pinLockedUntil: null,
+        pinVerifiedAt: now,
+        pinVerifiedPhone: verifiedPhone,
+      },
+    });
+    return count === 1 ? 'CREATED' : 'ALREADY_SET';
+  }
+
   private async whyRefused(userId: string, now: Date): Promise<PinCheck> {
     const profile = await this.prisma.tenantProfile.findUnique({
       where: { userId },

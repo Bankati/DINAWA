@@ -109,6 +109,43 @@ export class WhatsappCloudClient {
     });
   }
 
+  // Formulaire WhatsApp (Flow) sans serveur dédié (unité 50) : le bouton
+  // ouvre directement l'écran demandé, la réponse revient par le webhook
+  // (nfm_reply). « draft » : Flow pas encore publié, pour les essais.
+  sendFlow(params: {
+    to: string;
+    flowId: string;
+    flowToken: string;
+    cta: string;
+    screen: string;
+    body: string;
+    draft: boolean;
+    callbackData: string;
+  }): Promise<string> {
+    return this.postMessage({
+      to: params.to,
+      type: 'interactive',
+      interactive: {
+        type: 'flow',
+        header: { type: 'text', text: 'WARAH' },
+        body: { text: params.body },
+        action: {
+          name: 'flow',
+          parameters: {
+            flow_message_version: '3',
+            flow_id: params.flowId,
+            flow_token: params.flowToken,
+            flow_cta: params.cta,
+            flow_action: 'navigate',
+            flow_action_payload: { screen: params.screen },
+            mode: params.draft ? 'draft' : 'published',
+          },
+        },
+      },
+      biz_opaque_callback_data: params.callbackData,
+    });
+  }
+
   // Téléverse un fichier chez Meta et renvoie son identifiant média (valable
   // 30 jours côté Meta). N'envoie RIEN au destinataire à lui seul.
   async uploadMedia(params: { content: Buffer; mimeType: string; filename: string }): Promise<string> {

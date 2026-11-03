@@ -1,12 +1,14 @@
 import { WhatsappBotService, BotInbound } from './whatsapp-bot.service';
 import { BOT_TEXTS, MENU_ROWS } from './bot-messages';
 import { BOT_CONVERSATION_TIMEOUT_MS } from '../../common/constants';
+import { isPinFlowTokenValid } from './pin-flow';
 
 const RECEIVED = new Date(Date.now() - 5_000);
 
 type FakeUser = {
   role: string;
   firstName: string;
+  lastName: string;
   anonymizedAt: Date | null;
   whatsappConsent: string;
   whatsappVerifiedPhone: string | null;
@@ -39,16 +41,26 @@ describe('WhatsappBotService (unité 47)', () => {
     whatsappThread: { findUnique: jest.Mock };
     paymentScheduleEntry: { findFirst: jest.Mock; findMany: jest.Mock };
     payment: { findFirst: jest.Mock };
+    property: { findUnique: jest.Mock };
   };
   let whatsapp: {
     reply: jest.Mock;
     replyList: jest.Mock;
     replyDocument: jest.Mock;
+    replyFlow: jest.Mock;
     sendInvitation: jest.Mock;
   };
   let payLinks: { payLinkFor: jest.Mock };
   let receiptPdf: { generate: jest.Mock };
-  let identity: { isVerified: jest.Mock; check: jest.Mock };
+  let identity: {
+    isVerified: jest.Mock;
+    check: jest.Mock;
+    hashNewPin: jest.Mock;
+    matchesPendingPin: jest.Mock;
+    createPin: jest.Mock;
+  };
+  let configValues: Record<string, unknown>;
+  let notify: { notifyUser: jest.Mock };
   let threads: { openExchange: jest.Mock; closeExchange: jest.Mock; relay: jest.Mock };
   let service: WhatsappBotService;
   let user: FakeUser;
@@ -59,6 +71,7 @@ describe('WhatsappBotService (unité 47)', () => {
     user = {
       role: 'TENANT',
       firstName: 'Ama',
+      lastName: 'Mensah',
       anonymizedAt: null,
       whatsappConsent: 'ACCEPTED',
       whatsappVerifiedPhone: '98646779',
@@ -92,11 +105,21 @@ describe('WhatsappBotService (unité 47)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       payment: { findFirst: jest.fn().mockResolvedValue(null) },
+      property: {
+        findUnique: jest.fn().mockResolvedValue({
+          ownerId: 'owner-1',
+          address: null,
+          neighborhood: 'Bè',
+          city: 'Lomé',
+          mandates: [{ managerId: 'manager-1' }],
+        }),
+      },
     };
     whatsapp = {
       reply: jest.fn().mockResolvedValue(sent),
       replyList: jest.fn().mockResolvedValue(sent),
       replyDocument: jest.fn().mockResolvedValue(sent),
+      replyFlow: jest.fn().mockResolvedValue(sent),
       sendInvitation: jest.fn().mockResolvedValue(sent),
     };
     payLinks = {
@@ -108,7 +131,16 @@ describe('WhatsappBotService (unité 47)', () => {
     identity = {
       isVerified: jest.fn().mockReturnValue(false),
       check: jest.fn().mockResolvedValue({ result: 'OK' }),
+      hashNewPin: jest.fn().mockResolvedValue('$2b$nouveau'),
+      matchesPendingPin: jest.fn().mockResolvedValue(true),
+      createPin: jest.fn().mockResolvedValue('CREATED'),
     };
+    configValues = { PAY_LINK_SECRET: 'secret-de-test-pour-les-jetons' };
+    const config = {
+      get: jest.fn((key: string) => configValues[key]),
+      getOrThrow: jest.fn((key: string) => configValues[key]),
+    };
+    notify = { notifyUser: jest.fn().mockResolvedValue(undefined) };
     threads = {
       openExchange: jest.fn().mockResolvedValue('thread-1'),
       closeExchange: jest.fn().mockResolvedValue(true),
@@ -121,6 +153,8 @@ describe('WhatsappBotService (unité 47)', () => {
       receiptPdf as never,
       identity as never,
       threads as never,
+      config as never,
+      notify as never,
     );
   });
 
@@ -251,10 +285,12 @@ describe('WhatsappBotService (unité 47)', () => {
   });
 
   describe('actions protégées par le code (décision 2)', () => {
-    it('pas de code créé : explique comment le créer', async () => {
+    it('pas de code et pas de formulaire configuré : le demande en simple message (unité 50)', async () => {
       user.tenantProfile.whatsappPinHash = null;
       await service.handle(inbound({ text: 'quittance' }));
-      expect(lastText()).toBe(BOT_TEXTS.noPin);
+      expect(lastText()).toBe(BOT_TEXTS.createPinAsk);
+      expect(whatsapp.replyFlow).not.toHaveBeenCalled();
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
       expect(receiptPdf.generate).not.toHaveBeenCalled();
     });
 
@@ -641,6 +677,301 @@ describe('WhatsappBotService (unité 47)', () => {
       await service.handle(inbound({ text: 'Ma porte ne ferme plus' }));
       expect(threads.relay).not.toHaveBeenCalled();
       expect(whatsapp.reply).not.toHaveBeenCalled();
+    });
+  });
+  describe('code créé depuis WhatsApp (unité 50)', () => {
+    const conversation = (state: string, extra: Record<string, unknown> = {}): void => {
+      prisma.whatsappConversation.upsert.mockResolvedValue({
+        state,
+        pendingAction: 'RECEIPT',
+        lastActivityAt: new Date(),
+        humanThreadId: null,
+        pendingPinHash: null,
+        ...extra,
+      });
+    };
+    const flowReply = (payload: Record<string, unknown>): BotInbound =>
+      inbound({ messageType: 'INTERACTIVE', text: null, payload: payload as never });
+    const validCreate = {
+      pinDigest: 'empreinte',
+      pinFlow: 'CREATE',
+      pinFlowValid: true,
+      pinTrivial: false,
+      pinMismatch: false,
+    };
+    const lastPayment = (): void => {
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 'pay-1',
+        scheduleEntry: {
+          periodStart: new Date('2026-10-01T00:00:00Z'),
+          periodEnd: new Date('2026-10-31T00:00:00Z'),
+        },
+      });
+    };
+    type FlowCall = {
+      source: string;
+      body: string;
+      flow: { id: string; token: string; cta: string; screen: string; draft: boolean };
+    };
+    const flowCall = (): FlowCall => (whatsapp.replyFlow.mock.calls[0] as [FlowCall])[0];
+
+    beforeEach(() => {
+      user.tenantProfile.whatsappPinHash = null;
+    });
+
+    it('formulaire configuré : le bouton « Créer mon code » ouvre l’écran CREER_CODE, avec un jeton signé', async () => {
+      configValues['WHATSAPP_PIN_FLOW_ID'] = '123456789';
+      await service.handle(inbound({ text: 'quittance' }));
+      const call = flowCall();
+      expect(call.source).toBe('bot-pin-flow');
+      expect(call.body).toBe(BOT_TEXTS.createPinFlowBody);
+      expect(call.flow).toMatchObject({
+        id: '123456789',
+        cta: 'Créer mon code',
+        screen: 'CREER_CODE',
+        draft: false,
+      });
+      expect(
+        isPinFlowTokenValid(call.flow.token, 'tenant-1', 'CREATE', 'secret-de-test-pour-les-jetons'),
+      ).toBe(true);
+      expect(whatsapp.reply).not.toHaveBeenCalled();
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
+    });
+
+    it('mode brouillon seulement si WHATSAPP_PIN_FLOW_DRAFT est vrai', async () => {
+      configValues['WHATSAPP_PIN_FLOW_ID'] = '123456789';
+      configValues['WHATSAPP_PIN_FLOW_DRAFT'] = true;
+      await service.handle(inbound({ text: 'quittance' }));
+      expect(flowCall().flow.draft).toBe(true);
+    });
+
+    it('formulaire refusé par Meta (FAILED) : la demande part en simple message, même étape', async () => {
+      configValues['WHATSAPP_PIN_FLOW_ID'] = '123456789';
+      whatsapp.replyFlow.mockResolvedValue({ outcome: 'FAILED', messageId: 'out-1', retryable: false });
+      await service.handle(inbound({ text: 'quittance' }));
+      expect(lastText()).toBe(BOT_TEXTS.createPinAsk);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN' });
+    });
+
+    it('résultat incertain (UNKNOWN) : aucun second envoi', async () => {
+      configValues['WHATSAPP_PIN_FLOW_ID'] = '123456789';
+      whatsapp.replyFlow.mockResolvedValue({ outcome: 'UNKNOWN', messageId: 'out-1', retryable: false });
+      await service.handle(inbound({ text: 'quittance' }));
+      expect(whatsapp.reply).not.toHaveBeenCalled();
+      expect(prisma.whatsappConversation.update).not.toHaveBeenCalled();
+    });
+
+    it('formulaire valide : code créé, agence prévenue, quittance envoyée avec « Code créé »', async () => {
+      conversation('AWAITING_NEW_PIN');
+      lastPayment();
+      await service.handle(flowReply(validCreate));
+      expect(identity.hashNewPin).toHaveBeenCalledWith('empreinte');
+      expect(identity.createPin).toHaveBeenCalledWith(
+        'tenant-1',
+        '$2b$nouveau',
+        '98646779',
+        expect.any(Date),
+      );
+      expect(notify.notifyUser).toHaveBeenCalledWith({
+        userId: 'manager-1',
+        event: 'whatsapp-pin-created',
+        variables: { tenantName: 'Ama Mensah', propertyAddress: 'Bè, Lomé' },
+      });
+      const [doc] = whatsapp.replyDocument.mock.calls[0] as [{ caption: string }];
+      expect(doc.caption.startsWith(BOT_TEXTS.pinCreated)).toBe(true);
+      // Ni le code ni son empreinte ne survivent au traitement.
+      expect(prisma.whatsappMessage.updateMany).toHaveBeenCalledWith({
+        where: { id: 'in-1' },
+        data: { payload: { pinMasked: true } },
+      });
+      expect(conversationUpdate()).toMatchObject({
+        state: 'MENU',
+        pendingAction: null,
+        pendingPinHash: null,
+      });
+    });
+
+    it('formulaire valide sans demande en attente (conversation expirée) : menu avec « Code créé »', async () => {
+      prisma.whatsappConversation.upsert.mockResolvedValue({
+        state: 'AWAITING_NEW_PIN',
+        pendingAction: 'RECEIPT',
+        lastActivityAt: new Date(Date.now() - BOT_CONVERSATION_TIMEOUT_MS - 1000),
+      });
+      await service.handle(flowReply(validCreate));
+      expect(identity.createPin).toHaveBeenCalled();
+      expect(whatsapp.replyList).toHaveBeenCalledWith(
+        expect.objectContaining({ body: `${BOT_TEXTS.pinCreated}\n\n${BOT_TEXTS.menu('Ama')}` }),
+      );
+    });
+
+    it('un code existe déjà : jamais écrasé depuis WhatsApp, on renvoie vers l’agence', async () => {
+      conversation('AWAITING_NEW_PIN');
+      identity.createPin.mockResolvedValue('ALREADY_SET');
+      await service.handle(flowReply(validCreate));
+      expect(lastText()).toBe(BOT_TEXTS.pinAlreadySet);
+      expect(notify.notifyUser).not.toHaveBeenCalled();
+      expect(receiptPdf.generate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['jeton invalide ou expiré', { pinFlowValid: false }, BOT_TEXTS.pinFlowExpired],
+      ['deux codes différents', { pinMismatch: true }, BOT_TEXTS.pinMismatch],
+      ['code trop simple', { pinTrivial: true }, BOT_TEXTS.pinTooSimple],
+    ])('%s : rien n’est créé, la création est redemandée', async (_label, override, notice) => {
+      conversation('AWAITING_NEW_PIN');
+      await service.handle(flowReply({ ...validCreate, ...override }));
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(`${notice} ${BOT_TEXTS.createPinAsk}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
+    });
+
+    it('échec de l’alerte à l’agence : le code est quand même créé et la quittance part', async () => {
+      conversation('AWAITING_NEW_PIN');
+      lastPayment();
+      notify.notifyUser.mockRejectedValue(new Error('email en panne'));
+      await service.handle(flowReply(validCreate));
+      expect(identity.createPin).toHaveBeenCalled();
+      expect(whatsapp.replyDocument).toHaveBeenCalled();
+    });
+
+    it('simple message, 1er code : gardé haché, on demande la confirmation', async () => {
+      conversation('AWAITING_NEW_PIN');
+      await service.handle(inbound({ text: null, payload: { pinDigest: 'empreinte', pinTrivial: false } }));
+      expect(identity.hashNewPin).toHaveBeenCalledWith('empreinte');
+      expect(lastText()).toBe(BOT_TEXTS.confirmPinAsk);
+      expect(conversationUpdate()).toMatchObject({
+        state: 'AWAITING_NEW_PIN_CONFIRM',
+        pendingAction: 'RECEIPT',
+        pendingPinHash: '$2b$nouveau',
+      });
+      expect(identity.createPin).not.toHaveBeenCalled();
+    });
+
+    it('simple message, code trop simple : refusé, rien de stocké', async () => {
+      conversation('AWAITING_NEW_PIN');
+      await service.handle(inbound({ text: null, payload: { pinDigest: 'empreinte', pinTrivial: true } }));
+      expect(identity.hashNewPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(`${BOT_TEXTS.pinTooSimple} ${BOT_TEXTS.createPinAsk}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingPinHash: null });
+    });
+
+    it('simple message, confirmation identique : code créé avec le conseil d’effacer les messages', async () => {
+      conversation('AWAITING_NEW_PIN_CONFIRM', {
+        pendingAction: 'STATEMENT',
+        pendingPinHash: '$2b$premier',
+      });
+      await service.handle(inbound({ text: null, payload: { pinDigest: 'empreinte', pinTrivial: false } }));
+      expect(identity.matchesPendingPin).toHaveBeenCalledWith('empreinte', '$2b$premier');
+      expect(identity.createPin).toHaveBeenCalledWith(
+        'tenant-1',
+        '$2b$premier',
+        '98646779',
+        expect.any(Date),
+      );
+      expect(lastText().startsWith(BOT_TEXTS.pinCreatedDeleteTip)).toBe(true);
+      expect(conversationUpdate()).toMatchObject({ state: 'MENU', pendingPinHash: null });
+    });
+
+    it('simple message, confirmation différente : on recommence, premier code oublié', async () => {
+      conversation('AWAITING_NEW_PIN_CONFIRM', { pendingPinHash: '$2b$premier' });
+      identity.matchesPendingPin.mockResolvedValue(false);
+      await service.handle(inbound({ text: null, payload: { pinDigest: 'autre', pinTrivial: false } }));
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(`${BOT_TEXTS.pinMismatch} ${BOT_TEXTS.createPinAsk}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingPinHash: null });
+    });
+
+    it('autre message pendant la confirmation : rappel, le premier code reste en attente', async () => {
+      conversation('AWAITING_NEW_PIN_CONFIRM', { pendingPinHash: '$2b$premier' });
+      await service.handle(inbound({ text: 'euh' }));
+      expect(lastText()).toBe(BOT_TEXTS.askNewPinAgain);
+      expect(conversationUpdate()).toMatchObject({
+        state: 'AWAITING_NEW_PIN_CONFIRM',
+        pendingPinHash: '$2b$premier',
+      });
+    });
+
+    it('30 min sans message : premier code oublié, retour au menu', async () => {
+      prisma.whatsappConversation.upsert.mockResolvedValue({
+        state: 'AWAITING_NEW_PIN_CONFIRM',
+        pendingAction: 'RECEIPT',
+        lastActivityAt: new Date(Date.now() - BOT_CONVERSATION_TIMEOUT_MS - 1000),
+        pendingPinHash: '$2b$premier',
+      });
+      await service.handle(inbound({ text: null, payload: { pinDigest: 'empreinte', pinTrivial: false } }));
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(conversationUpdate()).toMatchObject({ state: 'MENU', pendingPinHash: null });
+    });
+  });
+
+  describe('code entré dans le formulaire (unité 50)', () => {
+    const enterReply = (pinFlowValid: boolean): BotInbound =>
+      inbound({
+        messageType: 'INTERACTIVE',
+        text: null,
+        payload: { pinDigest: 'empreinte', pinFlow: 'ENTER', pinFlowValid },
+      });
+    const awaitingPin = (): void => {
+      prisma.whatsappConversation.upsert.mockResolvedValue({
+        state: 'AWAITING_PIN',
+        pendingAction: 'STATEMENT',
+        lastActivityAt: new Date(),
+      });
+    };
+    const flowBody = (): string => (whatsapp.replyFlow.mock.calls[0] as [{ body: string }])[0].body;
+
+    beforeEach(() => {
+      configValues['WHATSAPP_PIN_FLOW_ID'] = '123456789';
+    });
+
+    it('code existant non vérifié : le formulaire ENTRER_CODE est envoyé', async () => {
+      await service.handle(inbound({ text: 'relevé' }));
+      const [call] = whatsapp.replyFlow.mock.calls[0] as [
+        { body: string; flow: { screen: string; cta: string } },
+      ];
+      expect(call.body).toBe(BOT_TEXTS.askPinFlowBody);
+      expect(call.flow).toMatchObject({ screen: 'ENTRER_CODE', cta: 'Entrer mon code' });
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_PIN', pendingAction: 'STATEMENT' });
+    });
+
+    it('réponse du formulaire : même vérification que le code tapé (5 essais, blocage)', async () => {
+      awaitingPin();
+      identity.check.mockResolvedValue({ result: 'WRONG', remaining: 2 });
+      await service.handle(enterReply(true));
+      expect(identity.check).toHaveBeenCalledWith('tenant-1', 'empreinte', '98646779', expect.any(Date));
+      expect(flowBody()).toBe(`${BOT_TEXTS.wrongPin(2)} ${BOT_TEXTS.askPinFlowBody}`);
+    });
+
+    it('jeton du formulaire invalide : aucun essai compté, nouveau formulaire', async () => {
+      awaitingPin();
+      await service.handle(enterReply(false));
+      expect(identity.check).not.toHaveBeenCalled();
+      expect(flowBody()).toBe(`${BOT_TEXTS.pinFlowExpired} ${BOT_TEXTS.askPinFlowBody}`);
+    });
+
+    it('réponse arrivée après l’expiration de la demande : rien vérifié, retour au menu', async () => {
+      await service.handle(enterReply(true));
+      expect(identity.check).not.toHaveBeenCalled();
+      expect(whatsapp.replyList).toHaveBeenCalledWith(
+        expect.objectContaining({ body: BOT_TEXTS.pinFlowLate }),
+      );
+    });
+
+    it('pendant un échange avec le gestionnaire : la réponse du formulaire n’est jamais relayée', async () => {
+      prisma.whatsappConversation.upsert.mockResolvedValue({
+        state: 'HUMAN',
+        pendingAction: null,
+        lastActivityAt: new Date(),
+        humanThreadId: 'thread-1',
+      });
+      prisma.whatsappThread.findUnique.mockResolvedValue({
+        humanOpenedAt: new Date(Date.now() - 3600_000),
+        humanClosedAt: null,
+        lastTenantMessageAt: new Date(Date.now() - 60_000),
+      });
+      await service.handle(enterReply(true));
+      expect(threads.relay).not.toHaveBeenCalled();
+      expect(threads.closeExchange).toHaveBeenCalledWith('thread-1', 'TENANT', expect.any(Date));
     });
   });
 });

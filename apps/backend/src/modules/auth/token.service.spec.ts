@@ -44,6 +44,12 @@ describe('TokenService — code locataire', () => {
     await expect(serviceWith('une-autre-cle-de-32-caracteres-au-moins').verifyPin('048213', hash)).resolves.toBe(false);
   }, 30_000);
 
+  it('code choisi dans WhatsApp (unité 50) : hashPinDigest(pinDigest(c)) se vérifie comme hashPin(c)', async () => {
+    const hash = await service.hashPinDigest(service.pinDigest('583920'));
+    await expect(service.verifyPin('583920', hash)).resolves.toBe(true);
+    await expect(service.verifyPin('583921', hash)).resolves.toBe(false);
+  }, 30_000);
+
   it('sans clé configurée : refuse de créer un code mal protégé (503)', async () => {
     await expect(serviceWith(undefined).hashPin('048213')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });

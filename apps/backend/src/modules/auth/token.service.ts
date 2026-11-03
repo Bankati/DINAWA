@@ -81,6 +81,13 @@ export class TokenService {
     return this.pepperPin(pin);
   }
 
+  // Code choisi par le locataire dans WhatsApp (unité 50) : seul le webhook
+  // voit le code en clair, le robot ne reçoit que l'empreinte.
+  // hashPinDigest(pinDigest(code)) équivaut à hashPin(code).
+  async hashPinDigest(digest: string): Promise<string> {
+    return bcrypt.hash(digest, BCRYPT_ROUNDS);
+  }
+
   async verifyPinDigest(digest: string, hash: string): Promise<boolean> {
     return bcrypt.compare(digest, hash);
   }

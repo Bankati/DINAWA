@@ -181,6 +181,8 @@ export const PIN_MAX_ATTEMPTS = 5;
 export const PIN_LOCK_MS = 60 * 60 * 1000;
 export const PIN_VERIFICATION_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
 export const PIN_FAILURE_ALERT_THRESHOLD = 50;
+// Formulaire WhatsApp du code (unité 50) : jeton signé valable 1 h.
+export const PIN_FLOW_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Relevé du robot : 6 derniers mois (mois en cours compris).
 export const BOT_STATEMENT_MONTHS = 6;
 // Phrase pré-remplie par le lien / QR code « Écrire à WARAH » : reconnue

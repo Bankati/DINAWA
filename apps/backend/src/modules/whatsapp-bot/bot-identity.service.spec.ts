@@ -38,6 +38,32 @@ describe('BotIdentityService (unité 47, décision 2)', () => {
     service = new BotIdentityService(prisma as never, tokens as never);
   });
 
+  describe('code créé depuis WhatsApp (unité 50)', () => {
+    it('crée seulement s’il n’existe aucun code, et le marque vérifié pour ce numéro', async () => {
+      await expect(service.createPin('tenant-1', '$2b$nouveau', PHONE, NOW)).resolves.toBe('CREATED');
+      expect(prisma.tenantProfile.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'tenant-1', whatsappPinHash: null },
+        data: {
+          whatsappPinHash: '$2b$nouveau',
+          pinFailedAttempts: 0,
+          pinLockedUntil: null,
+          pinVerifiedAt: NOW,
+          pinVerifiedPhone: PHONE,
+        },
+      });
+    });
+
+    it('un code existe déjà (ou une création simultanée a gagné) : rien n’est écrasé', async () => {
+      prisma.tenantProfile.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.createPin('tenant-1', '$2b$nouveau', PHONE, NOW)).resolves.toBe('ALREADY_SET');
+    });
+
+    it('confirmation : compare l’empreinte au premier code haché', async () => {
+      await expect(service.matchesPendingPin('empreinte', '$2b$premier')).resolves.toBe(true);
+      expect(tokens.verifyPinDigest).toHaveBeenCalledWith('empreinte', '$2b$premier');
+    });
+  });
+
   describe('vérification encore valable (30 jours, même numéro)', () => {
     const verified = {
       whatsappPinHash: '$2b$hash',
