@@ -98,15 +98,32 @@ export const BOT_TEXTS = {
   askPin: 'Pour votre sécurité, envoyez votre code WARAH à 6 chiffres.',
   askPinAgain: 'J’attends votre code à 6 chiffres. Écrivez « menu » pour revenir au menu.',
   wrongPin: (remaining: number): string =>
-    `Code incorrect. Il vous reste ${remaining} essai${remaining > 1 ? 's' : ''} avant un blocage d’une heure.`,
-  locked: (minutes: number): string =>
-    `Trop d’essais : le code est bloqué. Réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.`,
+    `Code incorrect. Il vous reste ${remaining} essai${remaining > 1 ? 's' : ''} avant un blocage temporaire.`,
+  // Au-delà d'une heure (blocages répétés, unité 50) : en heures.
+  locked: (minutes: number): string => {
+    if (minutes <= 60)
+      return `Trop d’essais : le code est bloqué. Réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.`;
+    const hours = Math.ceil(minutes / 60);
+    return `Trop d’essais : le code est bloqué. Réessayez dans ${hours} heures.`;
+  },
   askPinFlowBody: 'Pour votre sécurité, entrez votre code WARAH à 6 chiffres.',
   // Création du code depuis WhatsApp (unité 50) : formulaire, ou simple
   // message si le formulaire n'est pas disponible.
   createPinFlowBody:
     'Pour protéger vos quittances, créez votre code secret WARAH à 6 chiffres. ' +
-    'Touchez « Créer mon code ». Ne le donnez à personne.',
+    'Touchez « Créer mon code ». Ne le donnez à personne. ' +
+    'Le bouton ne s’affiche pas ? Envoyez ici le montant de votre loyer mensuel.',
+  // Question de contrôle avant la création (relecture Naffi, décision du boss).
+  rentAsk:
+    'Pour protéger vos quittances, vous allez créer votre code secret WARAH. ' +
+    'D’abord, pour vérifier que c’est bien vous, envoyez le montant de votre loyer mensuel ' +
+    '(en chiffres, ex. 50000).',
+  rentAskAgain:
+    'J’attends le montant de votre loyer mensuel, en chiffres (ex. 50000). ' +
+    'Écrivez « menu » pour revenir au menu.',
+  rentWrong: (remaining: number): string =>
+    `Ce montant ne correspond pas à votre bail. Il vous reste ${remaining} essai${remaining > 1 ? 's' : ''}.`,
+  rentOk: 'Merci, c’est bien vous.',
   createPinAsk:
     'Pour protéger vos quittances, choisissez un code secret à 6 chiffres et envoyez-le ici. ' +
     'Évitez 123456, 000000 ou votre date de naissance.',

@@ -6,7 +6,7 @@ describe('email « code WhatsApp créé » (unité 50)', () => {
     expect(subject()).toBe('Un locataire a créé son code WhatsApp');
     expect(html).toContain('Ama Mensah');
     expect(html).toContain('Bè, Lomé');
-    expect(html).toContain('réinitialisez son code');
+    expect(html).toContain('changez son numéro');
   });
 
   it('échappe les valeurs (nom saisi par un utilisateur)', () => {

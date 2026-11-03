@@ -41,18 +41,18 @@ describe('parseMetaNotification', () => {
 
     it('PIN_CREATE : code et confirmation dans secret, jamais dans payload ni text', () => {
       const [parsed] = parseMetaNotification(
-        flow(JSON.stringify({ action: 'PIN_CREATE', code: '583920', confirmation: '583920', flow_token: 'jeton', nom: 'Ama' })),
+        flow(JSON.stringify({ action: 'PIN_CREATE', loyer: '50000', code: '583920', confirmation: '583920', flow_token: 'jeton', nom: 'Ama' })),
       );
       const message = parsed?.messages[0];
       expect(message).toMatchObject({ type: 'INTERACTIVE', text: null, payload: {} });
-      expect(message?.secret).toEqual({ kind: 'CREATE', code: '583920', confirmation: '583920', flowToken: 'jeton' });
+      expect(message?.secret).toEqual({ kind: 'CREATE', code: '583920', confirmation: '583920', rent: '50000', flowToken: 'jeton' });
       // Aucune autre clé de response_json n'est recopiée.
       expect(JSON.stringify(message?.payload)).not.toContain('Ama');
     });
 
     it('PIN_ENTER : pas de confirmation', () => {
       const [parsed] = parseMetaNotification(flow(JSON.stringify({ action: 'PIN_ENTER', code: '583920', flow_token: 'jeton' })));
-      expect(parsed?.messages[0]?.secret).toEqual({ kind: 'ENTER', code: '583920', confirmation: null, flowToken: 'jeton' });
+      expect(parsed?.messages[0]?.secret).toEqual({ kind: 'ENTER', code: '583920', confirmation: null, rent: null, flowToken: 'jeton' });
     });
 
     it.each([

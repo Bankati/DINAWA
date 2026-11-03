@@ -5,13 +5,24 @@
       "id": "CREER_CODE",
       "title": "Mon code WARAH",
       "terminal": true,
-      "sensitive": ["code", "confirmation"],
+      "sensitive": [
+        "code",
+        "confirmation"
+      ],
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextBody",
-            "text": "Choisissez un code secret à 6 chiffres. Il protège vos quittances et votre relevé. Ne le donnez à personne."
+            "text": "Pour vérifier que c’est bien vous, indiquez le montant de votre loyer mensuel. Puis choisissez un code secret à 6 chiffres : il protège vos quittances et votre relevé. Ne le donnez à personne."
+          },
+          {
+            "type": "TextInput",
+            "name": "loyer",
+            "label": "Loyer mensuel (FCFA)",
+            "input-type": "number",
+            "required": true,
+            "helper-text": "Le montant de votre bail, en chiffres (ex. 50000)."
           },
           {
             "type": "TextInput",
@@ -42,6 +53,7 @@
               "name": "complete",
               "payload": {
                 "action": "PIN_CREATE",
+                "loyer": "${form.loyer}",
                 "code": "${form.code}",
                 "confirmation": "${form.confirmation}"
               }
@@ -54,7 +66,9 @@
       "id": "ENTRER_CODE",
       "title": "Mon code WARAH",
       "terminal": true,
-      "sensitive": ["code"],
+      "sensitive": [
+        "code"
+      ],
       "layout": {
         "type": "SingleColumnLayout",
         "children": [

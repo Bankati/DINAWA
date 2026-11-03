@@ -18,7 +18,7 @@ type FakeUser = {
     pinVerifiedPhone: string | null;
     pinLockedUntil: Date | null;
   };
-  leasesAsTenant: { id: string; propertyId: string }[];
+  leasesAsTenant: { id: string; propertyId: string; monthlyRent: number; monthlyCharges: number }[];
 };
 
 function inbound(overrides: Partial<BotInbound> = {}): BotInbound {
@@ -58,6 +58,8 @@ describe('WhatsappBotService (unité 47)', () => {
     hashNewPin: jest.Mock;
     matchesPendingPin: jest.Mock;
     createPin: jest.Mock;
+    checkRent: jest.Mock;
+    rentDigestMatches: jest.Mock;
   };
   let configValues: Record<string, unknown>;
   let notify: { notifyUser: jest.Mock };
@@ -81,7 +83,7 @@ describe('WhatsappBotService (unité 47)', () => {
         pinVerifiedPhone: null,
         pinLockedUntil: null,
       },
-      leasesAsTenant: [{ id: 'lease-1', propertyId: 'prop-1' }],
+      leasesAsTenant: [{ id: 'lease-1', propertyId: 'prop-1', monthlyRent: 50000, monthlyCharges: 5000 }],
     };
     prisma = {
       whatsappMessage: {
@@ -134,6 +136,8 @@ describe('WhatsappBotService (unité 47)', () => {
       hashNewPin: jest.fn().mockResolvedValue('$2b$nouveau'),
       matchesPendingPin: jest.fn().mockResolvedValue(true),
       createPin: jest.fn().mockResolvedValue('CREATED'),
+      checkRent: jest.fn().mockResolvedValue({ result: 'OK' }),
+      rentDigestMatches: jest.fn().mockReturnValue(true),
     };
     configValues = { PAY_LINK_SECRET: 'secret-de-test-pour-les-jetons' };
     const config = {
@@ -285,12 +289,12 @@ describe('WhatsappBotService (unité 47)', () => {
   });
 
   describe('actions protégées par le code (décision 2)', () => {
-    it('pas de code et pas de formulaire configuré : le demande en simple message (unité 50)', async () => {
+    it('pas de code et pas de formulaire configuré : demande d’abord le loyer en simple message (unité 50)', async () => {
       user.tenantProfile.whatsappPinHash = null;
       await service.handle(inbound({ text: 'quittance' }));
-      expect(lastText()).toBe(BOT_TEXTS.createPinAsk);
+      expect(lastText()).toBe(BOT_TEXTS.rentAsk);
       expect(whatsapp.replyFlow).not.toHaveBeenCalled();
-      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK', pendingAction: 'RECEIPT' });
       expect(receiptPdf.generate).not.toHaveBeenCalled();
     });
 
@@ -698,6 +702,7 @@ describe('WhatsappBotService (unité 47)', () => {
       pinFlowValid: true,
       pinTrivial: false,
       pinMismatch: false,
+      pinRent: '50000',
     };
     const lastPayment = (): void => {
       prisma.payment.findFirst.mockResolvedValue({
@@ -735,7 +740,7 @@ describe('WhatsappBotService (unité 47)', () => {
         isPinFlowTokenValid(call.flow.token, 'tenant-1', 'CREATE', 'secret-de-test-pour-les-jetons'),
       ).toBe(true);
       expect(whatsapp.reply).not.toHaveBeenCalled();
-      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK', pendingAction: 'RECEIPT' });
     });
 
     it('mode brouillon seulement si WHATSAPP_PIN_FLOW_DRAFT est vrai', async () => {
@@ -749,8 +754,8 @@ describe('WhatsappBotService (unité 47)', () => {
       configValues['WHATSAPP_PIN_FLOW_ID'] = '123456789';
       whatsapp.replyFlow.mockResolvedValue({ outcome: 'FAILED', messageId: 'out-1', retryable: false });
       await service.handle(inbound({ text: 'quittance' }));
-      expect(lastText()).toBe(BOT_TEXTS.createPinAsk);
-      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN' });
+      expect(lastText()).toBe(BOT_TEXTS.rentAsk);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK' });
     });
 
     it('résultat incertain (UNKNOWN) : aucun second envoi', async () => {
@@ -765,6 +770,7 @@ describe('WhatsappBotService (unité 47)', () => {
       conversation('AWAITING_NEW_PIN');
       lastPayment();
       await service.handle(flowReply(validCreate));
+      expect(identity.checkRent).toHaveBeenCalledWith('tenant-1', true, expect.any(Date));
       expect(identity.hashNewPin).toHaveBeenCalledWith('empreinte');
       expect(identity.createPin).toHaveBeenCalledWith(
         'tenant-1',
@@ -791,17 +797,92 @@ describe('WhatsappBotService (unité 47)', () => {
       });
     });
 
-    it('formulaire valide sans demande en attente (conversation expirée) : menu avec « Code créé »', async () => {
+    it('formulaire rempli après 30 min (jeton encore valable) : la quittance demandée part quand même', async () => {
       prisma.whatsappConversation.upsert.mockResolvedValue({
-        state: 'AWAITING_NEW_PIN',
+        state: 'AWAITING_RENT_CHECK',
         pendingAction: 'RECEIPT',
         lastActivityAt: new Date(Date.now() - BOT_CONVERSATION_TIMEOUT_MS - 1000),
       });
+      lastPayment();
+      await service.handle(flowReply(validCreate));
+      expect(identity.createPin).toHaveBeenCalled();
+      const [doc] = whatsapp.replyDocument.mock.calls[0] as [{ caption: string }];
+      expect(doc.caption.startsWith(BOT_TEXTS.pinCreated)).toBe(true);
+    });
+
+    it('formulaire valide sans demande en attente : menu avec « Code créé »', async () => {
+      conversation('MENU', { pendingAction: null });
       await service.handle(flowReply(validCreate));
       expect(identity.createPin).toHaveBeenCalled();
       expect(whatsapp.replyList).toHaveBeenCalledWith(
         expect.objectContaining({ body: `${BOT_TEXTS.pinCreated}\n\n${BOT_TEXTS.menu('Ama')}` }),
       );
+    });
+
+    it('formulaire avec un mauvais loyer : rien n’est créé, essai compté, la création est redemandée', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      identity.checkRent.mockResolvedValue({ result: 'WRONG', remaining: 4 });
+      await service.handle(flowReply({ ...validCreate, pinRent: '30000' }));
+      expect(identity.checkRent).toHaveBeenCalledWith('tenant-1', false, expect.any(Date));
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(`${BOT_TEXTS.rentWrong(4)} ${BOT_TEXTS.rentAsk}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK', pendingAction: 'RECEIPT' });
+    });
+
+    it('le loyer avec charges est accepté aussi', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      await service.handle(flowReply({ ...validCreate, pinRent: '55000' }));
+      expect(identity.checkRent).toHaveBeenCalledWith('tenant-1', true, expect.any(Date));
+    });
+
+    it('trop de mauvais loyers : bloqué, rien n’est créé', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      const until = new Date(Date.now() + 3600_000);
+      identity.checkRent.mockResolvedValue({ result: 'LOCKED', until });
+      await service.handle(flowReply(validCreate));
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(BOT_TEXTS.locked(60));
+    });
+
+    it('un code a été créé entre-temps (sur le site) : on renvoie vers l’agence', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      identity.checkRent.mockResolvedValue({ result: 'PIN_EXISTS' });
+      await service.handle(flowReply(validCreate));
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(BOT_TEXTS.pinAlreadySet);
+    });
+
+    it('simple message, loyer tapé « 50 000 F » : accepté, on demande le code', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      await service.handle(inbound({ text: '50 000 F' }));
+      expect(identity.checkRent).toHaveBeenCalledWith('tenant-1', true, expect.any(Date));
+      expect(lastText()).toBe(`${BOT_TEXTS.rentOk} ${BOT_TEXTS.createPinAsk}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
+    });
+
+    it('simple message, mauvais loyer : essais restants, on attend toujours le loyer', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      identity.checkRent.mockResolvedValue({ result: 'WRONG', remaining: 2 });
+      await service.handle(inbound({ text: '40000' }));
+      expect(identity.checkRent).toHaveBeenCalledWith('tenant-1', false, expect.any(Date));
+      expect(lastText()).toBe(`${BOT_TEXTS.rentWrong(2)} ${BOT_TEXTS.rentAskAgain}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK' });
+    });
+
+    it('simple message, réponse qui n’est pas un montant : rappel, aucun essai compté', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      await service.handle(inbound({ text: 'je ne sais pas' }));
+      expect(identity.checkRent).not.toHaveBeenCalled();
+      expect(lastText()).toBe(BOT_TEXTS.rentAskAgain);
+    });
+
+    it('simple message, loyer de 6 chiffres (reçu comme empreinte) : comparé par empreinte', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      user.leasesAsTenant[0] = { ...user.leasesAsTenant[0], monthlyRent: 100000, monthlyCharges: 0 };
+      await service.handle(inbound({ text: null, payload: { pinDigest: 'empreinte', pinTrivial: false } }));
+      expect(identity.rentDigestMatches).toHaveBeenCalledWith('empreinte', [100000]);
+      expect(identity.checkRent).toHaveBeenCalledWith('tenant-1', true, expect.any(Date));
+      expect(identity.hashNewPin).not.toHaveBeenCalled();
     });
 
     it('un code existe déjà : jamais écrasé depuis WhatsApp, on renvoie vers l’agence', async () => {
@@ -821,8 +902,8 @@ describe('WhatsappBotService (unité 47)', () => {
       conversation('AWAITING_NEW_PIN');
       await service.handle(flowReply({ ...validCreate, ...override }));
       expect(identity.createPin).not.toHaveBeenCalled();
-      expect(lastText()).toBe(`${notice} ${BOT_TEXTS.createPinAsk}`);
-      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_NEW_PIN', pendingAction: 'RECEIPT' });
+      expect(lastText()).toBe(`${notice} ${BOT_TEXTS.rentAsk}`);
+      expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK', pendingAction: 'RECEIPT' });
     });
 
     it('échec de l’alerte à l’agence : le code est quand même créé et la quittance part', async () => {

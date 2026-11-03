@@ -328,7 +328,13 @@ describe('WhatsappWebhookService', () => {
       // Une vraie empreinte HMAC ne laisse rien deviner du code.
       tokens.pinDigest.mockReturnValueOnce('9f2c4e7a');
       await receive(
-        flowNotification({ action: 'PIN_CREATE', code: '583920', confirmation: '583920', flow_token: flowToken }),
+        flowNotification({
+          action: 'PIN_CREATE',
+          loyer: '50 000',
+          code: '583920',
+          confirmation: '583920',
+          flow_token: flowToken,
+        }),
       );
       const data = stored();
       expect(tokens.pinDigest).toHaveBeenCalledWith('583920');
@@ -338,6 +344,7 @@ describe('WhatsappWebhookService', () => {
         pinFlowValid: true,
         pinTrivial: false,
         pinMismatch: false,
+        pinRent: '50000',
       });
       expect(data['body']).toBeNull();
       expect(data['inboundAction']).toBe('BOT');

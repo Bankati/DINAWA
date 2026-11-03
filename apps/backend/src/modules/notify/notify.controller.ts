@@ -34,6 +34,7 @@ const EVENT_LABELS: Record<string, string> = {
   'lease-created': 'Nouveau bail',
   'mandate-created': 'Proposition de mandat',
   'whatsapp-message': 'Nouveau message WhatsApp',
+  'whatsapp-pin-created': 'Code WhatsApp créé',
 };
 
 @ApiTags('Notifications')

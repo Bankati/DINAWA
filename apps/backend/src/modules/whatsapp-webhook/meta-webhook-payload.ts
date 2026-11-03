@@ -28,6 +28,8 @@ export type PinFlowSecret = {
   kind: PinFlowKind;
   code: string | null;
   confirmation: string | null;
+  // Montant du loyer tapé (question de contrôle de la création).
+  rent: string | null;
   flowToken: string | null;
 };
 
@@ -185,6 +187,7 @@ function flowReply(raw: unknown): Pick<InboundMessage, 'type' | 'text' | 'payloa
       kind,
       code: asString(response['code']),
       confirmation: kind === 'CREATE' ? asString(response['confirmation']) : null,
+      rent: kind === 'CREATE' ? asString(response['loyer']) : null,
       flowToken: asString(response['flow_token']),
     },
   };

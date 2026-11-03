@@ -134,7 +134,9 @@ export class WhatsappConsentService {
   }
 
   // Réinitialise le code sans jamais le voir (décision 2) : le locataire
-  // devra en générer un nouveau dans son espace.
+  // devra en créer un nouveau, dans son espace ou dans WhatsApp (unité 50,
+  // après la question du loyer). Contre un téléphone perdu ou prêté, c'est
+  // le changement de numéro qui protège.
   async resetPinByAgency(user: AuthenticatedUser, tenantUserId: string): Promise<WhatsappStatusView> {
     await this.assertAgencyAccess(user, tenantUserId, 'mutate');
     await this.prisma.tenantProfile.updateMany({ where: { userId: tenantUserId }, data: PIN_RESET });

@@ -232,14 +232,16 @@ enum WhatsappConsentMethod {
 // robot vient de demander le code pour une action protégée (pendingAction).
 // HUMAN (unité 48) : échange avec le responsable du bien en cours, le robot
 // se tait et relaie les messages (WhatsappConversation.humanThreadId).
-// AWAITING_NEW_PIN / AWAITING_NEW_PIN_CONFIRM (unité 50) : le locataire sans
-// code est en train d'en créer un depuis WhatsApp (formulaire ou message).
+// AWAITING_RENT_CHECK / AWAITING_NEW_PIN / AWAITING_NEW_PIN_CONFIRM (unité
+// 50) : le locataire sans code en crée un depuis WhatsApp — montant du loyer
+// d'abord (question de contrôle), puis le code et sa confirmation.
 enum WhatsappBotState {
   MENU
   AWAITING_PIN
   HUMAN
   AWAITING_NEW_PIN
   AWAITING_NEW_PIN_CONFIRM
+  AWAITING_RENT_CHECK
 }
 
 // Pourquoi un échange humain s'est terminé (unité 48). TIMEOUT : 24 h sans
@@ -475,6 +477,9 @@ model TenantProfile {
   whatsappPinHash   String?
   pinFailedAttempts Int       @default(0)
   pinLockedUntil    DateTime? @db.Timestamptz(6)
+  // Blocages successifs sans succès (unité 50) : à partir du 3e, le blocage
+  // dure 24 h au lieu d'1 h. Remis à 0 par un bon code ou une création.
+  pinLockCount      Int       @default(0)
   // Dernier bon code donné au robot (unité 47) : ouvre les actions
   // protégées pendant 30 jours, seulement si le numéro vérifié est toujours
   // pinVerifiedPhone. Effacé à chaque nouveau code, réinitialisation ou

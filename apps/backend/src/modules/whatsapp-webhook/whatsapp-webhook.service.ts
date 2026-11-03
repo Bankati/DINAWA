@@ -391,7 +391,11 @@ export class WhatsappWebhookService {
         this.config.get<string>('PAY_LINK_SECRET'),
       ),
       pinTrivial: code ? isTrivialPin(code) : false,
-      ...(secret.kind === 'CREATE' ? { pinMismatch: secret.confirmation !== secret.code } : {}),
+      // Le loyer n'est pas un secret (l'agence le connaît) : seuls ses
+      // chiffres sont transmis au robot, qui le compare au bail.
+      ...(secret.kind === 'CREATE'
+        ? { pinMismatch: secret.confirmation !== secret.code, pinRent: rentDigits(secret.rent) }
+        : {}),
     };
   }
 
@@ -468,6 +472,11 @@ export class WhatsappWebhookService {
       candidates.find((c) => c.whatsappPhone === local || c.phone === local) ?? candidates[0];
     return chosen ? { id: chosen.id, role: chosen.role } : null;
   }
+}
+
+// « 50 000 », « 50.000 F », « 50000 FCFA » → « 50000 » ; rien d'exploitable → "".
+function rentDigits(value: string | null): string {
+  return (value ?? '').replace(/\D/g, '').slice(0, 10);
 }
 
 function toStatusEvent(status: InboundStatus): StatusEvent {

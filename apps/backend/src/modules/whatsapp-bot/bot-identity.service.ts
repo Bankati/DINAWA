@@ -6,6 +6,8 @@ import { TokenService } from '../auth/token.service';
 import {
   PIN_FAILURE_ALERT_THRESHOLD,
   PIN_LOCK_MS,
+  PIN_LONG_LOCK_AFTER,
+  PIN_LONG_LOCK_MS,
   PIN_MAX_ATTEMPTS,
   PIN_VERIFICATION_VALIDITY_MS,
 } from '../../common/constants';
@@ -16,6 +18,12 @@ export type PinCheck =
   | { result: 'LOCKED'; until: Date }
   | { result: 'NO_PIN' }
   | { result: 'UNAVAILABLE' };
+
+export type RentCheck =
+  | { result: 'OK' }
+  | { result: 'WRONG'; remaining: number }
+  | { result: 'LOCKED'; until: Date }
+  | { result: 'PIN_EXISTS' };
 
 type PinState = {
   whatsappPinHash: string | null;
@@ -96,6 +104,7 @@ export class BotIdentityService {
         data: {
           pinFailedAttempts: 0,
           pinLockedUntil: null,
+          pinLockCount: 0,
           pinVerifiedAt: now,
           pinVerifiedPhone: verifiedPhone,
         },
@@ -104,15 +113,54 @@ export class BotIdentityService {
     }
 
     this.recordFailure(now);
-    if (attempt >= PIN_MAX_ATTEMPTS) {
-      const until = new Date(now.getTime() + PIN_LOCK_MS);
-      await this.prisma.tenantProfile.updateMany({
-        where: { userId },
-        data: { pinLockedUntil: until, pinFailedAttempts: 0 },
-      });
-      return { result: 'LOCKED', until };
-    }
+    if (attempt >= PIN_MAX_ATTEMPTS) return { result: 'LOCKED', until: await this.lock(userId, now) };
     return { result: 'WRONG', remaining: PIN_MAX_ATTEMPTS - attempt };
+  }
+
+  // Question de contrôle avant de créer un code dans WhatsApp (unité 50,
+  // décision du boss après la relecture de Naffi) : le montant du loyer, que
+  // le locataire connaît et pas celui qui aurait seulement son téléphone.
+  // Même compteur et même blocage que le code (réservation avant la
+  // réponse), seulement tant qu'aucun code n'existe.
+  async checkRent(userId: string, matches: boolean, now: Date): Promise<RentCheck> {
+    let attempt: number;
+    try {
+      ({ pinFailedAttempts: attempt } = await this.prisma.tenantProfile.update({
+        where: {
+          userId,
+          whatsappPinHash: null,
+          OR: [{ pinLockedUntil: null }, { pinLockedUntil: { lte: now } }],
+        },
+        data: { pinFailedAttempts: { increment: 1 } },
+        select: { pinFailedAttempts: true },
+      }));
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025'))
+        throw error;
+      return this.whyRentRefused(userId, now);
+    }
+    if (attempt > PIN_MAX_ATTEMPTS) return this.whyRentRefused(userId, now);
+
+    if (matches) {
+      await this.prisma.tenantProfile.updateMany({
+        where: { userId, whatsappPinHash: null },
+        data: { pinFailedAttempts: 0 },
+      });
+      return { result: 'OK' };
+    }
+    this.recordFailure(now);
+    if (attempt >= PIN_MAX_ATTEMPTS) return { result: 'LOCKED', until: await this.lock(userId, now) };
+    return { result: 'WRONG', remaining: PIN_MAX_ATTEMPTS - attempt };
+  }
+
+  // Loyer tapé seul en 6 chiffres (ex. 100000) : le webhook l'a pris pour un
+  // code et n'en a gardé que l'empreinte — on compare donc les empreintes.
+  rentDigestMatches(digest: string, amounts: number[]): boolean {
+    try {
+      return amounts.some((amount) => this.tokens.pinDigest(String(amount)) === digest);
+    } catch {
+      return false;
+    }
   }
 
   // Code choisi dans WhatsApp (unité 50) : haché comme un code créé sur le
@@ -142,11 +190,39 @@ export class BotIdentityService {
         whatsappPinHash: hash,
         pinFailedAttempts: 0,
         pinLockedUntil: null,
+        pinLockCount: 0,
         pinVerifiedAt: now,
         pinVerifiedPhone: verifiedPhone,
       },
     });
     return count === 1 ? 'CREATED' : 'ALREADY_SET';
+  }
+
+  // 5e erreur : blocage d'1 h, de 24 h à partir du 3e blocage sans succès
+  // entre-temps (unité 50).
+  private async lock(userId: string, now: Date): Promise<Date> {
+    const { pinLockCount } = await this.prisma.tenantProfile.update({
+      where: { userId },
+      data: { pinLockCount: { increment: 1 }, pinFailedAttempts: 0 },
+      select: { pinLockCount: true },
+    });
+    const duration = pinLockCount >= PIN_LONG_LOCK_AFTER ? PIN_LONG_LOCK_MS : PIN_LOCK_MS;
+    const until = new Date(now.getTime() + duration);
+    await this.prisma.tenantProfile.updateMany({ where: { userId }, data: { pinLockedUntil: until } });
+    return until;
+  }
+
+  private async whyRentRefused(userId: string, now: Date): Promise<RentCheck> {
+    const profile = await this.prisma.tenantProfile.findUnique({
+      where: { userId },
+      select: { whatsappPinHash: true, pinLockedUntil: true },
+    });
+    if (profile?.whatsappPinHash) return { result: 'PIN_EXISTS' };
+    const until =
+      profile?.pinLockedUntil && profile.pinLockedUntil > now
+        ? profile.pinLockedUntil
+        : new Date(now.getTime() + PIN_LOCK_MS);
+    return { result: 'LOCKED', until };
   }
 
   private async whyRefused(userId: string, now: Date): Promise<PinCheck> {
