@@ -494,11 +494,10 @@ export class WhatsappBotService {
     if (!readBoolean(payload, 'pinFlowValid'))
       return this.askNewPinStep(pending, BOT_TEXTS.pinFlowExpired);
     const rentTyped = parseRent(readString(payload, 'pinRent'));
-    const rent = await this.identity.checkRent(
-      inbound.userId,
-      rentTyped !== null && user.rentAmounts.includes(rentTyped),
-      now,
-    );
+    // Loyer absent ou illisible : redemandé sans compter d'essai (comme en
+    // simple message) — un vrai locataire n'est jamais bloqué pour ça.
+    if (rentTyped === null) return this.askNewPinStep(pending, BOT_TEXTS.rentMissing);
+    const rent = await this.identity.checkRent(inbound.userId, user.rentAmounts.includes(rentTyped), now);
     if (rent.result !== 'OK') return this.rentRefused(rent, pending, now);
     if (readBoolean(payload, 'pinMismatch'))
       return this.askNewPinStep(pending, BOT_TEXTS.pinMismatch);

@@ -67,6 +67,7 @@ const PIN_RESET = {
   whatsappPinHash: null,
   pinFailedAttempts: 0,
   pinLockedUntil: null,
+  pinLockCount: 0,
   pinVerifiedAt: null,
   pinVerifiedPhone: null,
 };

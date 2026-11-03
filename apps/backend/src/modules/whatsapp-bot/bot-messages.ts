@@ -124,6 +124,7 @@ export const BOT_TEXTS = {
   rentWrong: (remaining: number): string =>
     `Ce montant ne correspond pas à votre bail. Il vous reste ${remaining} essai${remaining > 1 ? 's' : ''}.`,
   rentOk: 'Merci, c’est bien vous.',
+  rentMissing: 'Indiquez le montant de votre loyer mensuel, en chiffres.',
   createPinAsk:
     'Pour protéger vos quittances, choisissez un code secret à 6 chiffres et envoyez-le ici. ' +
     'Évitez 123456, 000000 ou votre date de naissance.',

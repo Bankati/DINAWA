@@ -50,6 +50,13 @@ describe('parseMetaNotification', () => {
       expect(JSON.stringify(message?.payload)).not.toContain('Ama');
     });
 
+    it('loyer renvoyé comme un nombre par Meta (champ « number ») : lu quand même', () => {
+      const [parsed] = parseMetaNotification(
+        flow(JSON.stringify({ action: 'PIN_CREATE', loyer: 50000, code: '583920', confirmation: '583920', flow_token: 'jeton' })),
+      );
+      expect(parsed?.messages[0]?.secret?.rent).toBe('50000');
+    });
+
     it('PIN_ENTER : pas de confirmation', () => {
       const [parsed] = parseMetaNotification(flow(JSON.stringify({ action: 'PIN_ENTER', code: '583920', flow_token: 'jeton' })));
       expect(parsed?.messages[0]?.secret).toEqual({ kind: 'ENTER', code: '583920', confirmation: null, rent: null, flowToken: 'jeton' });

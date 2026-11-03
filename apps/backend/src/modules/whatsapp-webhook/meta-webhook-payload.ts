@@ -187,7 +187,8 @@ function flowReply(raw: unknown): Pick<InboundMessage, 'type' | 'text' | 'payloa
       kind,
       code: asString(response['code']),
       confirmation: kind === 'CREATE' ? asString(response['confirmation']) : null,
-      rent: kind === 'CREATE' ? asString(response['loyer']) : null,
+      // Champ « number » du formulaire : texte ou nombre selon Meta (relecture Naffi).
+      rent: kind === 'CREATE' ? asStringOrNumber(response['loyer']) : null,
       flowToken: asString(response['flow_token']),
     },
   };
@@ -232,4 +233,9 @@ function asArray(value: unknown): unknown[] {
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function asStringOrNumber(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return asString(value);
 }

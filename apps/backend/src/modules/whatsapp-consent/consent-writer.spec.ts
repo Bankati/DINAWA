@@ -139,7 +139,7 @@ describe('applyConsentCommand', () => {
     });
     expect(tx.tenantProfile.updateMany).toHaveBeenCalledWith({
       where: { userId: 'tenant-1' },
-      data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null, pinVerifiedAt: null, pinVerifiedPhone: null },
+      data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null, pinLockCount: 0, pinVerifiedAt: null, pinVerifiedPhone: null },
     });
     // Conversation avec le robot fermée (unité 47).
     expect(tx.whatsappConversation.deleteMany).toHaveBeenCalledWith({ where: { userId: 'tenant-1' } });

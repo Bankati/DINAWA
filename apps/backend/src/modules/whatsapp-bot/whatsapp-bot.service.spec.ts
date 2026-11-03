@@ -829,6 +829,14 @@ describe('WhatsappBotService (unité 47)', () => {
       expect(conversationUpdate()).toMatchObject({ state: 'AWAITING_RENT_CHECK', pendingAction: 'RECEIPT' });
     });
 
+    it('loyer absent ou illisible : redemandé sans compter d’essai', async () => {
+      conversation('AWAITING_RENT_CHECK');
+      await service.handle(flowReply({ ...validCreate, pinRent: '' }));
+      expect(identity.checkRent).not.toHaveBeenCalled();
+      expect(identity.createPin).not.toHaveBeenCalled();
+      expect(lastText()).toBe(`${BOT_TEXTS.rentMissing} ${BOT_TEXTS.rentAsk}`);
+    });
+
     it('le loyer avec charges est accepté aussi', async () => {
       conversation('AWAITING_RENT_CHECK');
       await service.handle(flowReply({ ...validCreate, pinRent: '55000' }));
