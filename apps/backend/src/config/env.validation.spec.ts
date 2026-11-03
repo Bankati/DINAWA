@@ -111,6 +111,19 @@ describe('validate (canal WhatsApp, phase 12)', () => {
     expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_BUSINESS_NUMBER: value })).toThrow(/WHATSAPP_BUSINESS_NUMBER/);
   });
 
+  it('formulaire du code absent : démarrage normal (le robot passe au simple message, unité 50)', () => {
+    expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV })).not.toThrow();
+  });
+
+  it('refuse un identifiant de formulaire non numérique', () => {
+    expect(() => validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_PIN_FLOW_ID: 'flow-abc' })).toThrow(/WHATSAPP_PIN_FLOW_ID/);
+  });
+
+  it('WHATSAPP_PIN_FLOW_DRAFT : seule la chaîne "true" vaut vrai', () => {
+    expect(validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_PIN_FLOW_DRAFT: 'false' }).WHATSAPP_PIN_FLOW_DRAFT).toBe(false);
+    expect(validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_PIN_FLOW_DRAFT: 'true' }).WHATSAPP_PIN_FLOW_DRAFT).toBe(true);
+  });
+
   it('refuse une version Graph mal formée', () => {
     expect(() =>
       validate({ ...BASE_ENV, ...WHATSAPP_ENV, WHATSAPP_GRAPH_VERSION: 'latest' }),

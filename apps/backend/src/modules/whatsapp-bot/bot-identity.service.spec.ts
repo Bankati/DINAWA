@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { BotIdentityService } from './bot-identity.service';
-import { PIN_LOCK_MS, PIN_VERIFICATION_VALIDITY_MS } from '../../common/constants';
+import { PIN_LOCK_MS, PIN_LONG_LOCK_MS, PIN_VERIFICATION_VALIDITY_MS } from '../../common/constants';
 
 jest.mock('@sentry/nestjs', () => ({ captureMessage: jest.fn() }));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -20,7 +20,7 @@ describe('BotIdentityService (unité 47, décision 2)', () => {
   let prisma: {
     tenantProfile: { update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock };
   };
-  let tokens: { verifyPinDigest: jest.Mock };
+  let tokens: { verifyPinDigest: jest.Mock; pinDigest: jest.Mock };
   let service: BotIdentityService;
 
   beforeEach(() => {
@@ -34,8 +34,91 @@ describe('BotIdentityService (unité 47, décision 2)', () => {
           .mockResolvedValue({ whatsappPinHash: '$2b$hash', pinLockedUntil: null }),
       },
     };
-    tokens = { verifyPinDigest: jest.fn().mockResolvedValue(true) };
+    tokens = {
+      verifyPinDigest: jest.fn().mockResolvedValue(true),
+      pinDigest: jest.fn((value: string) => `empreinte-${value}`),
+    };
     service = new BotIdentityService(prisma as never, tokens as never);
+  });
+
+  describe('code créé depuis WhatsApp (unité 50)', () => {
+    it('crée seulement s’il n’existe aucun code, et le marque vérifié pour ce numéro', async () => {
+      await expect(service.createPin('tenant-1', '$2b$nouveau', PHONE, NOW)).resolves.toBe('CREATED');
+      expect(prisma.tenantProfile.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'tenant-1', whatsappPinHash: null },
+        data: {
+          whatsappPinHash: '$2b$nouveau',
+          pinFailedAttempts: 0,
+          pinLockedUntil: null,
+          pinLockCount: 0,
+          pinVerifiedAt: NOW,
+          pinVerifiedPhone: PHONE,
+        },
+      });
+    });
+
+    it('un code existe déjà (ou une création simultanée a gagné) : rien n’est écrasé', async () => {
+      prisma.tenantProfile.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.createPin('tenant-1', '$2b$nouveau', PHONE, NOW)).resolves.toBe('ALREADY_SET');
+    });
+
+    it('confirmation : compare l’empreinte au premier code haché', async () => {
+      await expect(service.matchesPendingPin('empreinte', '$2b$premier')).resolves.toBe(true);
+      expect(tokens.verifyPinDigest).toHaveBeenCalledWith('empreinte', '$2b$premier');
+    });
+  });
+
+  describe('question du loyer avant la création (relecture Naffi)', () => {
+    it('réserve l’essai (+1) seulement tant qu’aucun code n’existe et que rien n’est bloqué', async () => {
+      prisma.tenantProfile.update.mockResolvedValue({ pinFailedAttempts: 1 });
+      await expect(service.checkRent('tenant-1', true, NOW)).resolves.toEqual({ result: 'OK' });
+      expect(prisma.tenantProfile.update).toHaveBeenCalledWith({
+        where: {
+          userId: 'tenant-1',
+          whatsappPinHash: null,
+          OR: [{ pinLockedUntil: null }, { pinLockedUntil: { lte: NOW } }],
+        },
+        data: { pinFailedAttempts: { increment: 1 } },
+        select: { pinFailedAttempts: true },
+      });
+      // Bon montant : compteur remis à zéro.
+      expect(prisma.tenantProfile.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'tenant-1', whatsappPinHash: null },
+        data: { pinFailedAttempts: 0 },
+      });
+    });
+
+    it('mauvais montant : essais restants', async () => {
+      prisma.tenantProfile.update.mockResolvedValue({ pinFailedAttempts: 2 });
+      await expect(service.checkRent('tenant-1', false, NOW)).resolves.toEqual({ result: 'WRONG', remaining: 3 });
+    });
+
+    it('5e mauvais montant : blocage, comme pour le code', async () => {
+      prisma.tenantProfile.update
+        .mockResolvedValueOnce({ pinFailedAttempts: 5 })
+        .mockResolvedValueOnce({ pinLockCount: 1 });
+      await expect(service.checkRent('tenant-1', false, NOW)).resolves.toEqual({
+        result: 'LOCKED',
+        until: new Date(NOW.getTime() + PIN_LOCK_MS),
+      });
+    });
+
+    it('un code existe déjà : la réservation échoue → PIN_EXISTS', async () => {
+      prisma.tenantProfile.update.mockRejectedValue(notFound());
+      await expect(service.checkRent('tenant-1', true, NOW)).resolves.toEqual({ result: 'PIN_EXISTS' });
+    });
+
+    it('déjà bloqué : LOCKED jusqu’à la fin du blocage', async () => {
+      const until = new Date(NOW.getTime() + 10 * 60_000);
+      prisma.tenantProfile.update.mockRejectedValue(notFound());
+      prisma.tenantProfile.findUnique.mockResolvedValue({ whatsappPinHash: null, pinLockedUntil: until });
+      await expect(service.checkRent('tenant-1', true, NOW)).resolves.toEqual({ result: 'LOCKED', until });
+    });
+
+    it('loyer de 6 chiffres reçu comme empreinte : comparé par empreinte', () => {
+      expect(service.rentDigestMatches('empreinte-100000', [100000, 105000])).toBe(true);
+      expect(service.rentDigestMatches('empreinte-100001', [100000, 105000])).toBe(false);
+    });
   });
 
   describe('vérification encore valable (30 jours, même numéro)', () => {
@@ -93,6 +176,7 @@ describe('BotIdentityService (unité 47, décision 2)', () => {
       data: {
         pinFailedAttempts: 0,
         pinLockedUntil: null,
+        pinLockCount: 0,
         pinVerifiedAt: NOW,
         pinVerifiedPhone: PHONE,
       },
@@ -113,18 +197,33 @@ describe('BotIdentityService (unité 47, décision 2)', () => {
 
   it('5e erreur : blocage d’une heure, compteur remis à zéro pour après', async () => {
     tokens.verifyPinDigest.mockResolvedValue(false);
-    prisma.tenantProfile.update.mockResolvedValue({
-      pinFailedAttempts: 5,
-      whatsappPinHash: '$2b$hash',
-    });
+    prisma.tenantProfile.update
+      .mockResolvedValueOnce({ pinFailedAttempts: 5, whatsappPinHash: '$2b$hash' })
+      .mockResolvedValueOnce({ pinLockCount: 1 });
     const until = new Date(NOW.getTime() + PIN_LOCK_MS);
     await expect(service.check('tenant-1', 'empreinte', PHONE, NOW)).resolves.toEqual({
       result: 'LOCKED',
       until,
     });
+    expect(prisma.tenantProfile.update).toHaveBeenLastCalledWith({
+      where: { userId: 'tenant-1' },
+      data: { pinLockCount: { increment: 1 }, pinFailedAttempts: 0 },
+      select: { pinLockCount: true },
+    });
     expect(prisma.tenantProfile.updateMany).toHaveBeenCalledWith({
       where: { userId: 'tenant-1' },
-      data: { pinLockedUntil: until, pinFailedAttempts: 0 },
+      data: { pinLockedUntil: until },
+    });
+  });
+
+  it('3e blocage sans succès entre-temps : 24 h au lieu d’une heure (unité 50)', async () => {
+    tokens.verifyPinDigest.mockResolvedValue(false);
+    prisma.tenantProfile.update
+      .mockResolvedValueOnce({ pinFailedAttempts: 5, whatsappPinHash: '$2b$hash' })
+      .mockResolvedValueOnce({ pinLockCount: 3 });
+    await expect(service.check('tenant-1', 'empreinte', PHONE, NOW)).resolves.toEqual({
+      result: 'LOCKED',
+      until: new Date(NOW.getTime() + PIN_LONG_LOCK_MS),
     });
   });
 

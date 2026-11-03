@@ -32,6 +32,50 @@ describe('parseMetaNotification', () => {
     expect(parsed?.statuses[0]).toMatchObject({ status: 'delivered', callbackData: 'msg-1', errorCode: null });
   });
 
+  describe('réponse du formulaire du code (unité 50)', () => {
+    const flow = (responseJson: unknown): Record<string, unknown> =>
+      messageNotification({
+        type: 'interactive',
+        interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: responseJson } },
+      });
+
+    it('PIN_CREATE : code et confirmation dans secret, jamais dans payload ni text', () => {
+      const [parsed] = parseMetaNotification(
+        flow(JSON.stringify({ action: 'PIN_CREATE', loyer: '50000', code: '583920', confirmation: '583920', flow_token: 'jeton', nom: 'Ama' })),
+      );
+      const message = parsed?.messages[0];
+      expect(message).toMatchObject({ type: 'INTERACTIVE', text: null, payload: {} });
+      expect(message?.secret).toEqual({ kind: 'CREATE', code: '583920', confirmation: '583920', rent: '50000', flowToken: 'jeton' });
+      // Aucune autre clé de response_json n'est recopiée.
+      expect(JSON.stringify(message?.payload)).not.toContain('Ama');
+    });
+
+    it('loyer renvoyé comme un nombre par Meta (champ « number ») : lu quand même', () => {
+      const [parsed] = parseMetaNotification(
+        flow(JSON.stringify({ action: 'PIN_CREATE', loyer: 50000, code: '583920', confirmation: '583920', flow_token: 'jeton' })),
+      );
+      expect(parsed?.messages[0]?.secret?.rent).toBe('50000');
+    });
+
+    it('PIN_ENTER : pas de confirmation', () => {
+      const [parsed] = parseMetaNotification(flow(JSON.stringify({ action: 'PIN_ENTER', code: '583920', flow_token: 'jeton' })));
+      expect(parsed?.messages[0]?.secret).toEqual({ kind: 'ENTER', code: '583920', confirmation: null, rent: null, flowToken: 'jeton' });
+    });
+
+    it.each([
+      ['illisible', '{pas du json'],
+      ['action inconnue', JSON.stringify({ action: 'AUTRE', code: '583920' })],
+      ['action héritée d’Object', JSON.stringify({ action: 'constructor', code: '583920' })],
+      ['absente', undefined],
+    ])('réponse %s → OTHER, seul le type est gardé', (_label, responseJson) => {
+      const [parsed] = parseMetaNotification(flow(responseJson));
+      const message = parsed?.messages[0];
+      expect(message).toMatchObject({ type: 'OTHER', text: null, payload: { metaType: 'nfm_reply' } });
+      expect(message?.secret).toBeUndefined();
+      expect(JSON.stringify(message)).not.toContain('583920');
+    });
+  });
+
   it('lit un message texte', () => {
     const [parsed] = parseMetaNotification(textNotification('Bonjour, ma fenêtre est cassée'));
     expect(parsed?.messages).toEqual([

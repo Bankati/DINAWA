@@ -173,6 +173,43 @@ export class WhatsappService {
     return this.markSent(message.id, input.source, wamid);
   }
 
+  // Formulaire WhatsApp du code (unité 50) : mêmes contrôles que
+  // replyList(), un seul appel Meta. Le jeton du formulaire n'est JAMAIS
+  // enregistré, seulement l'écran ouvert.
+  async replyFlow(
+    input: SendContext & {
+      flow: { id: string; token: string; cta: string; screen: string; draft: boolean };
+      body: string;
+      inboundReceivedAt: Date;
+    },
+  ): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    const access = await this.access.canUseWhatsapp(input.userId);
+    if (!access.allowed) return this.refused(input, access.reason);
+
+    const message = await this.createQueued(input, access.recipientPhone, {
+      messageType: 'INTERACTIVE',
+      templateName: null,
+      payload: { body: input.body, flow: input.flow.screen },
+    });
+    let wamid: string;
+    try {
+      wamid = await this.client.sendFlow({
+        to: access.metaNumber,
+        flowId: input.flow.id,
+        flowToken: input.flow.token,
+        cta: input.flow.cta,
+        screen: input.flow.screen,
+        body: input.body,
+        draft: input.flow.draft,
+        callbackData: message.id,
+      });
+    } catch (error) {
+      return this.markFailure(message.id, input.source, error, classify(error));
+    }
+    return this.markSent(message.id, input.source, wamid);
+  }
+
   // Document en réponse (quittance du robot, unité 47) : PDF en mémoire,
   // jamais stocké (invariant #5), fenêtre de 24 h vérifiée à l'envoi.
   async replyDocument(

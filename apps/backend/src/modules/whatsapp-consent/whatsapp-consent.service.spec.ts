@@ -346,6 +346,7 @@ describe('WhatsappConsentService', () => {
         whatsappPinHash: '$2b$12$hash',
         pinFailedAttempts: 0,
         pinLockedUntil: null,
+        pinLockCount: 0,
         pinVerifiedAt: null,
         pinVerifiedPhone: null,
       });
@@ -371,6 +372,7 @@ describe('WhatsappConsentService', () => {
         whatsappPinHash: null,
         pinFailedAttempts: 0,
         pinLockedUntil: null,
+        pinLockCount: 0,
         pinVerifiedAt: null,
         pinVerifiedPhone: null,
       });

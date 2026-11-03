@@ -42,6 +42,9 @@ function duplicateError(): Prisma.PrismaClientKnownRequestError {
   });
 }
 
+import { signPinFlowToken } from '../whatsapp-bot/pin-flow';
+import { signToken } from '../../common/utils/signed-token';
+
 describe('WhatsappWebhookService', () => {
   let prisma: Mocked;
   let configValues: Record<string, string | undefined>;
@@ -266,7 +269,7 @@ describe('WhatsappWebhookService', () => {
       expect(tokens.pinDigest).toHaveBeenCalledWith('583920');
       const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
       expect(args.data['body']).toBeNull();
-      expect(args.data['payload']).toEqual({ pinDigest: '9f2c4e7a' });
+      expect(args.data['payload']).toEqual({ pinDigest: '9f2c4e7a', pinTrivial: false });
       expect(JSON.stringify(args.data)).not.toContain('583920');
     });
 
@@ -279,7 +282,15 @@ describe('WhatsappWebhookService', () => {
       await receive(textNotification('583920'));
       const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
       expect(args.data['body']).toBeNull();
-      expect(args.data['payload']).toEqual({ pinDigest: null });
+      expect(args.data['payload']).toEqual({ pinDigest: null, pinTrivial: false });
+    });
+
+    it('code trop simple tapé : seul le booléen pinTrivial le dit, jamais le code', async () => {
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+      await receive(textNotification('123456'));
+      const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(args.data['payload']).toEqual({ pinDigest: 'empreinte-123456', pinTrivial: true });
     });
 
     it('numéro inconnu qui envoie 6 chiffres : rien n’est gardé, pas d’empreinte', async () => {
@@ -287,6 +298,103 @@ describe('WhatsappWebhookService', () => {
       expect(tokens.pinDigest).not.toHaveBeenCalled();
       const [args] = prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }];
       expect(args.data['body']).toBeNull();
+    });
+  });
+
+  describe('formulaire WhatsApp du code (unité 50)', () => {
+    const tenant = { id: 'tenant-1', role: 'TENANT', whatsappPhone: SENDER_LOCAL, phone: null };
+    const SECRET = 'secret-des-liens-de-paiement-test';
+    const flowNotification = (response: Record<string, unknown>): Record<string, unknown> =>
+      messageNotification({
+        type: 'interactive',
+        interactive: {
+          type: 'nfm_reply',
+          nfm_reply: { name: 'flow', body: 'Sent', response_json: JSON.stringify(response) },
+        },
+      });
+    const stored = (): Record<string, unknown> =>
+      (prisma.whatsappMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
+    const token = (userId = 'tenant-1', kind: 'CREATE' | 'ENTER' = 'CREATE', at = new Date()): string =>
+      signPinFlowToken(userId, kind, at, SECRET);
+
+    beforeEach(() => {
+      configValues['PAY_LINK_SECRET'] = SECRET;
+      prisma.user.findFirst.mockResolvedValue(tenant);
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    });
+
+    it('création valide : seule l’empreinte est enregistrée (ni code, ni confirmation, ni jeton)', async () => {
+      const flowToken = token();
+      // Une vraie empreinte HMAC ne laisse rien deviner du code.
+      tokens.pinDigest.mockReturnValueOnce('9f2c4e7a');
+      await receive(
+        flowNotification({
+          action: 'PIN_CREATE',
+          loyer: '50 000',
+          code: '583920',
+          confirmation: '583920',
+          flow_token: flowToken,
+        }),
+      );
+      const data = stored();
+      expect(tokens.pinDigest).toHaveBeenCalledWith('583920');
+      expect(data['payload']).toEqual({
+        pinDigest: '9f2c4e7a',
+        pinFlow: 'CREATE',
+        pinFlowValid: true,
+        pinTrivial: false,
+        pinMismatch: false,
+        pinRent: '50000',
+      });
+      expect(data['body']).toBeNull();
+      expect(data['inboundAction']).toBe('BOT');
+      expect(JSON.stringify(data)).not.toContain('583920');
+      expect(JSON.stringify(data)).not.toContain(flowToken);
+    });
+
+    it('codes différents → pinMismatch ; code trop simple → pinTrivial', async () => {
+      await receive(
+        flowNotification({ action: 'PIN_CREATE', code: '111111', confirmation: '222222', flow_token: token() }),
+      );
+      expect(stored()['payload']).toMatchObject({ pinMismatch: true, pinTrivial: true });
+    });
+
+    it.each([
+      ['expiré', (): string | undefined => token('tenant-1', 'CREATE', new Date(Date.now() - 2 * 3600_000))],
+      ['d’un autre locataire', (): string | undefined => token('tenant-2')],
+      ['d’un autre écran', (): string | undefined => token('tenant-1', 'ENTER')],
+      ['de lien de paiement', (): string | undefined => signToken({ purpose: 'pay-link', data: { u: 'tenant-1', s: 'CREATE' }, expiresAt: new Date(Date.now() + 3600_000) }, SECRET)],
+      ['absent', (): string | undefined => undefined],
+    ])('jeton %s → pinFlowValid=false', async (_label, makeToken) => {
+      await receive(
+        flowNotification({ action: 'PIN_CREATE', code: '583920', confirmation: '583920', flow_token: makeToken() }),
+      );
+      expect(stored()['payload']).toMatchObject({ pinFlowValid: false });
+    });
+
+    it('vérification par le formulaire : empreinte + écran, pas de confirmation', async () => {
+      await receive(flowNotification({ action: 'PIN_ENTER', code: '583920', flow_token: token('tenant-1', 'ENTER') }));
+      expect(stored()['payload']).toEqual({
+        pinDigest: 'empreinte-583920',
+        pinFlow: 'ENTER',
+        pinFlowValid: true,
+        pinTrivial: false,
+      });
+    });
+
+    it('code mal formé : aucune empreinte, mais la clé reste pour l’effacement', async () => {
+      await receive(flowNotification({ action: 'PIN_ENTER', code: 'abc', flow_token: token('tenant-1', 'ENTER') }));
+      expect(tokens.pinDigest).not.toHaveBeenCalled();
+      expect(stored()['payload']).toMatchObject({ pinDigest: null });
+    });
+
+    it('numéro inconnu : rien du formulaire n’est gardé', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+      await receive(
+        flowNotification({ action: 'PIN_CREATE', code: '583920', confirmation: '583920', flow_token: token() }),
+      );
+      expect(tokens.pinDigest).not.toHaveBeenCalled();
+      expect(JSON.stringify(stored())).not.toContain('583920');
     });
   });
 

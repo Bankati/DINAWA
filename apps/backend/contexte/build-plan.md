@@ -633,6 +633,16 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 - `GET /api/support-requests` (filtres bien/statut), `PATCH /api/support-requests/:id` (statut) — `canActOnProperty()` ; locataire prévenu sur WhatsApp à la résolution
 - Frontend : pages Signalements (liste, détail avec photos, changement de statut)
 
+### 50 Code locataire créé dans WhatsApp
+
+**Construite le 2026-11-03** (demande du client : un locataire qui n'utilise que WhatsApp ne pouvait jamais obtenir sa quittance ; rapport et plan de Viviane, feu vert du patron le même jour) — détails dans `architecture.md`, « Code créé depuis WhatsApp ». Migration additive `20261103100000_add_whatsapp_pin_creation` (3 états, 2 colonnes). Après les relectures d'Esther et de Naffi (même jour) : question de contrôle du loyer avant la création, codes faciles refusés en plus (paires, miroirs, dates), blocage de 24 h à partir du 3e, alerte agence « changez son numéro WhatsApp ». Variables `WHATSAPP_PIN_FLOW_ID` (facultative) et `WHATSAPP_PIN_FLOW_DRAFT`. JSON du formulaire à publier chez Meta : `contexte/whatsapp-flow-code.json`.
+
+**Logique :**
+
+- Sans code, « Ma quittance » / « Mon relevé » ouvrent le formulaire « Créer mon code » (ou la demande en simple message) ; montant du loyer (question de contrôle), code + confirmation, refus des codes trop simples, création seulement si aucun code, agence prévenue, puis la quittance ou le relevé part aussitôt
+- Avec un code, la vérification passe par le formulaire « Entrer mon code » (même compteur 5 essais / 1 h) ; le code tapé reste accepté
+- Le webhook lit `nfm_reply`, ne garde que l'empreinte et des booléens ; rien d'autre de `response_json` n'est recopié
+
 ### 49 Recette et documentation WhatsApp
 
 **Logique :**
@@ -659,5 +669,5 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 | Phase 9 — Abonnements                                | 2               |
 | Phase 10 — Administration                            | 3               |
 | Phase 11 — Sécurité, conformité et observabilité     | 2               |
-| Phase 12 — WhatsApp et chatbot locataire             | 8 (+ 39 réactivée) |
-| **Total**                                            | **49**          |
+| Phase 12 — WhatsApp et chatbot locataire             | 9 (+ 39 réactivée) |
+| **Total**                                            | **50**          |

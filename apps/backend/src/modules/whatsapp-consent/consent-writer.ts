@@ -120,7 +120,7 @@ export async function applyConsentCommand(
     if (isPhoneChange) {
       await tx.tenantProfile.updateMany({
         where: { userId: input.userId },
-        data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null, pinVerifiedAt: null, pinVerifiedPhone: null },
+        data: { whatsappPinHash: null, pinFailedAttempts: 0, pinLockedUntil: null, pinLockCount: 0, pinVerifiedAt: null, pinVerifiedPhone: null },
       });
       // Conversation en cours avec le robot fermée (point reporté de l'unité
       // 45) : un nouveau numéro repart du menu, sans code vérifié.

@@ -6,7 +6,8 @@ import { BadRequestException } from '@nestjs/common';
 // la phase 12 (lien de paiement public, /architect unité 42, 2026-10-08).
 // L'usage (`purpose`) fait partie de la charge signée : un jeton émis pour un
 // usage n'est jamais accepté pour un autre, même avec le même secret.
-export type SignedTokenPurpose = 'pay-link';
+// whatsapp-pin-flow : formulaire WhatsApp du code locataire (unité 50).
+export type SignedTokenPurpose = 'pay-link' | 'whatsapp-pin-flow';
 
 type SignedTokenPayload<T> = { p: SignedTokenPurpose; d: T; exp: number };
 

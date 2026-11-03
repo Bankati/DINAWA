@@ -86,6 +86,46 @@ describe('WhatsappCloudClient', () => {
     });
   });
 
+  it('envoie le formulaire du code au format Flow de Meta (unité 50)', async () => {
+    post.mockResolvedValueOnce({ data: { messages: [{ id: 'wamid.flow' }] } });
+    await expect(
+      client.sendFlow({
+        to: '22890112233',
+        flowId: '123456789',
+        flowToken: 'jeton',
+        cta: 'Créer mon code',
+        screen: 'CREER_CODE',
+        body: 'Créez votre code',
+        draft: true,
+        callbackData: 'msg-10',
+      }),
+    ).resolves.toBe('wamid.flow');
+    expect(post).toHaveBeenCalledWith('/messages', {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '22890112233',
+      type: 'interactive',
+      interactive: {
+        type: 'flow',
+        header: { type: 'text', text: 'WARAH' },
+        body: { text: 'Créez votre code' },
+        action: {
+          name: 'flow',
+          parameters: {
+            flow_message_version: '3',
+            flow_id: '123456789',
+            flow_token: 'jeton',
+            flow_cta: 'Créer mon code',
+            flow_action: 'navigate',
+            flow_action_payload: { screen: 'CREER_CODE' },
+            mode: 'draft',
+          },
+        },
+      },
+      biz_opaque_callback_data: 'msg-10',
+    });
+  });
+
   it('lève une MetaApiError sans code pour un 2xx sans wamid', async () => {
     post.mockResolvedValueOnce({ data: { messages: [] } });
     await expect(client.sendText({ to: '2289', body: 'x', callbackData: 'm' })).rejects.toMatchObject({

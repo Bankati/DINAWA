@@ -181,6 +181,13 @@ export const PIN_MAX_ATTEMPTS = 5;
 export const PIN_LOCK_MS = 60 * 60 * 1000;
 export const PIN_VERIFICATION_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
 export const PIN_FAILURE_ALERT_THRESHOLD = 50;
+// Blocages répétés (unité 50, relecture Naffi) : à partir du 3e blocage sans
+// succès entre-temps, 24 h au lieu d'1 h — un code choisi par une personne se
+// devine plus facilement qu'un code tiré au hasard.
+export const PIN_LONG_LOCK_AFTER = 3;
+export const PIN_LONG_LOCK_MS = 24 * 60 * 60 * 1000;
+// Formulaire WhatsApp du code (unité 50) : jeton signé valable 1 h.
+export const PIN_FLOW_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Relevé du robot : 6 derniers mois (mois en cours compris).
 export const BOT_STATEMENT_MONTHS = 6;
 // Phrase pré-remplie par le lien / QR code « Écrire à WARAH » : reconnue

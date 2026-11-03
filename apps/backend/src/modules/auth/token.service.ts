@@ -81,6 +81,13 @@ export class TokenService {
     return this.pepperPin(pin);
   }
 
+  // Code choisi par le locataire dans WhatsApp (unité 50) : seul le webhook
+  // voit le code en clair, le robot ne reçoit que l'empreinte.
+  // hashPinDigest(pinDigest(code)) équivaut à hashPin(code).
+  async hashPinDigest(digest: string): Promise<string> {
+    return bcrypt.hash(digest, BCRYPT_ROUNDS);
+  }
+
   async verifyPinDigest(digest: string, hash: string): Promise<boolean> {
     return bcrypt.compare(digest, hash);
   }
@@ -160,14 +167,38 @@ export class TokenService {
   }
 }
 
+// Codes courants qui échappent aux motifs ci-dessous (lignes du clavier,
+// diagonales, miroirs) — unité 50, relecture Naffi.
+const COMMON_PINS: ReadonlySet<string> = new Set([
+  '147258', '258369', '147369', '159753', '357159', '789456', '456123', '102030',
+  '010203', '696969', '123321', '654456', '321123', '112358', '142536', '202020',
+]);
+
 // Code trop facile à deviner (unité 45, décision 2) : un seul chiffre
 // répété (000000), une suite qui monte ou descend (123456, 987654, 890123),
-// un motif de 2 ou 3 chiffres répété (121212, 123123).
+// un motif de 2 ou 3 chiffres répété (121212, 123123). Depuis que le
+// locataire peut CHOISIR son code (unité 50) : aussi les paires et triplets
+// (112233, 111222), les miroirs (123321), les dates JJMMAA (150395) et
+// quelques codes courants.
 export function isTrivialPin(pin: string): boolean {
   const digits = [...pin].map(Number);
   // Écart entre chiffres voisins, en tournant (9 → 0 compte comme +1).
   const steps = new Set(digits.slice(1).map((digit, i) => (digit - digits[i] + 10) % 10));
   const [onlyStep] = [...steps];
   if (steps.size === 1 && [0, 1, 9].includes(onlyStep)) return true;
-  return pin === pin.slice(0, 2).repeat(3) || pin === pin.slice(0, 3).repeat(2);
+  if (pin === pin.slice(0, 2).repeat(3) || pin === pin.slice(0, 3).repeat(2)) return true;
+  if (COMMON_PINS.has(pin)) return true;
+  const [a, b, c, d, e, f] = pin;
+  if (a === b && c === d && e === f) return true;
+  if (a === b && b === c && d === e && e === f) return true;
+  if (pin === [...pin].reverse().join('')) return true;
+  return looksLikeDate(pin);
+}
+
+// JJMMAA (jour 01-31, mois 01-12) : une date de naissance est la première
+// idée de beaucoup de gens.
+function looksLikeDate(pin: string): boolean {
+  const day = Number(pin.slice(0, 2));
+  const month = Number(pin.slice(2, 4));
+  return day >= 1 && day <= 31 && month >= 1 && month <= 12;
 }

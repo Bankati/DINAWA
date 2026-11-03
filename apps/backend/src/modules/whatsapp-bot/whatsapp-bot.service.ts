@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, WhatsappBotAction, WhatsappBotState, WhatsappMessageType } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { addDays } from 'date-fns';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotifyService } from '../notify/notify.service';
+import { responsibleUserIdFor } from '../../common/permissions/property-access';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 import { WhatsappSendResult, WhatsappService } from '../whatsapp-channel/whatsapp.service';
 import { PayLinksService } from '../pay-links/pay-links.service';
 import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
@@ -16,7 +21,8 @@ import {
   WHATSAPP_RELAY_MAX_PER_HOUR,
   WHATSAPP_RELAY_WINDOW_MS,
 } from '../../common/constants';
-import { BotIdentityService } from './bot-identity.service';
+import { BotIdentityService, RentCheck } from './bot-identity.service';
+import { PIN_FLOW_CTA, PIN_FLOW_SCREENS, PinFlowKind, signPinFlowToken } from './pin-flow';
 import {
   BOT_TEXTS,
   BotChoice,
@@ -40,6 +46,13 @@ export type BotInbound = {
   payload: Prisma.JsonValue;
 };
 
+// États de la création du code depuis WhatsApp (unité 50).
+const CREATION_STATES: ReadonlySet<WhatsappBotState> = new Set<WhatsappBotState>([
+  'AWAITING_RENT_CHECK',
+  'AWAITING_NEW_PIN',
+  'AWAITING_NEW_PIN_CONFIRM',
+]);
+
 const PROTECTED: Record<'RECEIPT' | 'STATEMENT', WhatsappBotAction> = {
   RECEIPT: 'RECEIPT',
   STATEMENT: 'STATEMENT',
@@ -50,21 +63,30 @@ const PROTECTED: Record<'RECEIPT' | 'STATEMENT', WhatsappBotAction> = {
 type Reply =
   | { kind: 'menu'; body: string }
   | { kind: 'text'; text: string; source: string }
-  | { kind: 'document'; paymentId: string; content: Buffer; caption: string };
+  | { kind: 'document'; paymentId: string; content: Buffer; caption: string }
+  // Formulaire WhatsApp du code (unité 50) ; fallback : même demande en
+  // simple message si Meta refuse le formulaire.
+  | { kind: 'flow'; flow: PinFlowKind; body: string; fallback: string };
 
 // openPropertyId : « Contacter mon gestionnaire » — l'échange humain n'est
-// ouvert qu'une fois la réponse partie (unité 48).
+// ouvert qu'une fois la réponse partie (unité 48). pendingPinHash : premier
+// code tapé en message, en attente de confirmation (unité 50).
 type Step = {
   reply: Reply;
   state: WhatsappBotState;
   pendingAction: WhatsappBotAction | null;
   openPropertyId?: string;
+  pendingPinHash?: string;
 };
 
 type BotUser = {
   firstName: string;
+  lastName: string;
   // Bien du bail actif (le premier, comme pour « Payer »).
   activePropertyId: string;
+  // Loyer du bail actif, avec et sans charges : question de contrôle avant
+  // de créer un code dans WhatsApp (unité 50).
+  rentAmounts: number[];
   whatsappVerifiedPhone: string | null;
   tenantProfile: {
     whatsappPinHash: string | null;
@@ -99,6 +121,8 @@ export class WhatsappBotService {
     private readonly receiptPdf: ReceiptPdfService,
     private readonly identity: BotIdentityService,
     private readonly threads: WhatsappThreadService,
+    private readonly config: ConfigService,
+    private readonly notify: NotifyService,
   ) {}
 
   handle(inbound: BotInbound): Promise<void> {
@@ -128,6 +152,7 @@ export class WhatsappBotService {
       select: {
         role: true,
         firstName: true,
+        lastName: true,
         anonymizedAt: true,
         whatsappConsent: true,
         whatsappVerifiedPhone: true,
@@ -141,7 +166,7 @@ export class WhatsappBotService {
         },
         leasesAsTenant: {
           where: { status: 'ACTIVE' },
-          select: { id: true, propertyId: true },
+          select: { id: true, propertyId: true, monthlyRent: true, monthlyCharges: true },
           take: 1,
         },
       },
@@ -159,9 +184,20 @@ export class WhatsappBotService {
       where: { userId: inbound.userId },
       create: { userId: inbound.userId, lastActivityAt: now, replyWindowStart: now, replyCount: 0 },
       update: {},
-      select: { state: true, pendingAction: true, lastActivityAt: true, humanThreadId: true },
+      select: {
+        state: true,
+        pendingAction: true,
+        lastActivityAt: true,
+        humanThreadId: true,
+        pendingPinHash: true,
+      },
     });
-    const botUser: BotUser = { ...user, activePropertyId: user.leasesAsTenant[0].propertyId };
+    const lease = user.leasesAsTenant[0];
+    const botUser: BotUser = {
+      ...user,
+      activePropertyId: lease.propertyId,
+      rentAmounts: [...new Set([lease.monthlyRent, lease.monthlyRent + lease.monthlyCharges])],
+    };
 
     let currentState = conversation.state;
     if (currentState === 'HUMAN') {
@@ -182,10 +218,19 @@ export class WhatsappBotService {
       now.getTime() - conversation.lastActivityAt.getTime() >= BOT_CONVERSATION_TIMEOUT_MS;
     const state = idle ? 'MENU' : currentState;
     const pending = idle ? null : conversation.pendingAction;
+    const pendingPinHash = idle ? null : conversation.pendingPinHash;
+    // Formulaire « Créer mon code » rempli après 30 min (jeton valable 1 h) :
+    // la quittance ou le relevé demandé part quand même (relecture Esther).
+    const creationPending = CREATION_STATES.has(conversation.state) ? conversation.pendingAction : null;
 
     let step: Step;
     try {
-      step = await this.decide(inbound, botUser, state, pending, now);
+      step = await this.decide(
+        inbound,
+        botUser,
+        { state, pending, pendingPinHash, creationPending },
+        now,
+      );
     } catch (error) {
       this.logger.error(
         `[whatsapp-bot] user=${inbound.userId} : réponse impossible`,
@@ -219,7 +264,7 @@ export class WhatsappBotService {
     if (humanThreadId) {
       await this.prisma.whatsappConversation.update({
         where: { userId: inbound.userId },
-        data: { state: 'HUMAN', pendingAction: null, lastActivityAt: now, humanThreadId },
+        data: { state: 'HUMAN', pendingAction: null, lastActivityAt: now, humanThreadId, pendingPinHash: null },
       });
     }
 
@@ -237,7 +282,14 @@ export class WhatsappBotService {
     if (humanThreadId) return;
     await this.prisma.whatsappConversation.update({
       where: { userId: inbound.userId },
-      data: { state: step.state, pendingAction: step.pendingAction, lastActivityAt: now, humanThreadId: null },
+      data: {
+        state: step.state,
+        pendingAction: step.pendingAction,
+        lastActivityAt: now,
+        humanThreadId: null,
+        // Premier code non confirmé : jamais au-delà de la réponse suivante.
+        pendingPinHash: step.pendingPinHash ?? null,
+      },
     });
   }
 
@@ -254,7 +306,11 @@ export class WhatsappBotService {
       return false;
     }
 
-    const exit = parseHumanExit(inbound.text, readString(inbound.payload, 'replyId'));
+    // Réponse d'un formulaire du code (unité 50) : jamais relayée au
+    // gestionnaire, elle termine l'échange comme une commande du menu.
+    const exit = readString(inbound.payload, 'pinFlow')
+      ? 'MENU'
+      : parseHumanExit(inbound.text, readString(inbound.payload, 'replyId'));
     if (exit === 'AGENT') {
       if (await this.reserveReply(inbound.userId, now))
         await this.sendOnce(inbound, BOT_TEXTS.agentAlreadyOpen, 'bot-agent');
@@ -311,10 +367,25 @@ export class WhatsappBotService {
   private async decide(
     inbound: BotInbound,
     user: BotUser,
-    state: WhatsappBotState,
-    pending: WhatsappBotAction | null,
+    conversation: {
+      state: WhatsappBotState;
+      pending: WhatsappBotAction | null;
+      pendingPinHash: string | null;
+      creationPending: WhatsappBotAction | null;
+    },
     now: Date,
   ): Promise<Step> {
+    const { state, pending } = conversation;
+    // Réponse d'un formulaire du code (unité 50) : avant les mots du menu.
+    const flow = readString(inbound.payload, 'pinFlow');
+    if (flow === 'CREATE') return this.onFlowCreate(inbound, user, conversation.creationPending, now);
+    if (flow === 'ENTER') {
+      if (state !== 'AWAITING_PIN' || !pending) return menuStep(BOT_TEXTS.pinFlowLate);
+      if (!readBoolean(inbound.payload, 'pinFlowValid'))
+        return this.askPinStep(pending, BOT_TEXTS.pinFlowExpired);
+      return this.onPin(inbound, user, pending, now);
+    }
+
     const replyId = readString(inbound.payload, 'replyId');
     const choice = parseBotChoice(inbound.text, replyId);
     if (choice) return this.onChoice(inbound, user, choice, now);
@@ -328,6 +399,21 @@ export class WhatsappBotService {
         reply: { kind: 'text', text: BOT_TEXTS.askPinAgain, source: 'bot-pin' },
         state,
         pendingAction: pending,
+      };
+    }
+    // Création du code par simple message (unité 50, secours) : le loyer
+    // d'abord, puis le code et sa confirmation.
+    if (state === 'AWAITING_RENT_CHECK') return this.onRentTyped(inbound, user, pending, now);
+    if (state === 'AWAITING_NEW_PIN' && hasPinDigest(inbound.payload))
+      return this.onNewPinTyped(inbound, pending);
+    if (state === 'AWAITING_NEW_PIN_CONFIRM' && hasPinDigest(inbound.payload))
+      return this.onNewPinConfirm(inbound, user, pending, conversation.pendingPinHash, now);
+    if (state === 'AWAITING_NEW_PIN' || state === 'AWAITING_NEW_PIN_CONFIRM') {
+      return {
+        reply: { kind: 'text', text: BOT_TEXTS.askNewPinAgain, source: 'bot-pin' },
+        state,
+        pendingAction: pending,
+        pendingPinHash: conversation.pendingPinHash ?? undefined,
       };
     }
     return {
@@ -356,16 +442,14 @@ export class WhatsappBotService {
 
     const action = PROTECTED[choice];
     const pin = user.tenantProfile;
-    if (!pin?.whatsappPinHash) return textStep(BOT_TEXTS.noPin, 'bot-pin');
+    if (!pin) return textStep(BOT_TEXTS.pinUnavailable, 'bot-pin');
+    // Pas encore de code : le locataire le crée ici (unité 50).
+    if (!pin.whatsappPinHash) return this.askNewPinStep(action);
     if (this.identity.isVerified(pin, user.whatsappVerifiedPhone, now))
       return this.perform(inbound, action, now);
     if (pin.pinLockedUntil && pin.pinLockedUntil > now)
       return textStep(BOT_TEXTS.locked(minutesUntil(pin.pinLockedUntil, now)), 'bot-pin');
-    return {
-      reply: { kind: 'text', text: BOT_TEXTS.askPin, source: 'bot-pin' },
-      state: 'AWAITING_PIN',
-      pendingAction: action,
-    };
+    return this.askPinStep(action);
   }
 
   private async onPin(
@@ -386,18 +470,212 @@ export class WhatsappBotService {
       case 'OK':
         return this.perform(inbound, pending, now);
       case 'WRONG':
-        return {
-          reply: { kind: 'text', text: BOT_TEXTS.wrongPin(check.remaining), source: 'bot-pin' },
-          state: 'AWAITING_PIN',
-          pendingAction: pending,
-        };
+        return this.askPinStep(pending, BOT_TEXTS.wrongPin(check.remaining));
       case 'LOCKED':
         return textStep(BOT_TEXTS.locked(minutesUntil(check.until, now)), 'bot-pin');
       case 'NO_PIN':
-        return textStep(BOT_TEXTS.noPin, 'bot-pin');
+        // Code réinitialisé par l'agence entre la demande et la réponse.
+        return this.askNewPinStep(pending);
       default:
         return textStep(BOT_TEXTS.pinUnavailable, 'bot-pin');
     }
+  }
+
+  // Formulaire « Créer mon code » renvoyé (unité 50). Les contrôles qui
+  // demandent le code en clair ont été faits par le webhook : seuls leurs
+  // résultats arrivent ici.
+  private async onFlowCreate(
+    inbound: BotInbound,
+    user: BotUser,
+    pending: WhatsappBotAction | null,
+    now: Date,
+  ): Promise<Step> {
+    const payload = inbound.payload;
+    if (!readBoolean(payload, 'pinFlowValid'))
+      return this.askNewPinStep(pending, BOT_TEXTS.pinFlowExpired);
+    const rentTyped = parseRent(readString(payload, 'pinRent'));
+    // Loyer absent ou illisible : redemandé sans compter d'essai (comme en
+    // simple message) — un vrai locataire n'est jamais bloqué pour ça.
+    if (rentTyped === null) return this.askNewPinStep(pending, BOT_TEXTS.rentMissing);
+    const rent = await this.identity.checkRent(inbound.userId, user.rentAmounts.includes(rentTyped), now);
+    if (rent.result !== 'OK') return this.rentRefused(rent, pending, now);
+    if (readBoolean(payload, 'pinMismatch'))
+      return this.askNewPinStep(pending, BOT_TEXTS.pinMismatch);
+    if (readBoolean(payload, 'pinTrivial'))
+      return this.askNewPinStep(pending, BOT_TEXTS.pinTooSimple);
+    const digest = readString(payload, 'pinDigest');
+    if (!digest || !user.whatsappVerifiedPhone) return textStep(BOT_TEXTS.pinUnavailable, 'bot-pin');
+    const hash = await this.identity.hashNewPin(digest);
+    return this.createPin(inbound, user, hash, pending, BOT_TEXTS.pinCreated, now);
+  }
+
+  // Secours sans formulaire : le montant du loyer (question de contrôle).
+  // Un loyer de 6 chiffres (ex. 100000) est arrivé sous forme d'empreinte,
+  // comme un code : on compare alors les empreintes.
+  private async onRentTyped(
+    inbound: BotInbound,
+    user: BotUser,
+    pending: WhatsappBotAction | null,
+    now: Date,
+  ): Promise<Step> {
+    let matches: boolean;
+    if (hasPinDigest(inbound.payload)) {
+      const digest = readString(inbound.payload, 'pinDigest');
+      matches = digest !== null && this.identity.rentDigestMatches(digest, user.rentAmounts);
+    } else {
+      const typed = parseRent(inbound.text);
+      if (typed === null) {
+        return {
+          reply: { kind: 'text', text: BOT_TEXTS.rentAskAgain, source: 'bot-pin' },
+          state: 'AWAITING_RENT_CHECK',
+          pendingAction: pending,
+        };
+      }
+      matches = user.rentAmounts.includes(typed);
+    }
+    const check = await this.identity.checkRent(inbound.userId, matches, now);
+    if (check.result === 'WRONG') {
+      return {
+        reply: { kind: 'text', text: withLead(BOT_TEXTS.rentWrong(check.remaining), BOT_TEXTS.rentAskAgain), source: 'bot-pin' },
+        state: 'AWAITING_RENT_CHECK',
+        pendingAction: pending,
+      };
+    }
+    if (check.result !== 'OK') return this.rentRefused(check, pending, now);
+    return {
+      reply: { kind: 'text', text: withLead(BOT_TEXTS.rentOk, BOT_TEXTS.createPinAsk), source: 'bot-pin' },
+      state: 'AWAITING_NEW_PIN',
+      pendingAction: pending,
+    };
+  }
+
+  private rentRefused(check: Exclude<RentCheck, { result: 'OK' }>, pending: WhatsappBotAction | null, now: Date): Step {
+    if (check.result === 'WRONG') return this.askNewPinStep(pending, BOT_TEXTS.rentWrong(check.remaining));
+    if (check.result === 'LOCKED')
+      return textStep(BOT_TEXTS.locked(minutesUntil(check.until, now)), 'bot-pin');
+    return textStep(BOT_TEXTS.pinAlreadySet, 'bot-pin');
+  }
+
+  // Secours sans formulaire, 1er message : le code, gardé haché jusqu'à la
+  // confirmation (jamais l'empreinte brute).
+  private async onNewPinTyped(inbound: BotInbound, pending: WhatsappBotAction | null): Promise<Step> {
+    const digest = readString(inbound.payload, 'pinDigest');
+    if (!digest) return textStep(BOT_TEXTS.pinUnavailable, 'bot-pin');
+    if (readBoolean(inbound.payload, 'pinTrivial')) {
+      return {
+        reply: { kind: 'text', text: withLead(BOT_TEXTS.pinTooSimple, BOT_TEXTS.createPinAsk), source: 'bot-pin' },
+        state: 'AWAITING_NEW_PIN',
+        pendingAction: pending,
+      };
+    }
+    return {
+      reply: { kind: 'text', text: BOT_TEXTS.confirmPinAsk, source: 'bot-pin' },
+      state: 'AWAITING_NEW_PIN_CONFIRM',
+      pendingAction: pending,
+      pendingPinHash: await this.identity.hashNewPin(digest),
+    };
+  }
+
+  // Secours sans formulaire, 2e message : la confirmation.
+  private async onNewPinConfirm(
+    inbound: BotInbound,
+    user: BotUser,
+    pending: WhatsappBotAction | null,
+    pendingPinHash: string | null,
+    now: Date,
+  ): Promise<Step> {
+    const digest = readString(inbound.payload, 'pinDigest');
+    if (!digest || !user.whatsappVerifiedPhone) return textStep(BOT_TEXTS.pinUnavailable, 'bot-pin');
+    if (!pendingPinHash || !(await this.identity.matchesPendingPin(digest, pendingPinHash))) {
+      return {
+        reply: { kind: 'text', text: withLead(BOT_TEXTS.pinMismatch, BOT_TEXTS.createPinAsk), source: 'bot-pin' },
+        state: 'AWAITING_NEW_PIN',
+        pendingAction: pending,
+      };
+    }
+    return this.createPin(inbound, user, pendingPinHash, pending, BOT_TEXTS.pinCreatedDeleteTip, now);
+  }
+
+  // Code créé seulement s'il n'en existe aucun ; l'agence est prévenue, puis
+  // la demande en attente (quittance, relevé) part aussitôt.
+  private async createPin(
+    inbound: BotInbound,
+    user: BotUser,
+    hash: string,
+    pending: WhatsappBotAction | null,
+    notice: string,
+    now: Date,
+  ): Promise<Step> {
+    if (!user.whatsappVerifiedPhone) return textStep(BOT_TEXTS.pinUnavailable, 'bot-pin');
+    const created = await this.identity.createPin(inbound.userId, hash, user.whatsappVerifiedPhone, now);
+    if (created === 'ALREADY_SET') return textStep(BOT_TEXTS.pinAlreadySet, 'bot-pin');
+    await this.notifyPinCreated(inbound.userId, user);
+    if (!pending) return menuStep(`${notice}\n\n${BOT_TEXTS.menu(user.firstName)}`);
+    const step = await this.perform(inbound, pending, now);
+    return { ...step, reply: withNotice(step.reply, notice) };
+  }
+
+  // L'agence est prévenue (téléphone perdu ou prêté : elle change le numéro
+  // WhatsApp, ce qui efface le code). Jamais le code dans le message ; un
+  // échec n'annule rien.
+  private async notifyPinCreated(userId: string, user: BotUser): Promise<void> {
+    try {
+      const property = await this.prisma.property.findUnique({
+        where: { id: user.activePropertyId },
+        select: {
+          ownerId: true,
+          address: true,
+          neighborhood: true,
+          city: true,
+          mandates: { where: { status: 'ACTIVE' }, take: 1, select: { managerId: true } },
+        },
+      });
+      if (!property) return;
+      await this.notify.notifyUser({
+        userId: responsibleUserIdFor(property, property.mandates[0]),
+        event: 'whatsapp-pin-created',
+        variables: {
+          tenantName: `${user.firstName} ${user.lastName}`.trim(),
+          propertyAddress: formatPropertyLocation(property),
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `[whatsapp-bot] user=${userId} : agence non prévenue de la création du code`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  // Formulaire si le Flow est configuré, sinon simple message (unité 50).
+  private pinRequest(kind: PinFlowKind, body: string, fallback: string): Reply {
+    if (this.config.get<string>('WHATSAPP_PIN_FLOW_ID'))
+      return { kind: 'flow', flow: kind, body, fallback };
+    return { kind: 'text', text: fallback, source: 'bot-pin' };
+  }
+
+  // notice : ce qui précède la demande (code faux, formulaire expiré...).
+  private askPinStep(action: WhatsappBotAction, notice?: string): Step {
+    return {
+      reply: this.pinRequest('ENTER', withLead(notice, BOT_TEXTS.askPinFlowBody), notice ?? BOT_TEXTS.askPin),
+      state: 'AWAITING_PIN',
+      pendingAction: action,
+    };
+  }
+
+  // Création : formulaire (loyer + code + confirmation) ou, en secours, le
+  // loyer demandé en message. L'état attend le loyer dans les deux cas : un
+  // vieux téléphone sans formulaire peut répondre en simple message.
+  private askNewPinStep(action: WhatsappBotAction | null, notice?: string): Step {
+    return {
+      reply: this.pinRequest(
+        'CREATE',
+        withLead(notice, BOT_TEXTS.createPinFlowBody),
+        withLead(notice, BOT_TEXTS.rentAsk),
+      ),
+      state: 'AWAITING_RENT_CHECK',
+      pendingAction: action,
+    };
   }
 
   private async perform(inbound: BotInbound, action: WhatsappBotAction, now: Date): Promise<Step> {
@@ -473,6 +751,7 @@ export class WhatsappBotService {
     }
     if (reply.kind === 'text')
       return this.whatsapp.reply({ ...base, source: reply.source, text: reply.text });
+    if (reply.kind === 'flow') return this.sendPinFlow(inbound, reply);
     return this.whatsapp.replyDocument({
       ...base,
       source: 'bot-receipt',
@@ -480,6 +759,44 @@ export class WhatsappBotService {
       document: { content: reply.content, filename: 'quittance-warah.pdf', mimeType: 'application/pdf' },
       caption: reply.caption,
     });
+  }
+
+  // Formulaire du code (unité 50). Refusé par Meta (Flow supprimé, pas encore
+  // publié...) : la même demande part aussitôt en simple message, et l'équipe
+  // est alertée. Résultat incertain (UNKNOWN) : rien de plus, pour ne pas
+  // risquer un doublon.
+  private async sendPinFlow(
+    inbound: BotInbound,
+    reply: Extract<Reply, { kind: 'flow' }>,
+  ): Promise<WhatsappSendResult> {
+    const base = { userId: inbound.userId, inboundReceivedAt: inbound.receivedAt };
+    const flowId = this.config.get<string>('WHATSAPP_PIN_FLOW_ID');
+    const result = flowId
+      ? await this.whatsapp.replyFlow({
+          ...base,
+          source: 'bot-pin-flow',
+          body: reply.body,
+          flow: {
+            id: flowId,
+            token: signPinFlowToken(
+              inbound.userId,
+              reply.flow,
+              new Date(),
+              this.config.getOrThrow<string>('PAY_LINK_SECRET'),
+            ),
+            cta: PIN_FLOW_CTA[reply.flow],
+            screen: PIN_FLOW_SCREENS[reply.flow],
+            draft: this.config.get<boolean>('WHATSAPP_PIN_FLOW_DRAFT') === true,
+          },
+        })
+      : null;
+    if (result && result.outcome !== 'FAILED') return result;
+    if (result) {
+      const summary = `[whatsapp-bot] formulaire du code refusé par Meta (message=${result.messageId}), envoi en simple message`;
+      this.logger.warn(summary);
+      Sentry.captureMessage(`WhatsApp : ${summary}`, 'warning');
+    }
+    return this.whatsapp.reply({ ...base, source: 'bot-pin', text: reply.fallback });
   }
 
   // Quittance du dernier paiement confirmé, refabriquée à chaque demande et
@@ -591,6 +908,31 @@ function readString(payload: Prisma.JsonValue, key: string): string | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const value = (payload as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : null;
+}
+
+// « 50 000 », « 50.000 F », « 50000 FCFA » → 50000 ; autre chose → null.
+function parseRent(text: string | null): number | null {
+  if (!text) return null;
+  const cleaned = text.trim().replace(/\s*(f\s*cfa|fcfa|cfa|francs?|f)\.?$/i, '');
+  if (!/^\d[\d\s.,]*$/.test(cleaned)) return null;
+  const digits = cleaned.replace(/\D/g, '');
+  return digits.length > 0 && digits.length <= 9 ? Number(digits) : null;
+}
+
+function readBoolean(payload: Prisma.JsonValue, key: string): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  return (payload as Record<string, unknown>)[key] === true;
+}
+
+// « Code créé ✅ » devant la quittance ou le relevé qui suit la création.
+function withNotice(reply: Reply, notice: string): Reply {
+  if (reply.kind === 'document') return { ...reply, caption: `${notice}\n${reply.caption}` };
+  if (reply.kind === 'text') return { ...reply, text: `${notice}\n\n${reply.text}` };
+  return reply;
+}
+
+function withLead(lead: string | undefined, text: string): string {
+  return lead ? `${lead} ${text}` : text;
 }
 
 function hasPinDigest(payload: Prisma.JsonValue): boolean {

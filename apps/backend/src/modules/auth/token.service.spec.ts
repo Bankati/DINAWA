@@ -44,6 +44,12 @@ describe('TokenService — code locataire', () => {
     await expect(serviceWith('une-autre-cle-de-32-caracteres-au-moins').verifyPin('048213', hash)).resolves.toBe(false);
   }, 30_000);
 
+  it('code choisi dans WhatsApp (unité 50) : hashPinDigest(pinDigest(c)) se vérifie comme hashPin(c)', async () => {
+    const hash = await service.hashPinDigest(service.pinDigest('583920'));
+    await expect(service.verifyPin('583920', hash)).resolves.toBe(true);
+    await expect(service.verifyPin('583921', hash)).resolves.toBe(false);
+  }, 30_000);
+
   it('sans clé configurée : refuse de créer un code mal protégé (503)', async () => {
     await expect(serviceWith(undefined).hashPin('048213')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
@@ -57,7 +63,16 @@ describe('isTrivialPin', () => {
     },
   );
 
-  it.each(['048213', '583920', '112358', '120000', '135790', '246802', '102938'])('accepte %s', (pin) => {
+  // Unité 50 (code choisi par le locataire) : paires, triplets, miroirs,
+  // dates JJMMAA et codes courants.
+  it.each(['112233', '111222', '123321', '150395', '311299', '010101', '147258', '159753', '112358'])(
+    'refuse aussi %s (code choisi)',
+    (pin) => {
+      expect(isTrivialPin(pin)).toBe(true);
+    },
+  );
+
+  it.each(['048213', '583920', '120000', '135790', '246802', '102938', '320517', '481306'])('accepte %s', (pin) => {
     expect(isTrivialPin(pin)).toBe(false);
   });
 });

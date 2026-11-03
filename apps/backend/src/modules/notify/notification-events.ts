@@ -117,6 +117,12 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{tenantName} vous a écrit sur WhatsApp ({propertyAddress}). Répondez depuis WARAH.',
     url: '/messages',
   },
+  // Code locataire créé depuis WhatsApp (unité 50) : jamais le code.
+  'whatsapp-pin-created': {
+    title: 'Code WhatsApp créé',
+    body: '{tenantName} ({propertyAddress}) a créé son code WhatsApp. Pas lui ? Changez son numéro WhatsApp.',
+    url: '/locataires',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {
