@@ -93,6 +93,10 @@ export type InviteTenantResponse = {
   // précédent résilié, nouveau bail sur un autre bien) — pas de nouvelle
   // invitation dans ce cas, voir AuthService.inviteTenant().
   invitationUrl: string | null;
+  // Numéro du robot WhatsApp WARAH (international sans « + »), à transmettre
+  // au locataire avec son invitation — null si WhatsApp est éteint ou le
+  // numéro non configuré.
+  whatsappBotNumber: string | null;
 };
 
 export type LoginResponse = {
@@ -538,6 +542,7 @@ export class AuthService {
     // quand c'est une première invitation (invitationUrl != null). Pour un
     // locataire déjà connu (bail précédent), invitationUrl est null et le template
     // n'affiche pas de bouton "Créer mon compte".
+    const whatsappBotNumber = this.whatsappBotNumber();
     try {
       await this.notify.notifyUser({
         userId: user.id,
@@ -548,13 +553,22 @@ export class AuthService {
           startDate: format(startDate, 'dd/MM/yyyy'),
           monthlyAmount: effectiveMonthlyRent + effectiveMonthlyCharges,
           ...(invitationUrl ? { invitationUrl } : {}),
+          ...(whatsappBotNumber ? { whatsappBotNumber } : {}),
         },
       });
     } catch (notifyError) {
       this.logger.error(`[lease-created] notification échouée pour tenant=${user.id}`, notifyError);
     }
 
-    return { user, lease, invitationUrl };
+    return { user, lease, invitationUrl, whatsappBotNumber };
+  }
+
+  // Le numéro vient de la config backend (comme le lien « Écrire à WARAH »),
+  // jamais d'une variable frontend. Interrupteur éteint : on ne fait pas
+  // connaître un numéro qui ne répondrait pas.
+  private whatsappBotNumber(): string | null {
+    if (this.config.get<boolean>('WHATSAPP_ENABLED') !== true) return null;
+    return this.config.get<string>('WHATSAPP_BUSINESS_NUMBER') || null;
   }
 
   // Utilisé pour les deux chemins de inviteTenant() (nouveau locataire ou

@@ -49,7 +49,7 @@ describe('AuthService', () => {
     paymentScheduleEntry: { createMany: jest.Mock };
     property: { update: jest.Mock };
   };
-  let config: { getOrThrow: jest.Mock };
+  let config: { getOrThrow: jest.Mock; get: jest.Mock };
   let tokens: {
     hashPassword: jest.Mock;
     comparePassword: jest.Mock;
@@ -61,6 +61,7 @@ describe('AuthService', () => {
   let notify: { notifyUser: jest.Mock };
   let listings: { deactivateForProperty: jest.Mock };
 
+  let configValues: Record<string, string | boolean>;
   const CONFIG_VALUES: Record<string, string> = {
     FRONTEND_URL: 'http://localhost:4300',
     INVITATION_TOKEN_SECRET: 'test-secret',
@@ -124,7 +125,11 @@ describe('AuthService', () => {
         count: jest.fn().mockResolvedValue(0),
       },
     };
-    config = { getOrThrow: jest.fn((key: string) => CONFIG_VALUES[key]) };
+    configValues = { ...CONFIG_VALUES };
+    config = {
+      getOrThrow: jest.fn((key: string) => configValues[key]),
+      get: jest.fn((key: string) => configValues[key]),
+    };
     tokens = {
       hashPassword: jest.fn().mockResolvedValue('hashed-password'),
       comparePassword: jest.fn().mockResolvedValue(false),
@@ -608,6 +613,51 @@ describe('AuthService', () => {
       const payload = verifyInvitationTokenPayload(token as string, 'test-secret');
       expect(payload.userId).toBe('tenant-1');
       expect(payload.pwd).toBe(passwordFingerprint('placeholder-hash'));
+    });
+
+    describe('numéro WhatsApp du robot', () => {
+      it('renvoie le numéro et le transmet à l’email quand WhatsApp est allumé', async () => {
+        configValues['WHATSAPP_ENABLED'] = true;
+        configValues['WHATSAPP_BUSINESS_NUMBER'] = '22899327312';
+
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(result.whatsappBotNumber).toBe('22899327312');
+        const [params] = notify.notifyUser.mock.calls[0] as [{ variables: Record<string, unknown> }];
+        expect(params.variables['whatsappBotNumber']).toBe('22899327312');
+      });
+
+      it('renvoie null et laisse l’email inchangé quand WhatsApp est éteint', async () => {
+        configValues['WHATSAPP_ENABLED'] = false;
+        configValues['WHATSAPP_BUSINESS_NUMBER'] = '22899327312';
+
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(result.whatsappBotNumber).toBeNull();
+        const [params] = notify.notifyUser.mock.calls[0] as [{ variables: Record<string, unknown> }];
+        expect(params.variables).not.toHaveProperty('whatsappBotNumber');
+      });
+
+      it('renvoie null quand WhatsApp est allumé sans numéro configuré', async () => {
+        configValues['WHATSAPP_ENABLED'] = true;
+
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(result.whatsappBotNumber).toBeNull();
+        const [params] = notify.notifyUser.mock.calls[0] as [{ variables: Record<string, unknown> }];
+        expect(params.variables).not.toHaveProperty('whatsappBotNumber');
+      });
+
+      it('renvoie aussi le numéro pour un locataire déjà connu (nouveau bail, pas de lien)', async () => {
+        configValues['WHATSAPP_ENABLED'] = true;
+        configValues['WHATSAPP_BUSINESS_NUMBER'] = '22899327312';
+        prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
+
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(result.invitationUrl).toBeNull();
+        expect(result.whatsappBotNumber).toBe('22899327312');
+      });
     });
 
     it('ne fait pas échouer la création si la notification lease-created échoue', async () => {
