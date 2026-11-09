@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { isWhatsappPhoneVerified } from '../whatsapp-consent/consent-writer';
 import { canActOnProperty } from '../../common/permissions/property-access';
+import { UNCONFIRMED_LEASE_STATUSES } from '../../common/constants';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { BlockTenantDto } from './dto/block-tenant.dto';
 import { LeaseHistoryQueryDto } from './dto/lease-history-query.dto';
@@ -80,6 +81,12 @@ export type TenantSummary = {
 // ceux d'un bien sous mandat ACTIVE. Un locataire qui déménage chez un autre
 // bailleur ne doit pas exposer sa nouvelle adresse ni son loyer à l'ancien
 // (audit de sécurité du 2026-10-20, M4).
+// Accord du locataire déjà inscrit (09/11/2026) : un bail en attente ou
+// annulé n'a jamais commencé. Il n'apparaît dans aucun historique et ne
+// crée aucun « lien » avec le locataire — sinon taper le numéro de
+// quelqu'un suffirait à voir son nom et son email dans l'historique.
+const STARTED_LEASES: Prisma.LeaseWhereInput = { status: { notIn: [...UNCONFIRMED_LEASE_STATUSES] } };
+
 function leasesVisibleTo(userId: string): Prisma.LeaseWhereInput {
   return {
     OR: [
@@ -116,7 +123,7 @@ export class TenantsService {
         select: { id: true, role: true },
       }),
       this.prisma.lease.findFirst({
-        where: { propertyId, tenantUserId, status: { in: ['ACTIVE', 'EXPIRED'] } },
+        where: { propertyId, tenantUserId, status: { in: ['ACTIVE', 'EXPIRED', 'PENDING_TENANT'] } },
         select: { id: true },
       }),
       this.prisma.tenantPropertyBlock.findUnique({
@@ -230,7 +237,7 @@ export class TenantsService {
     const access = await canActOnProperty(this.prisma, user, property);
     if (!access.canRead) throw new ForbiddenException('Accès refusé à ce bien');
 
-    return this.paginateLeaseHistory({ propertyId }, query);
+    return this.paginateLeaseHistory({ propertyId, ...STARTED_LEASES }, query);
   }
 
   // Liste les locataires invités par l'utilisateur courant (via
@@ -256,6 +263,10 @@ export class TenantsService {
               },
             },
           },
+          // Locataire déjà inscrit qui a accepté un bail de l'appelant
+          // (09/11/2026) : il a été invité par quelqu'un d'autre à l'origine,
+          // mais son bail actif est ici. Avant son « Oui », il n'apparaît pas.
+          { leasesAsTenant: { some: { status: 'ACTIVE', ownerId: user.id } } },
         ],
       },
       take: 100,
@@ -335,7 +346,7 @@ export class TenantsService {
 
     if (!isAdmin && !isSelf) {
       const hasRelation = await this.prisma.lease.findFirst({
-        where: { tenantUserId, ...relationFilter },
+        where: { tenantUserId, ...STARTED_LEASES, ...relationFilter },
         select: { id: true },
       });
       if (!hasRelation) throw new ForbiddenException('Accès refusé à cet historique');
@@ -343,6 +354,7 @@ export class TenantsService {
 
     const where: Prisma.LeaseWhereInput = {
       tenantUserId,
+      ...STARTED_LEASES,
       ...(isAdmin || isSelf ? {} : relationFilter),
     };
 

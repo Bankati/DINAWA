@@ -220,6 +220,18 @@ class EnvironmentVariables {
   @IsOptional()
   WHATSAPP_ENABLED?: boolean = false;
 
+  // Modèle Meta « confirmation_logement » (accord du locataire, 09/11/2026)
+  // approuvé chez Meta ? false tant qu'il ne l'est pas : la demande part
+  // alors par email et dans l'application seulement, sans erreur. Même
+  // lecture de la valeur brute que WHATSAPP_ENABLED.
+  @Transform(({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+    const raw = obj[key];
+    return raw === true || raw === 'true';
+  })
+  @IsBoolean()
+  @IsOptional()
+  WHATSAPP_LEASE_CONFIRMATION_ENABLED?: boolean = false;
+
   // Les WHATSAPP_* ci-dessous ne sont obligatoires que si le canal est allumé
   // — un environnement sans compte Meta (dev, CI) démarre normalement.
   @ValidateIf((env: EnvironmentVariables) => env.WHATSAPP_ENABLED === true)

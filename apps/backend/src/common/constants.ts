@@ -1,3 +1,5 @@
+import { LeaseStatus } from '@prisma/client';
+
 // Limites de taille — Supabase Storage (voir architecture.md, Storage Model)
 export const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5 Mo
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10 Mo
@@ -243,3 +245,20 @@ export const PAYDUNYA_MIN_INVOICE_FCFA = 200;
 // changer phone/payoutOperator d'un OWNER/MANAGER, voir ProfileService) —
 // limité pour ne jamais servir d'oracle de mot de passe.
 export const THROTTLE_PROFILE_UPDATE = { default: { limit: 10, ttl: 3_600_000 } };
+
+// Accord du locataire déjà inscrit (registre des décisions, 09/11/2026 ;
+// contrat d'API du même jour). Un bail créé pour un locataire qui a déjà un
+// compte activé attend son « Oui » : la demande expire 7 jours après l'envoi,
+// avec un rappel à 2 jours et un autre à 5 jours. Après 3 refus pour un
+// même couple (inviteur, locataire), le renvoi n'est plus possible.
+export const LEASE_CONFIRMATION_TTL_DAYS = 7;
+export const LEASE_CONFIRMATION_REMINDER_DAYS = [2, 5] as const;
+export const LEASE_CONFIRMATION_MAX_REFUSALS = 3;
+// Passage horaire : rappels (dans la plage 7 h – 21 h des locataires) et
+// expirations. Décalé des rappels de loyer (:00) et des retards (:30).
+export const CRON_LEASE_CONFIRMATIONS = '15 * * * *';
+// Statuts d'un bail qui n'a jamais commencé : en attente du locataire, ou
+// annulé (refus, expiration, annulation). Exclus de l'historique, des
+// comptes et des droits d'accès — un propriétaire qui a tapé un numéro
+// n'obtient ainsi aucun lien avec le compte qui le porte.
+export const UNCONFIRMED_LEASE_STATUSES: readonly LeaseStatus[] = [LeaseStatus.PENDING_TENANT, LeaseStatus.CANCELLED];

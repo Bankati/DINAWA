@@ -22,6 +22,14 @@ export type WhatsappTemplateSpec = {
   // PDF en en-tête (quittance) : la première pièce jointe de l'email, déjà
   // générée en mémoire — jamais stockée (invariant #5).
   document?: { filename: string };
+  // Boutons de réponse rapide (accord du locataire, 09/11/2026) : le code
+  // caché de chaque bouton, dans l'ordre des boutons du modèle publié chez
+  // Meta. Meta le renvoie tel quel dans le webhook quand on appuie.
+  quickReplies?: readonly { variable: string }[];
+  // Contrôle d'envoi particulier : 'lease-confirmation' = demande d'accord à
+  // un locataire SANS bail actif (seule exception à canUseWhatsapp, voir
+  // WhatsappAccessService.canSendLeaseConfirmation).
+  access?: 'lease-confirmation';
   // Nouvel essai automatique sur refus temporaire (décision 2). false pour
   // la quittance : le PDF n'est pas stocké, l'email et le robot couvrent.
   retry: boolean;
@@ -70,6 +78,36 @@ const TENANT_OVERDUE: WhatsappTemplateSpec = {
     'Vous pouvez payer par Flooz ou Mixx by Yas avec le bouton ci-dessous.',
 };
 
+// Demande d'accord au locataire déjà inscrit (registre des décisions et
+// contrat d'API du 09/11/2026, maquette C1). Modèle « utility » à 2 boutons
+// de réponse rapide, sans émoji dans les boutons (règle Meta) : « Oui, c'est
+// mon logement » (code caché LC_ACCEPT:<id>) et « Ce n'est pas moi »
+// (LC_REFUSE:<id>). Le robot traite la réponse (WhatsappBotService). Texte et
+// création chez Meta : docs/whatsapp-modele-confirmation-logement.md. Tant
+// que le modèle n'est pas approuvé, WHATSAPP_LEASE_CONFIRMATION_ENABLED
+// reste à false : seul ce WhatsApp est sauté, l'email et l'application
+// partent toujours. Pas de nouvel essai : les rappels à 2 et 5 jours
+// renvoient la demande.
+const LEASE_CONFIRMATION_REQUEST: WhatsappTemplateSpec = {
+  name: 'confirmation_logement',
+  body: [
+    { variable: 'tenantFirstName' },
+    { variable: 'inviterName' },
+    { variable: 'propertyAddress' },
+    { variable: 'monthlyRent', format: 'amount' },
+    { variable: 'startDate' },
+    { variable: 'expiresAt' },
+  ],
+  quickReplies: [{ variable: 'acceptPayload' }, { variable: 'refusePayload' }],
+  access: 'lease-confirmation',
+  retry: false,
+  metaText:
+    'Bonjour {{1}},\n{{2}} vous ajoute comme locataire sur WARAH :\n📍 {{3}}\n' +
+    '💰 {{4}} F par mois, à partir du {{5}}\n' +
+    'Est-ce bien votre logement ? Sans réponse, la demande expire le {{6}}. ' +
+    'Répondez avec un des boutons ci-dessous.',
+};
+
 // Record exhaustif : un événement ajouté à NotificationEvent sans être
 // listé ici ne compile pas. null = pas de WhatsApp, choix explicite.
 export const WHATSAPP_TEMPLATES: Record<NotificationEvent, WhatsappTemplateSpec | null> = {
@@ -94,6 +132,11 @@ export const WHATSAPP_TEMPLATES: Record<NotificationEvent, WhatsappTemplateSpec 
   'payout-failed': null,
   'payout-failed-admin': null,
   'subscription-invoice-due': null,
+  'lease-confirmation-request': LEASE_CONFIRMATION_REQUEST,
+  // Destinés au propriétaire ou au gestionnaire, jamais à un locataire.
+  'lease-confirmation-accepted': null,
+  'lease-confirmation-refused': null,
+  'lease-confirmation-expired': null,
 };
 
 // Modèles autorisés à un nouvel essai — lu par la tâche whatsapp-retry,
@@ -108,7 +151,7 @@ export const RETRYABLE_TEMPLATE_NAMES: readonly WhatsappTemplateName[] = Object.
 export const MAX_TEMPLATE_PARAM_LENGTH = 200;
 
 export type BuiltTemplate =
-  | { ok: true; bodyParams: string[]; buttonParam?: string }
+  | { ok: true; bodyParams: string[]; buttonParam?: string; quickReplyPayloads?: string[] }
   | { ok: false; missing: string[] };
 
 // Remplit les trous à partir des variables nommées. Une variable absente ou
@@ -128,8 +171,14 @@ export function buildTemplate(spec: WhatsappTemplateSpec, variables: TemplateVar
 
   const bodyParams = spec.body.map((field) => truncate(formatField(read(field.variable), field.format)));
   const buttonParam = spec.button ? read(spec.button.variable) : undefined;
+  const quickReplyPayloads = spec.quickReplies?.map((reply) => read(reply.variable));
   if (missing.length > 0) return { ok: false, missing };
-  return buttonParam === undefined ? { ok: true, bodyParams } : { ok: true, bodyParams, buttonParam };
+  return {
+    ok: true,
+    bodyParams,
+    ...(buttonParam === undefined ? {} : { buttonParam }),
+    ...(quickReplyPayloads === undefined ? {} : { quickReplyPayloads }),
+  };
 }
 
 function truncate(value: string): string {

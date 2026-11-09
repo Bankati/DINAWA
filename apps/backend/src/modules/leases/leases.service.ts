@@ -37,6 +37,17 @@ export class LeasesService {
     if (lease.status === 'TERMINATED') {
       throw new ConflictException('Ce bail est déjà résilié');
     }
+    // Accord du locataire (09/11/2026) : un bail en attente s'annule par la
+    // demande (POST /lease-confirmations/:id/cancel), un bail annulé n'a
+    // jamais commencé — aucun des deux ne se résilie.
+    if (lease.status === 'PENDING_TENANT') {
+      throw new ConflictException(
+        "Ce bail attend la confirmation du locataire — annulez la demande au lieu de le résilier",
+      );
+    }
+    if (lease.status === 'CANCELLED') {
+      throw new ConflictException("Ce bail n'a jamais commencé : il n'y a rien à résilier");
+    }
 
     const terminatedAt = new Date();
 

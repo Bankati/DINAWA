@@ -8,6 +8,7 @@ import { WhatsappChannelModule } from '../whatsapp-channel/whatsapp-channel.modu
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { PlatformSettingsModule } from '../platform-settings/platform-settings.module';
 import { WhatsappWebhookModule } from '../whatsapp-webhook/whatsapp-webhook.module';
+import { LeaseConfirmationsModule } from '../lease-confirmations/lease-confirmations.module';
 import { InactivityTask } from './inactivity.task';
 import { SupabaseKeepaliveTask } from './supabase-keepalive.task';
 import { RemindersTask } from './reminders.task';
@@ -18,6 +19,7 @@ import { PayoutsTask } from './payouts.task';
 import { SubscriptionBillingTask } from './subscription-billing.task';
 import { WhatsappInboundRecoveryTask } from './whatsapp-inbound-recovery.task';
 import { WhatsappRetryTask } from './whatsapp-retry.task';
+import { LeaseConfirmationsTask } from './lease-confirmations.task';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { WhatsappRetryTask } from './whatsapp-retry.task';
     SubscriptionsModule,
     PlatformSettingsModule,
     WhatsappWebhookModule,
+    LeaseConfirmationsModule,
   ],
   providers: [
     InactivityTask,
@@ -42,6 +45,7 @@ import { WhatsappRetryTask } from './whatsapp-retry.task';
     SubscriptionBillingTask,
     WhatsappInboundRecoveryTask,
     WhatsappRetryTask,
+    LeaseConfirmationsTask,
   ],
 })
 export class SchedulingModule {}

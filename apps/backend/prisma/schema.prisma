@@ -85,10 +85,37 @@ enum PropertyDocumentType {
   OTHER
 }
 
+// Accord du locataire déjà inscrit (registre des décisions, 09/11/2026) :
+// PENDING_TENANT = bail créé pour un locataire qui a déjà un compte activé,
+// en attente de son « Oui » (aucune échéance, bien réservé, annonce
+// retirée). CANCELLED = bail en attente qui n'a jamais commencé (refus,
+// expiration ou annulation de la demande). Ni l'un ni l'autre n'apparaît
+// dans l'historique, les comptes ou les droits d'accès
+// (UNCONFIRMED_LEASE_STATUSES dans common/constants.ts).
 enum LeaseStatus {
   ACTIVE
   TERMINATED
   EXPIRED
+  PENDING_TENANT
+  CANCELLED
+}
+
+// Demande de confirmation d'un bail (LeaseConfirmation). PENDING : en
+// attente. ACCEPTED : « Oui, c'est mon logement ». REFUSED : « Ce n'est pas
+// moi ». EXPIRED : sans réponse 7 jours après l'envoi. CANCELLED : annulée
+// par le propriétaire ou le gestionnaire.
+enum LeaseConfirmationStatus {
+  PENDING
+  ACCEPTED
+  REFUSED
+  EXPIRED
+  CANCELLED
+}
+
+// Où le locataire a répondu : espace WARAH (bandeau) ou bouton WhatsApp.
+enum LeaseConfirmationChannel {
+  APP
+  WHATSAPP
 }
 
 enum PaymentFrequency {
@@ -393,32 +420,34 @@ model User {
   managerProfile ManagerProfile?
   adminProfile   AdminProfile?
 
-  tenantsInvited         TenantProfile[]        @relation("TenantInvitedBy")
-  ownedProperties        Property[]             @relation("PropertyOwner")
-  listingsPublished      Listing[]
-  leasesAsOwner          Lease[]                @relation("LeaseOwner")
-  leasesAsTenant         Lease[]                @relation("LeaseTenant")
-  tenantBlocksReceived   TenantPropertyBlock[]  @relation("TenantPropertyBlockTenant")
-  tenantBlocksAuthored   TenantPropertyBlock[]  @relation("TenantPropertyBlockAuthor")
-  mandatesAsOwner        Mandate[]              @relation("MandateOwner")
-  mandatesAsManager      Mandate[]              @relation("MandateManager")
-  paymentsRecorded       Payment[]              @relation("PaymentRecordedBy")
-  paymentsConfirmed      Payment[]              @relation("PaymentConfirmedBy")
-  paymentsAsBeneficiary  Payment[]              @relation("PaymentBeneficiary")
-  payouts                Payout[]               @relation("PayoutBeneficiary")
-  managerReviewsGiven    ManagerReview[]        @relation("ManagerReviewOwner")
-  managerReviewsReceived ManagerReview[]        @relation("ManagerReviewManager")
-  subscription           Subscription?
-  pushSubscriptions      PushSubscription[]
-  passwordResetOtps      PasswordResetOtp[]
-  sessions               Session[]
-  notifications          Notification[]
-  auditLogs              AuditLog[]
-  whatsappMessages       WhatsappMessage[]
-  whatsappConsentEvents  WhatsappConsentEvent[] @relation("WhatsappConsentSubject")
-  whatsappConsentActions WhatsappConsentEvent[] @relation("WhatsappConsentActor")
-  whatsappConversation   WhatsappConversation?
-  whatsappThreads        WhatsappThread[]       @relation("WhatsappThreadTenant")
+  tenantsInvited             TenantProfile[]        @relation("TenantInvitedBy")
+  ownedProperties            Property[]             @relation("PropertyOwner")
+  listingsPublished          Listing[]
+  leasesAsOwner              Lease[]                @relation("LeaseOwner")
+  leasesAsTenant             Lease[]                @relation("LeaseTenant")
+  tenantBlocksReceived       TenantPropertyBlock[]  @relation("TenantPropertyBlockTenant")
+  tenantBlocksAuthored       TenantPropertyBlock[]  @relation("TenantPropertyBlockAuthor")
+  mandatesAsOwner            Mandate[]              @relation("MandateOwner")
+  mandatesAsManager          Mandate[]              @relation("MandateManager")
+  paymentsRecorded           Payment[]              @relation("PaymentRecordedBy")
+  paymentsConfirmed          Payment[]              @relation("PaymentConfirmedBy")
+  paymentsAsBeneficiary      Payment[]              @relation("PaymentBeneficiary")
+  payouts                    Payout[]               @relation("PayoutBeneficiary")
+  managerReviewsGiven        ManagerReview[]        @relation("ManagerReviewOwner")
+  managerReviewsReceived     ManagerReview[]        @relation("ManagerReviewManager")
+  subscription               Subscription?
+  pushSubscriptions          PushSubscription[]
+  passwordResetOtps          PasswordResetOtp[]
+  sessions                   Session[]
+  notifications              Notification[]
+  auditLogs                  AuditLog[]
+  whatsappMessages           WhatsappMessage[]
+  whatsappConsentEvents      WhatsappConsentEvent[] @relation("WhatsappConsentSubject")
+  whatsappConsentActions     WhatsappConsentEvent[] @relation("WhatsappConsentActor")
+  whatsappConversation       WhatsappConversation?
+  whatsappThreads            WhatsappThread[]       @relation("WhatsappThreadTenant")
+  leaseConfirmationsReceived LeaseConfirmation[]    @relation("LeaseConfirmationTenant")
+  leaseConfirmationsSent     LeaseConfirmation[]    @relation("LeaseConfirmationInviter")
 
   @@map("users")
 }
@@ -558,13 +587,14 @@ model Property {
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
 
-  photos          PropertyPhoto[]
-  documents       PropertyDocument[]
-  leases          Lease[]
-  mandates        Mandate[]
-  listings        Listing[]
-  tenantBlocks    TenantPropertyBlock[]
-  whatsappThreads WhatsappThread[]
+  photos             PropertyPhoto[]
+  documents          PropertyDocument[]
+  leases             Lease[]
+  mandates           Mandate[]
+  listings           Listing[]
+  tenantBlocks       TenantPropertyBlock[]
+  whatsappThreads    WhatsappThread[]
+  leaseConfirmations LeaseConfirmation[]
 
   @@index([ownerId])
   @@index([status])
@@ -622,7 +652,9 @@ model TenantPropertyBlock {
 // Contrainte non exprimable en Prisma : un seul Lease ACTIVE par
 // tenantUserId à la fois — déjà en base (migration
 // 20260701104113_partial_unique_active_constraints, unité 02),
-// `leases_tenant_active_unique`.
+// `leases_tenant_active_unique`. Même chose pour un seul bail
+// PENDING_TENANT par bien (`leases_property_pending_unique`, migration
+// 20261109120100_lease_confirmations) : le bien est réservé pendant l'attente.
 model Lease {
   id                      String           @id @default(cuid())
   propertyId              String
@@ -653,12 +685,70 @@ model Lease {
 
   scheduleEntries PaymentScheduleEntry[]
   payments        Payment[]
+  confirmations   LeaseConfirmation[]
 
   @@index([propertyId])
   @@index([ownerId])
   @@index([tenantUserId])
   @@index([status])
   @@map("leases")
+}
+
+// Demande de confirmation d'un bail à un locataire qui a déjà un compte
+// activé (registre des décisions, 09/11/2026 ; contrat d'API du même jour).
+// Le bail (status PENDING_TENANT) porte les conditions ; cette ligne porte
+// la demande : ce que l'inviteur a tapé, les dates d'envoi et de rappel, la
+// réponse, et l'état du bien et de l'annonce à rétablir si la demande
+// n'aboutit pas. Toutes les transitions sont des écritures conditionnelles
+// sur `status` (LeaseConfirmationsService) : deux réponses simultanées n'en
+// appliquent qu'une. Un seul PENDING par bail
+// (`lease_confirmations_lease_pending_unique`, index partiel en SQL).
+model LeaseConfirmation {
+  id                     String                    @id @default(cuid())
+  leaseId                String
+  lease                  Lease                     @relation(fields: [leaseId], references: [id])
+  propertyId             String
+  property               Property                  @relation(fields: [propertyId], references: [id])
+  tenantUserId           String
+  tenant                 User                      @relation("LeaseConfirmationTenant", fields: [tenantUserId], references: [id])
+  // Propriétaire ou gestionnaire qui a invité : les 3 refus se comptent
+  // par couple (inviteur, locataire), décision du boss du 09/11.
+  inviterUserId          String
+  inviter                User                      @relation("LeaseConfirmationInviter", fields: [inviterUserId], references: [id])
+  // Ce que l'inviteur a tapé. Le propriétaire ne voit jamais le nom ni
+  // l'email enregistrés dans le compte du locataire.
+  typedFirstName         String
+  typedLastName          String
+  typedPhone             String
+  typedEmail             String
+  status                 LeaseConfirmationStatus   @default(PENDING)
+  sentAt                 DateTime                  @db.Timestamptz(6)
+  expiresAt              DateTime                  @db.Timestamptz(6)
+  // Rappels à 2 et 5 jours : réservés par écriture conditionnelle juste
+  // avant l'envoi (un seul envoi même si deux passages se chevauchent).
+  reminder1SentAt        DateTime?                 @db.Timestamptz(6)
+  reminder2SentAt        DateTime?                 @db.Timestamptz(6)
+  // Premier WhatsApp de la demande accepté par Meta (demande ou rappel) :
+  // sert à dire à l'écran par où la demande est partie (channels).
+  whatsappSentAt         DateTime?                 @db.Timestamptz(6)
+  respondedAt            DateTime?                 @db.Timestamptz(6)
+  respondedVia           LeaseConfirmationChannel?
+  // État d'avant la réservation, rétabli au refus, à l'expiration et à
+  // l'annulation.
+  previousPropertyStatus PropertyStatus
+  listingWasActive       Boolean
+  // Demande renvoyée (après un refus ou une expiration) : elle est
+  // remplacée par une nouvelle demande ou une invitation classique.
+  resentAt               DateTime?                 @db.Timestamptz(6)
+  createdAt              DateTime                  @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime                  @updatedAt @db.Timestamptz(6)
+
+  @@index([leaseId])
+  @@index([propertyId])
+  @@index([tenantUserId, status])
+  @@index([inviterUserId, tenantUserId, status])
+  @@index([status, expiresAt])
+  @@map("lease_confirmations")
 }
 
 // ────────────────────────────────────────────────────────────────

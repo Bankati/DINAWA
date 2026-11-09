@@ -20,7 +20,7 @@ export type NotifyUserParams = {
   forceEmail?: boolean;
   // Échéance / paiement concernés : rattachés au message WhatsApp pour le
   // suivi et les nouveaux essais (unité 46). Sans effet sur push/email.
-  relatedTo?: { scheduleEntryId?: string; paymentId?: string };
+  relatedTo?: { scheduleEntryId?: string; paymentId?: string; propertyId?: string };
 };
 
 // Clés jamais persistées dans l'historique (Notification.payload) même si
@@ -30,7 +30,9 @@ export type NotifyUserParams = {
 // consultable via GET /api/notifications. payToken / payLinkUrl (unité 46) :
 // le lien de paiement sans connexion, valable jusqu'à 30 jours après
 // l'échéance.
-const SENSITIVE_PAYLOAD_KEYS = new Set(['invitationUrl', 'payToken', 'payLinkUrl']);
+// acceptPayload / refusePayload (09/11/2026) : codes cachés des boutons
+// WhatsApp de la demande d'accord, sans intérêt dans l'historique.
+const SENSITIVE_PAYLOAD_KEYS = new Set(['invitationUrl', 'payToken', 'payLinkUrl', 'acceptPayload', 'refusePayload']);
 
 function sanitizePayloadForStorage(variables: TemplateVariables): TemplateVariables {
   const safe: TemplateVariables = {};
@@ -62,6 +64,13 @@ export class NotifyService {
   ) {}
 
   async notifyUser(params: NotifyUserParams): Promise<void> {
+    await this.notifyUserWithOutcome(params);
+  }
+
+  // Même envoi que notifyUser(), en disant si le WhatsApp est parti (Meta l'a
+  // accepté). Utilisé par la demande d'accord du locataire (09/11/2026) pour
+  // indiquer à l'écran par où elle est partie (channels).
+  async notifyUserWithOutcome(params: NotifyUserParams): Promise<{ whatsappSent: boolean }> {
     const user = await this.prisma.user.findUnique({
       where: { id: params.userId },
       select: {
@@ -74,11 +83,12 @@ export class NotifyService {
     });
     if (!user) {
       this.logger.warn(`[notify/${params.event}] utilisateur introuvable: ${params.userId}`);
-      return;
+      return { whatsappSent: false };
     }
 
     await this.sendPushOrEmail(user, params);
-    if (user.role === 'TENANT') await this.sendWhatsapp(params);
+    const whatsappSent = user.role === 'TENANT' ? await this.sendWhatsapp(params) : false;
+    return { whatsappSent };
   }
 
   private async sendPushOrEmail(
@@ -110,10 +120,11 @@ export class NotifyService {
   }
 
   // Chaque tentative est tracée par WhatsappService (WhatsappMessage), d'où
-  // l'absence de ligne Notification pour ce canal. Ne lève jamais.
-  private async sendWhatsapp(params: NotifyUserParams): Promise<void> {
+  // l'absence de ligne Notification pour ce canal. Ne lève jamais. Renvoie
+  // true seulement si Meta a accepté le message.
+  private async sendWhatsapp(params: NotifyUserParams): Promise<boolean> {
     const spec = WHATSAPP_TEMPLATES[params.event];
-    if (!spec) return;
+    if (!spec) return false;
 
     const built = buildTemplate(spec, params.variables);
     if (!built.ok) {
@@ -122,7 +133,7 @@ export class NotifyService {
       const summary = `[notify/${params.event}] WhatsApp non envoyé pour user=${params.userId} : variable(s) manquante(s) ${built.missing.join(', ')}`;
       this.logger.error(summary);
       Sentry.captureMessage(summary, 'warning');
-      return;
+      return false;
     }
 
     const context = {
@@ -131,13 +142,22 @@ export class NotifyService {
       scheduleEntryId: params.relatedTo?.scheduleEntryId,
       paymentId: params.relatedTo?.paymentId,
     };
+    // Demande d'accord (09/11/2026) : contrôlée sur le bien de la demande.
+    const propertyId = params.relatedTo?.propertyId;
+    if (spec.access === 'lease-confirmation' && !propertyId) {
+      this.logger.error(`[notify/${params.event}] WhatsApp non envoyé pour user=${params.userId} : bien absent`);
+      return false;
+    }
+    const access = spec.access === 'lease-confirmation' && propertyId
+      ? { access: { kind: 'lease-confirmation' as const, propertyId } }
+      : {};
     try {
       let result: WhatsappSendResult;
       if (spec.document) {
         const pdf = params.emailAttachments?.[0];
         if (!pdf) {
           this.logger.error(`[notify/${params.event}] WhatsApp non envoyé pour user=${params.userId} : PDF absent`);
-          return;
+          return false;
         }
         result = await this.whatsapp.sendDocument({
           ...context,
@@ -147,13 +167,20 @@ export class NotifyService {
       } else {
         result = await this.whatsapp.send({
           ...context,
+          ...access,
           kind: 'template',
-          template: { name: spec.name, bodyParams: built.bodyParams, buttonParam: built.buttonParam },
+          template: {
+            name: spec.name,
+            bodyParams: built.bodyParams,
+            buttonParam: built.buttonParam,
+            quickReplyPayloads: built.quickReplyPayloads,
+          },
         });
       }
       if (result.outcome !== 'SENT' && result.outcome !== 'REFUSED') {
         this.logger.warn(`[notify/${params.event}] WhatsApp ${result.outcome} pour user=${params.userId}`);
       }
+      return result.outcome === 'SENT';
     } catch (error) {
       // Erreur de base AVANT l'appel à Meta (WhatsappService ne lève que
       // dans ce cas) : rien n'est parti, l'email/push reste valable.
@@ -161,6 +188,7 @@ export class NotifyService {
         `[notify/${params.event}] WhatsApp impossible pour user=${params.userId}`,
         error instanceof Error ? error.stack : undefined,
       );
+      return false;
     }
   }
 

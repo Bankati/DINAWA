@@ -55,3 +55,28 @@ export function buildScheduleEntries(
 
   return entries;
 }
+
+// Accord du locataire déjà inscrit (registre des décisions du 09/11/2026) :
+// l'échéancier n'est créé qu'à l'acceptation, à partir de la date de début
+// du bail. Règle : une échéance dont la date due tombe AVANT le jour de
+// l'acceptation prend pour date due ce jour-là (00:00 UTC, convention des
+// dueDate — Lomé est en UTC+0). La période (periodStart / periodEnd) et le
+// montant ne changent pas. Le délai de tolérance du retard court donc à
+// partir de l'acceptation : l'attente ne rend jamais une échéance « en
+// retard ». Fonction pure.
+export function dueDateAfterAcceptance(dueDate: Date, acceptedAt: Date): Date {
+  const acceptanceDay = new Date(
+    Date.UTC(acceptedAt.getUTCFullYear(), acceptedAt.getUTCMonth(), acceptedAt.getUTCDate()),
+  );
+  return dueDate < acceptanceDay ? acceptanceDay : dueDate;
+}
+
+export function shiftDueDatesToAcceptance(
+  entries: ScheduleEntryInput[],
+  acceptedAt: Date,
+): ScheduleEntryInput[] {
+  return entries.map((entry) => ({
+    ...entry,
+    dueDate: dueDateAfterAcceptance(new Date(entry.dueDate), acceptedAt),
+  }));
+}

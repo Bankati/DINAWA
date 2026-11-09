@@ -11,7 +11,9 @@ import { isWithinReplyWindow } from './reply-window';
 // plan d'implémentation). Leur approbation se fait chez Meta, hors code.
 // Pas de modèle de bienvenue : depuis l'unité 45, la bienvenue est la
 // réponse libre au « OUI » du locataire (décision 4).
-export type WhatsappTemplateName = 'rappel_loyer' | 'paiement_recu' | 'loyer_en_retard';
+// confirmation_logement : demande d'accord au locataire déjà inscrit
+// (09/11/2026), voir notify/whatsapp-templates.ts.
+export type WhatsappTemplateName = 'rappel_loyer' | 'paiement_recu' | 'loyer_en_retard' | 'confirmation_logement';
 
 const TEMPLATE_LANGUAGE = 'fr';
 
@@ -59,9 +61,16 @@ type TemplateParams = {
   bodyParams: string[];
   // Partie variable du bouton URL du modèle (ex. jeton du lien /payer).
   buttonParam?: string;
+  // Codes cachés des boutons de réponse rapide, dans l'ordre des boutons.
+  quickReplyPayloads?: string[];
 };
 
-export type WhatsappSendInput = SendContext &
+// Contrôle d'envoi particulier (accord du locataire, 09/11/2026) : le
+// locataire n'a pas (encore) de bail actif, le forfait regardé est celui du
+// responsable du bien de la demande.
+export type WhatsappSendAccess = { kind: 'lease-confirmation'; propertyId: string };
+
+export type WhatsappSendInput = SendContext & { access?: WhatsappSendAccess } &
   ({ kind: 'template'; template: TemplateParams } | { kind: 'text'; text: string });
 
 export type WhatsappDocumentInput = SendContext & {
@@ -98,7 +107,9 @@ export class WhatsappService {
   ) {}
 
   async send(input: WhatsappSendInput): Promise<WhatsappSendResult> {
-    const access = await this.access.canUseWhatsapp(input.userId);
+    const access = input.access
+      ? await this.access.canSendLeaseConfirmation(input.userId, input.access.propertyId, input.kind === 'template')
+      : await this.access.canUseWhatsapp(input.userId);
     if (!access.allowed) return this.refused(input, access.reason);
 
     const message = await this.createQueued(input, access.recipientPhone, {
@@ -139,6 +150,23 @@ export class WhatsappService {
       source: input.source,
       threadId: input.threadId,
       sentByUserId: input.sentByUserId,
+      kind: 'text',
+      text: input.text,
+    });
+  }
+
+  // Réponse du robot à un bouton de la demande d'accord (09/11/2026) : le
+  // locataire n'a peut-être pas de bail actif (refus, demande close), d'où le
+  // contrôle canSendLeaseConfirmation sur le bien de la demande, plus la
+  // fenêtre de 24 h ouverte par l'appui sur le bouton.
+  async replyLeaseConfirmation(
+    input: SendContext & { propertyId: string; text: string; inboundReceivedAt: Date },
+  ): Promise<WhatsappSendResult> {
+    if (!isWithinReplyWindow(input.inboundReceivedAt)) return this.refused(input, 'REPLY_WINDOW_CLOSED');
+    return this.send({
+      userId: input.userId,
+      source: input.source,
+      access: { kind: 'lease-confirmation', propertyId: input.propertyId },
       kind: 'text',
       text: input.text,
     });
@@ -416,7 +444,9 @@ function templatePayload(template: Pick<TemplateParams, 'bodyParams' | 'buttonPa
     : { bodyParams: template.bodyParams, buttonParam: template.buttonParam };
 }
 
-function templateComponents(template: Pick<TemplateParams, 'bodyParams' | 'buttonParam'>): TemplateComponent[] {
+function templateComponents(
+  template: Pick<TemplateParams, 'bodyParams' | 'buttonParam' | 'quickReplyPayloads'>,
+): TemplateComponent[] {
   const components: TemplateComponent[] = [
     { type: 'body', parameters: template.bodyParams.map((text) => ({ type: 'text', text })) },
   ];
@@ -428,6 +458,16 @@ function templateComponents(template: Pick<TemplateParams, 'bodyParams' | 'butto
       parameters: [{ type: 'text', text: template.buttonParam }],
     });
   }
+  // Boutons de réponse rapide : le libellé est fixé chez Meta, seul le code
+  // caché (payload) est envoyé, renvoyé tel quel par Meta à l'appui.
+  template.quickReplyPayloads?.forEach((payload, index) => {
+    components.push({
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: String(index),
+      parameters: [{ type: 'payload', payload }],
+    });
+  });
   return components;
 }
 

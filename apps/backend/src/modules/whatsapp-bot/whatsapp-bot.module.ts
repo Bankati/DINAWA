@@ -5,6 +5,7 @@ import { PayLinksModule } from '../pay-links/pay-links.module';
 import { ReceiptsModule } from '../receipts/receipts.module';
 import { AuthModule } from '../auth/auth.module';
 import { WhatsappInboxModule } from '../whatsapp-inbox/whatsapp-inbox.module';
+import { LeaseConfirmationsModule } from '../lease-confirmations/lease-confirmations.module';
 import { BotIdentityService } from './bot-identity.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
 
@@ -20,6 +21,8 @@ import { WhatsappBotService } from './whatsapp-bot.service';
     AuthModule,
     // Échange avec le gestionnaire (unité 48).
     WhatsappInboxModule,
+    // Boutons de la demande d'accord du locataire (09/11/2026).
+    LeaseConfirmationsModule,
   ],
   providers: [WhatsappBotService, BotIdentityService],
   exports: [WhatsappBotService],

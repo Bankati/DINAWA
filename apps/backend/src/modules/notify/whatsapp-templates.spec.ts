@@ -18,7 +18,36 @@ describe('WHATSAPP_TEMPLATES — contrat avec Meta', () => {
       'payment-reminder': 'rappel_loyer',
       receipt: 'paiement_recu',
       'tenant-overdue': 'loyer_en_retard',
+      // Accord du locataire déjà inscrit (09/11/2026).
+      'lease-confirmation-request': 'confirmation_logement',
     });
+  });
+
+  it('demande de confirmation : 2 boutons à code caché, accès particulier, pas de nouvel essai', () => {
+    const spec = WHATSAPP_TEMPLATES['lease-confirmation-request'];
+    expect(spec).toMatchObject({
+      quickReplies: [{ variable: 'acceptPayload' }, { variable: 'refusePayload' }],
+      access: 'lease-confirmation',
+      retry: false,
+    });
+    const built = buildTemplate(spec as WhatsappTemplateSpec, {
+      tenantFirstName: 'Awa',
+      inviterName: 'Jean Dupont',
+      propertyAddress: 'Villa rue 12, Adidogomé, Lomé',
+      monthlyRent: 50000,
+      startDate: '01/12/2026',
+      expiresAt: '16/11/2026',
+      acceptPayload: 'LC_ACCEPT:conf-1',
+      refusePayload: 'LC_REFUSE:conf-1',
+    });
+    expect(built).toEqual({
+      ok: true,
+      bodyParams: ['Awa', 'Jean Dupont', 'Villa rue 12, Adidogomé, Lomé', (50000).toLocaleString('fr-FR'), '01/12/2026', '16/11/2026'],
+      quickReplyPayloads: ['LC_ACCEPT:conf-1', 'LC_REFUSE:conf-1'],
+    });
+    // Le texte ne commence ni ne finit par une variable (règle Meta).
+    expect(spec?.metaText.trim().startsWith('{{')).toBe(false);
+    expect(spec?.metaText.trim().endsWith('}}')).toBe(false);
   });
 
   it.each(specs)('%s : autant de variables que de trous {{1}}..{{n}}, numérotés sans trou ni doublon', (_event, spec) => {
