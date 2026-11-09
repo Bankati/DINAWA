@@ -4,6 +4,7 @@ import { Injectable, ServiceUnavailableException, UnauthorizedException } from '
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 // Authentification interne (remplace Supabase Auth depuis le 2026-08-11,
 // voir architecture.md) — seul point d'entrée pour le hash des mots de
@@ -131,7 +132,9 @@ export class TokenService {
       include: { user: true },
     });
 
-    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+    // Compte supprimé ou anonymisé : plus jamais de nouveau badge (audit de
+    // sécurité du 2026-10-20, E3).
+    if (!session || session.revokedAt || session.expiresAt < new Date() || session.user.anonymizedAt) {
       throw new UnauthorizedException('Session expirée — veuillez vous reconnecter');
     }
 
@@ -141,6 +144,16 @@ export class TokenService {
     });
 
     return this.issueTokenPair(session.user);
+  }
+
+  // Coupe toutes les sessions d'un compte, sur tous ses appareils (audit de
+  // sécurité du 2026-10-20) : nouveau mot de passe, compte supprimé. Renvoie
+  // la requête sans l'exécuter, pour l'inclure dans un $transaction.
+  revokeAllSessions(userId: string): Prisma.PrismaPromise<Prisma.BatchPayload> {
+    return this.prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   // Déconnexion explicite — révoque la session sans en émettre de nouvelle.

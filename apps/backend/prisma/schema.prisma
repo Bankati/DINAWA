@@ -518,6 +518,10 @@ model PasswordResetOtp {
   code      String
   expiresAt DateTime  @db.Timestamptz(6)
   usedAt    DateTime? @db.Timestamptz(6)
+  // Essais de confirmation déjà faits sur ce code (audit sécurité du
+  // 2026-10-20, E1) : au-delà de PASSWORD_RESET_MAX_ATTEMPTS, le code est
+  // annulé — un code à 6 chiffres ne doit pas pouvoir être deviné.
+  attempts  Int       @default(0)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([userId])
