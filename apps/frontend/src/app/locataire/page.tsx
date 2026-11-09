@@ -8,6 +8,8 @@ import { useAuth } from '@/lib/auth-context';
 import { paymentsApi, type Payment, PAYMENT_STATUS_LABELS } from '@/lib/payments';
 import { formatFcfa } from '@/lib/format';
 import { PageHeader, Card, CardHeader, CardBody, StatCard, Badge, EmptyState, Skeleton } from '@/components/ds';
+import { leaseConfirmationsApi, MY_LEASE_CONFIRMATIONS_QUERY_KEY } from '@/lib/lease-confirmations';
+import { TenantConfirmationBanner } from '@/components/lease-confirmation/tenant-confirmation-banner';
 
 interface ScheduleEntry {
   id: string;
@@ -30,6 +32,12 @@ interface ActiveLease {
 const PAYMENT_STATUS_TONE: Record<string, 'success' | 'warning' | 'error' | 'neutral' | 'info'> = {
   PAID: 'success', PENDING: 'neutral', PENDING_CONFIRMATION: 'info', LATE: 'error', REJECTED: 'error', CANCELLED: 'neutral',
 };
+
+function pageSubtitle(pendingCount: number): string {
+  if (pendingCount > 1) return `${pendingCount} demandes attendent votre réponse`;
+  if (pendingCount === 1) return 'Une demande attend votre réponse';
+  return "Votre bail et vos paiements en un coup d'œil";
+}
 
 export default function LocataireDashboardPage() {
   const { user } = useAuth();
@@ -57,13 +65,27 @@ export default function LocataireDashboardPage() {
   });
   const payments: Payment[] = paymentsRes?.data ?? [];
 
+  // Demandes « Est-ce bien votre logement ? » en attente (accord du
+  // locataire déjà inscrit). Toujours relues à l'ouverture : une réponse
+  // donnée entre-temps sur WhatsApp doit faire disparaître le bandeau.
+  const { data: confirmations, isError: confirmationsError } = useQuery({
+    queryKey: MY_LEASE_CONFIRMATIONS_QUERY_KEY,
+    queryFn: leaseConfirmationsApi.mine,
+    enabled: !!user,
+    staleTime: 0,
+  });
+  const pendingCount = confirmations?.length ?? 0;
+
   const loading = leasesLoading;
-  const error = leasesError || scheduleError || paymentsError;
+  const error = leasesError || scheduleError || paymentsError || confirmationsError;
   const enRetard = nextDue?.status === 'OVERDUE';
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Tableau de bord" subtitle="Votre bail et vos paiements en un coup d'œil" />
+      <PageHeader title="Tableau de bord" subtitle={pageSubtitle(pendingCount)} />
+
+      {/* En haut, avant tout le reste (écran D). */}
+      <TenantConfirmationBanner confirmations={confirmations ?? []} />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
@@ -75,11 +97,19 @@ export default function LocataireDashboardPage() {
         <Card><CardBody><div className="flex flex-col gap-3"><Skeleton className="h-10" /><Skeleton className="h-10" /></div></CardBody></Card>
       ) : noLease ? (
         <Card>
-          <EmptyState
-            icon={<Home />}
-            title="Aucun bail actif"
-            description="Contactez votre propriétaire ou gestionnaire si vous pensez qu'il s'agit d'une erreur."
-          />
+          {pendingCount > 0 ? (
+            <EmptyState
+              icon={<Home />}
+              title="Pas encore de bail actif"
+              description="Votre bail apparaîtra ici dès que vous aurez confirmé."
+            />
+          ) : (
+            <EmptyState
+              icon={<Home />}
+              title="Aucun bail actif"
+              description="Contactez votre propriétaire ou gestionnaire si vous pensez qu'il s'agit d'une erreur."
+            />
+          )}
         </Card>
       ) : (
         <>
