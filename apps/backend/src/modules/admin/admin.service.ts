@@ -484,18 +484,27 @@ export class AdminService {
       );
     }
 
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        email: null,
-        phone: null,
-        firstName: 'Compte',
-        lastName: 'Supprimé',
-        profilePhotoPath: null,
-        supabaseId: null,
-        anonymizedAt: new Date(),
-      },
-    });
+    // Anonymisation et coupure de toutes les sessions ensemble, sur tous ses
+    // appareils (audit de sécurité du 2026-10-20, E3) — en plus du refus par
+    // JwtAuthGuard.
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id },
+        data: {
+          email: null,
+          phone: null,
+          firstName: 'Compte',
+          lastName: 'Supprimé',
+          profilePhotoPath: null,
+          supabaseId: null,
+          anonymizedAt: new Date(),
+        },
+      }),
+      this.prisma.session.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
 
     return { message: 'Compte supprimé' };
   }

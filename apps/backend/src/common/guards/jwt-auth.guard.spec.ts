@@ -75,6 +75,17 @@ describe('JwtAuthGuard', () => {
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
+  it('rejette avec 401 un compte supprimé ou anonymisé, même avec un badge encore valable (audit sécurité E3)', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      accountStatus: 'ACTIVE',
+      anonymizedAt: new Date('2026-10-20T10:00:00Z'),
+    });
+    const { context, request } = buildContext({ authorization: 'Bearer x' });
+    await expect(guard.canActivate(context)).rejects.toThrow('Compte supprimé');
+    expect(request.user).toBeUndefined();
+  });
+
   it('rejette avec 401 un compte SUSPENDED_ADMIN', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'user-1', accountStatus: 'SUSPENDED_ADMIN' });
     const { context } = buildContext({ authorization: 'Bearer x' });
