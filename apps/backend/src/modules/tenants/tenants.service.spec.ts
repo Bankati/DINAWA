@@ -88,7 +88,8 @@ describe('TenantsService', () => {
       const [findFirstArgs] = prisma.lease.findFirst.mock.calls[0] as [
         { where: { status: { in: string[] } } },
       ];
-      expect(findFirstArgs.where.status).toEqual({ in: ['ACTIVE', 'EXPIRED'] });
+      // Un bail en attente de confirmation (09/11/2026) bloque aussi : il faut d'abord annuler la demande.
+      expect(findFirstArgs.where.status).toEqual({ in: ['ACTIVE', 'EXPIRED', 'PENDING_TENANT'] });
     });
 
     it('lève ConflictException (409 propre, pas 500) si une requête concurrente a déjà créé le blocage (P2002)', async () => {
@@ -172,7 +173,8 @@ describe('TenantsService', () => {
       const [findManyArgs] = prisma.lease.findMany.mock.calls[0] as [
         { where: { propertyId: string }; skip: number; take: number },
       ];
-      expect(findManyArgs.where).toEqual({ propertyId: 'prop-1' });
+      // Baux en attente ou annulés (09/11/2026) exclus de l'historique.
+      expect(findManyArgs.where).toEqual({ propertyId: 'prop-1', status: { notIn: ['PENDING_TENANT', 'CANCELLED'] } });
       expect(findManyArgs.skip).toBe(10);
       expect(findManyArgs.take).toBe(10);
       expect(result).toMatchObject({ page: 2, limit: 10, total: 42 });
@@ -199,6 +201,16 @@ describe('TenantsService', () => {
         service.getTenantLeasesHistory(tenantUser, 'tenant-1', {}),
       ).resolves.toBeDefined();
       expect(prisma.lease.findFirst).not.toHaveBeenCalled();
+    });
+
+    // Accord du locataire (09/11/2026) : taper le numéro de quelqu'un ne doit
+    // jamais ouvrir l'accès à son historique.
+    it('un bail en attente ou annulé ne crée aucun lien avec le locataire', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(makeTenant());
+      prisma.lease.findFirst.mockResolvedValueOnce(null);
+      await expect(service.getTenantLeasesHistory(owner, 'tenant-1', {})).rejects.toThrow(ForbiddenException);
+      const [findFirstArgs] = prisma.lease.findFirst.mock.calls[0] as [{ where: { status: unknown } }];
+      expect(findFirstArgs.where.status).toEqual({ notIn: ['PENDING_TENANT', 'CANCELLED'] });
     });
 
     it('lève ForbiddenException pour un propriétaire sans aucun bail avec ce locataire', async () => {
@@ -236,6 +248,7 @@ describe('TenantsService', () => {
       ];
       expect(findManyArgs.where).toEqual({
         tenantUserId: 'tenant-1',
+        status: { notIn: ['PENDING_TENANT', 'CANCELLED'] },
         OR: [
           { ownerId: 'owner-1' },
           { property: { mandates: { some: { managerId: 'owner-1', status: 'ACTIVE' } } } },
@@ -270,7 +283,7 @@ describe('TenantsService', () => {
       const [findManyArgs] = prisma.lease.findMany.mock.calls[0] as [
         { where: { tenantUserId: string } },
       ];
-      expect(findManyArgs.where).toEqual({ tenantUserId: 'tenant-1' });
+      expect(findManyArgs.where).toEqual({ tenantUserId: 'tenant-1', status: { notIn: ['PENDING_TENANT', 'CANCELLED'] } });
       expect(result).toMatchObject({ page: 1, limit: 5, total: 7 });
     });
 
@@ -283,7 +296,7 @@ describe('TenantsService', () => {
       const [findManyArgs] = prisma.lease.findMany.mock.calls[0] as [
         { where: { tenantUserId: string } },
       ];
-      expect(findManyArgs.where).toEqual({ tenantUserId: 'tenant-1' });
+      expect(findManyArgs.where).toEqual({ tenantUserId: 'tenant-1', status: { notIn: ['PENDING_TENANT', 'CANCELLED'] } });
     });
   });
 
@@ -462,6 +475,8 @@ describe('TenantsService', () => {
             },
           },
         },
+        // Locataire déjà inscrit qui a accepté un bail de l'appelant (09/11/2026).
+        { leasesAsTenant: { some: { status: 'ACTIVE', ownerId: 'manager-1' } } },
       ]);
     });
   });

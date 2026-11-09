@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SupabaseAdminService } from '../supabase/supabase-admin.service';
 import { NotifyService } from '../notify/notify.service';
-import { SUBSCRIPTION_TIERS } from '../../common/constants';
+import { SUBSCRIPTION_TIERS, UNCONFIRMED_LEASE_STATUSES } from '../../common/constants';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { SuspendUserDto } from './dto/suspend-user.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
@@ -55,7 +55,8 @@ export class AdminService {
           _count: {
             select: {
               ownedProperties: true,
-              leasesAsTenant: true,
+              // Baux réellement commencés (09/11/2026 : ni en attente, ni annulés).
+              leasesAsTenant: { where: { status: { notIn: [...UNCONFIRMED_LEASE_STATUSES] } } },
             },
           },
         },
@@ -454,7 +455,7 @@ export class AdminService {
         _count: {
           select: {
             ownedProperties: true,
-            leasesAsTenant: true,
+            leasesAsTenant: { where: { status: { notIn: [...UNCONFIRMED_LEASE_STATUSES] } } },
           },
         },
       },

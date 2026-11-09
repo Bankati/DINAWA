@@ -248,12 +248,16 @@ export class PropertiesService {
     const access = await canActOnProperty(this.prisma, user, property);
     if (!access.canMutate) throw new ForbiddenException('Accès refusé à ce bien');
 
+    // Un bail en attente de confirmation (09/11/2026) réserve aussi le bien :
+    // il faut d'abord annuler la demande.
     const activeLease = await this.prisma.lease.findFirst({
-      where: { propertyId: id, status: 'ACTIVE' },
+      where: { propertyId: id, status: { in: ['ACTIVE', 'PENDING_TENANT'] } },
     });
     if (activeLease) {
       throw new ConflictException(
-        "Impossible d'archiver un bien avec un bail actif — résiliez le bail d'abord",
+        activeLease.status === 'PENDING_TENANT'
+          ? "Impossible d'archiver un bien qui attend la confirmation d'un locataire — annulez la demande d'abord"
+          : "Impossible d'archiver un bien avec un bail actif — résiliez le bail d'abord",
       );
     }
 
@@ -465,11 +469,13 @@ export class PropertiesService {
     }
     if (property.status === 'OCCUPIED' && next === 'VACANT') {
       const activeLease = await this.prisma.lease.findFirst({
-        where: { propertyId: property.id, status: 'ACTIVE' },
+        where: { propertyId: property.id, status: { in: ['ACTIVE', 'PENDING_TENANT'] } },
       });
       if (activeLease) {
         throw new BadRequestException(
-          'Impossible de repasser en VACANT — un bail actif existe encore sur ce bien',
+          activeLease.status === 'PENDING_TENANT'
+            ? "Impossible de repasser en VACANT — ce bien attend la confirmation d'un locataire, annulez la demande d'abord"
+            : 'Impossible de repasser en VACANT — un bail actif existe encore sur ce bien',
         );
       }
     }
