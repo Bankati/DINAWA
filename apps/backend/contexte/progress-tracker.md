@@ -487,6 +487,12 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
 - [ ] 39 Signalements locataire (réactivée) — prévu mar. 20 ; photo reportable en semaine 3 si retard constaté le 19
 - [ ] 49 Recette et documentation WhatsApp — jeu. 22 et ven. 23
 
+### Accord du locataire déjà inscrit (2026-11-09, registre des décisions)
+
+- [x] Serveur (Viviane, branche `feat/accord-locataire-backend`, PR en brouillon vers `dev`) : bail `PENDING_TENANT`, module `lease-confirmations` (routes propriétaire et locataire), tâche horaire (rappels 2 et 5 jours, expiration 7 jours), boutons WhatsApp traités par le robot, migrations `20261109120000_lease_status_pending_tenant` puis `20261109120100_lease_confirmations` (séparées : une valeur d'enum ne peut pas servir dans la transaction qui l'ajoute). Voir architecture.md, section du même nom.
+- [ ] Écrans (Majoie, PR #108), relecture Mabibè, recette Esther.
+- [ ] Modèle Meta `confirmation_logement` à créer (boss ou Mabibè, `docs/whatsapp-modele-confirmation-logement.md`), puis `WHATSAPP_LEASE_CONFIRMATION_ENABLED=true` sur Railway.
+
 ### Performance — signalement client (2026-08-13, hors numérotation build-plan)
 
 Le développeur a transmis 3 problèmes signalés par son client (lenteur, liens d'activation en `localhost` en prod, absence de responsive). Traité dans cette passe : le volet lenteur backend.
