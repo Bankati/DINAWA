@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
   InjectThrottlerOptions,
@@ -9,6 +9,7 @@ import {
 } from '@nestjs/throttler';
 import { Request } from 'express';
 import { TokenService } from '../../modules/auth/token.service';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 // Suit le quota par utilisateur authentifié plutôt que par IP.
 // ThrottlerGuard s'exécute AVANT JwtAuthGuard dans app.module.ts, donc
@@ -32,7 +33,18 @@ export class AppThrottlerGuard extends ThrottlerGuard {
   // Synchrone (verifyAccessToken ne fait qu'un décodage JWT en mémoire) —
   // enveloppé dans Promise.resolve() pour respecter la signature de la
   // classe parente.
-  protected override getTracker(req: Request): Promise<string> {
+  protected override getTracker(req: Request, context?: ExecutionContext): Promise<string> {
+    // Routes publiques (connexion, inscription, mot de passe oublié) :
+    // toujours par IP. Sinon chaque compte gratuit créé par un attaquant
+    // apporterait son propre quota d'essais (audit de sécurité, E1).
+    const isPublic =
+      context &&
+      this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
+    if (isPublic) return Promise.resolve(req.ip ?? '');
+
     const header = req.headers?.authorization;
     if (header?.startsWith('Bearer ')) {
       const token = header.slice('Bearer '.length).trim();
