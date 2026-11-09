@@ -40,6 +40,7 @@ import { PayLinksModule } from './modules/pay-links/pay-links.module';
 import { WhatsappWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
 import { WhatsappInboxModule } from './modules/whatsapp-inbox/whatsapp-inbox.module';
 import { WhatsappConsentModule } from './modules/whatsapp-consent/whatsapp-consent.module';
+import { LeaseConfirmationsModule } from './modules/lease-confirmations/lease-confirmations.module';
 import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -194,6 +195,10 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Messagerie avec le locataire (phase 12, unité 48) —
     // /api/whatsapp/conversations* (propriétaire et gestionnaire).
     WhatsappInboxModule,
+
+    // Accord du locataire déjà inscrit (09/11/2026) — /api/lease-confirmations*
+    // (propriétaire et gestionnaire) et /api/me/lease-confirmations* (locataire).
+    LeaseConfirmationsModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout

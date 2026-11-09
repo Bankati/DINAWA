@@ -81,6 +81,32 @@ export function parseHumanExit(text: string | null, replyId: string | null): Bot
   return HUMAN_EXIT_KEYWORDS.get(normalizeKeywordText(text)) ?? null;
 }
 
+// Boutons de la demande d'accord du locataire (09/11/2026) : code caché
+// LC_ACCEPT:<id> ou LC_REFUSE:<id>, renvoyé tel quel par Meta. Tout autre
+// format est ignoré (le robot répond alors comme d'habitude).
+const LEASE_CONFIRMATION_REPLY = /^LC_(ACCEPT|REFUSE):([A-Za-z0-9_-]{1,64})$/;
+
+export function parseLeaseConfirmationReply(
+  replyId: string | null,
+): { decision: 'ACCEPT' | 'REFUSE'; confirmationId: string } | null {
+  const match = replyId ? LEASE_CONFIRMATION_REPLY.exec(replyId) : null;
+  if (!match) return null;
+  return { decision: match[1] === 'ACCEPT' ? 'ACCEPT' : 'REFUSE', confirmationId: match[2] };
+}
+
+// Réponses aux boutons de la demande (maquettes C2 et E3 de Majoie). Jamais
+// d'erreur technique affichée ; textes sans supposer le genre.
+export const LEASE_CONFIRMATION_TEXTS = {
+  accepted: (firstName: string, place: string, amount: string, firstDue: string, inviterName: string): string =>
+    `Merci ${firstName} ! ✅ Votre bail est actif :\n📍 ${place}\n💰 Premier loyer : ${amount}, le ${firstDue}\n\n` +
+    `Nous avons prévenu ${inviterName}. Tout est dans votre espace : warahcontact.com/locataire`,
+  refused: (firstName: string, inviterName: string): string =>
+    `C'est noté, merci ${firstName}.\nCe logement n'a pas été ajouté à votre compte, et nous avons prévenu ${inviterName}. ` +
+    "Vous n'avez rien d'autre à faire.\n\nVous avez appuyé par erreur ? Demandez-lui de vous renvoyer la demande.",
+  activeLeaseExists: 'Votre bail actuel doit d’abord être terminé par votre propriétaire.',
+  closed: "Cette demande n'est plus en cours. Rien n'a changé sur votre compte.",
+};
+
 export const BOT_TEXTS = {
   menu: (firstName: string): string => `Bonjour ${firstName} ! Que voulez-vous faire ?`,
   notUnderstood: "Je n'ai pas compris. Que voulez-vous faire ?",

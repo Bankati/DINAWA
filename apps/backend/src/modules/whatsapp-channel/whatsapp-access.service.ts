@@ -14,7 +14,11 @@ export type WhatsappAccessRefusal =
   | 'NO_ACTIVE_LEASE'
   | 'TIER_NOT_INCLUDED'
   // Réponse libre hors de la fenêtre de 24 h (WhatsappService, unité 45).
-  | 'REPLY_WINDOW_CLOSED';
+  | 'REPLY_WINDOW_CLOSED'
+  // Modèle Meta pas encore approuvé (WHATSAPP_LEASE_CONFIRMATION_ENABLED).
+  | 'TEMPLATE_NOT_ENABLED'
+  // Bien de la demande d'accord introuvable.
+  | 'PROPERTY_NOT_FOUND';
 
 export type WhatsappAccess =
   | { allowed: true; recipientPhone: string; metaNumber: string }
@@ -109,6 +113,45 @@ export class WhatsappAccessService {
     if (!metaNumber) return refuse('NO_VALID_NUMBER');
     const recipientPhone = metaNumber.slice(3);
     if (user.whatsappVerifiedPhone !== recipientPhone) return refuse('NUMBER_NOT_VERIFIED');
+    return { allowed: true, recipientPhone, metaNumber };
+  }
+
+  // Demande d'accord du locataire déjà inscrit (registre des décisions du
+  // 09/11/2026, choix 1) — troisième exception à canUseWhatsapp, LIMITÉE à ce
+  // message et aux réponses du robot à ses boutons : le locataire n'a pas
+  // encore de bail actif, mais tout le reste est exigé (interrupteur, accord
+  // ACCEPTED donné par le locataire lui-même, numéro exploitable ET vérifié).
+  // Le forfait regardé est celui du responsable du bien de la demande.
+  // viaTemplate : la demande elle-même part en modèle, qui n'existe chez Meta
+  // qu'une fois approuvé (WHATSAPP_LEASE_CONFIRMATION_ENABLED) ; sinon elle est
+  // simplement sautée et l'email part seul.
+  async canSendLeaseConfirmation(userId: string, propertyId: string, viaTemplate: boolean): Promise<WhatsappAccess> {
+    if (this.config.get<boolean>('WHATSAPP_ENABLED') !== true) return refuse('CHANNEL_DISABLED');
+    if (viaTemplate && this.config.get<boolean>('WHATSAPP_LEASE_CONFIRMATION_ENABLED') !== true) {
+      return refuse('TEMPLATE_NOT_ENABLED');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, whatsappPhone: true, whatsappConsent: true, whatsappVerifiedPhone: true, role: true },
+    });
+    if (!user) return refuse('USER_NOT_FOUND');
+    if (user.role !== 'TENANT' || user.whatsappConsent !== 'ACCEPTED') return refuse('NO_CONSENT');
+
+    const metaNumber = toWhatsappNumber(user.whatsappPhone ?? user.phone);
+    if (!metaNumber) return refuse('NO_VALID_NUMBER');
+    const recipientPhone = metaNumber.slice(3);
+    if (user.whatsappVerifiedPhone !== recipientPhone) return refuse('NUMBER_NOT_VERIFIED');
+
+    const property = await this.prisma.property.findUnique({ where: { id: propertyId } });
+    if (!property) return refuse('PROPERTY_NOT_FOUND');
+    const responsibleUserId = await resolveResponsibleUserId(this.prisma, property);
+    const [subscription, enabledTiers] = await Promise.all([
+      this.prisma.subscription.findUnique({ where: { userId: responsibleUserId }, select: { tier: true } }),
+      this.platformSettings.whatsappEnabledTiers(),
+    ]);
+    if (!enabledTiers.includes(subscription?.tier ?? 'STARTER')) return refuse('TIER_NOT_INCLUDED');
+
     return { allowed: true, recipientPhone, metaNumber };
   }
 

@@ -21,6 +21,10 @@ import * as payoutFailedAdmin from './payout-failed-admin.template';
 import * as subscriptionInvoiceDue from './subscription-invoice-due.template';
 import * as tenantOverdue from './tenant-overdue.template';
 import * as whatsappMessage from './whatsapp-message.template';
+import * as leaseConfirmationRequest from './lease-confirmation-request.template';
+import * as leaseConfirmationAccepted from './lease-confirmation-accepted.template';
+import * as leaseConfirmationRefused from './lease-confirmation-refused.template';
+import * as leaseConfirmationExpired from './lease-confirmation-expired.template';
 import { TemplateModule, TemplateVariables } from './types';
 
 export type EmailTemplate =
@@ -46,7 +50,11 @@ export type EmailTemplate =
   | 'payout-failed-admin'
   | 'subscription-invoice-due'
   | 'tenant-overdue'
-  | 'whatsapp-message';
+  | 'whatsapp-message'
+  | 'lease-confirmation-request'
+  | 'lease-confirmation-accepted'
+  | 'lease-confirmation-refused'
+  | 'lease-confirmation-expired';
 
 const registry: Record<EmailTemplate, TemplateModule> = {
   'signup-confirmation': signupConfirmation,
@@ -72,6 +80,10 @@ const registry: Record<EmailTemplate, TemplateModule> = {
   'subscription-invoice-due': subscriptionInvoiceDue,
   'tenant-overdue': tenantOverdue,
   'whatsapp-message': whatsappMessage,
+  'lease-confirmation-request': leaseConfirmationRequest,
+  'lease-confirmation-accepted': leaseConfirmationAccepted,
+  'lease-confirmation-refused': leaseConfirmationRefused,
+  'lease-confirmation-expired': leaseConfirmationExpired,
 };
 
 export function subjectFor(template: EmailTemplate, variables: TemplateVariables): string {

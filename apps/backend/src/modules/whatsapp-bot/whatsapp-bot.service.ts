@@ -17,8 +17,11 @@ import {
   WHATSAPP_RELAY_WINDOW_MS,
 } from '../../common/constants';
 import { BotIdentityService } from './bot-identity.service';
+import { LeaseConfirmationsService } from '../lease-confirmations/lease-confirmations.service';
+import { formatPropertyLocation } from '../../common/utils/format-property-location';
 import {
   BOT_TEXTS,
+  LEASE_CONFIRMATION_TEXTS,
   BotChoice,
   MENU_BUTTON,
   MENU_ROWS,
@@ -27,6 +30,7 @@ import {
   formatMonth,
   parseBotChoice,
   parseHumanExit,
+  parseLeaseConfirmationReply,
 } from './bot-messages';
 
 // Message reçu à traiter (lu par WhatsappInboundProcessor).
@@ -99,6 +103,7 @@ export class WhatsappBotService {
     private readonly receiptPdf: ReceiptPdfService,
     private readonly identity: BotIdentityService,
     private readonly threads: WhatsappThreadService,
+    private readonly leaseConfirmations: LeaseConfirmationsService,
   ) {}
 
   handle(inbound: BotInbound): Promise<void> {
@@ -123,6 +128,14 @@ export class WhatsappBotService {
   }
 
   private async respond(inbound: BotInbound, now: Date): Promise<void> {
+    // Bouton de la demande d'accord (09/11/2026) : traité AVANT la règle
+    // « bail actif » — le locataire n'en a souvent pas encore.
+    const leaseReply = parseLeaseConfirmationReply(readString(inbound.payload, 'replyId'));
+    if (leaseReply) {
+      await this.onLeaseConfirmationReply(inbound, leaseReply, now);
+      return;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: inbound.userId },
       select: {
@@ -239,6 +252,59 @@ export class WhatsappBotService {
       where: { userId: inbound.userId },
       data: { state: step.state, pendingAction: step.pendingAction, lastActivityAt: now, humanThreadId: null },
     });
+  }
+
+  // « Oui, c'est mon logement » / « Ce n'est pas moi » (contrat d'API du
+  // 09/11/2026) : mêmes règles que les routes /me/lease-confirmations. La
+  // décision est appliquée même si le locataire a arrêté WhatsApp depuis
+  // (c'est un geste explicite) ; seule la réponse dépend de son accord. Une
+  // demande inconnue ou d'un autre locataire : silence. Un second appui ou
+  // une demande close : « n'est plus en cours », jamais d'erreur technique.
+  private async onLeaseConfirmationReply(
+    inbound: BotInbound,
+    reply: { decision: 'ACCEPT' | 'REFUSE'; confirmationId: string },
+    now: Date,
+  ): Promise<void> {
+    const result = await this.leaseConfirmations.respondFromWhatsapp(
+      inbound.userId,
+      reply.confirmationId,
+      reply.decision,
+    );
+    if (result.outcome === 'UNKNOWN') return;
+
+    // Jamais deux réponses au même message (même règle que le robot).
+    const claimed = await this.prisma.whatsappMessage.updateMany({
+      where: { id: inbound.messageId, processedAt: null },
+      data: { processedAt: now },
+    });
+    if (claimed.count === 0) return;
+
+    const text =
+      result.outcome === 'ACCEPTED'
+        ? LEASE_CONFIRMATION_TEXTS.accepted(
+            result.tenantFirstName,
+            formatPropertyLocation(result.propertyLabel),
+            formatFcfa(result.monthlyRent),
+            formatDay(result.firstDueDate),
+            result.inviterName,
+          )
+        : result.outcome === 'REFUSED'
+          ? LEASE_CONFIRMATION_TEXTS.refused(result.tenantFirstName, result.inviterName)
+          : result.outcome === 'ACTIVE_LEASE_EXISTS'
+            ? LEASE_CONFIRMATION_TEXTS.activeLeaseExists
+            : LEASE_CONFIRMATION_TEXTS.closed;
+
+    const sent = await this.whatsapp.replyLeaseConfirmation({
+      userId: inbound.userId,
+      source: 'lease-confirmation-reply',
+      propertyId: result.propertyId,
+      text,
+      inboundReceivedAt: inbound.receivedAt,
+    });
+    if (sent.outcome !== 'SENT') {
+      const detail = sent.outcome === 'REFUSED' ? `REFUSED (${sent.reason})` : sent.outcome;
+      this.logger.warn(`[whatsapp-bot] réponse à la demande d'accord non envoyée pour user=${inbound.userId} : ${detail}`);
+    }
   }
 
   // Message reçu pendant un échange avec le gestionnaire (unité 48,

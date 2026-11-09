@@ -11,7 +11,12 @@ const yesterday = (): Date => new Date(Date.now() - 24 * 60 * 60 * 1000);
 
 describe('WhatsappService', () => {
   let prisma: { whatsappMessage: { create: jest.Mock; update: jest.Mock } };
-  let access: { canUseWhatsapp: jest.Mock; canSendStopConfirmation: jest.Mock; canSendInvitation?: jest.Mock };
+  let access: {
+    canUseWhatsapp: jest.Mock;
+    canSendStopConfirmation: jest.Mock;
+    canSendInvitation?: jest.Mock;
+    canSendLeaseConfirmation?: jest.Mock;
+  };
   let client: {
     sendTemplate: jest.Mock;
     sendText: jest.Mock;
@@ -72,6 +77,68 @@ describe('WhatsappService', () => {
       sendDocumentMessage: jest.fn().mockResolvedValue('wamid.3'),
     };
     service = new WhatsappService(prisma as never, access as never, client as never);
+  });
+
+  // Accord du locataire déjà inscrit (09/11/2026).
+  describe('demande de confirmation de bail', () => {
+    const granted = { allowed: true, recipientPhone: '90112233', metaNumber: '22890112233' };
+    const request = {
+      userId: 'tenant-1',
+      source: 'lease-confirmation-request',
+      access: { kind: 'lease-confirmation' as const, propertyId: 'prop-9' },
+      kind: 'template' as const,
+      template: {
+        name: 'confirmation_logement' as const,
+        bodyParams: ['Awa', 'Jean Dupont', 'Villa rue 12', '50 000', '01/12/2026', '16/11/2026'],
+        quickReplyPayloads: ['LC_ACCEPT:conf-1', 'LC_REFUSE:conf-1'],
+      },
+    };
+
+    it('contrôle l’accès sur le bien de la demande (pas canUseWhatsapp) et envoie les 2 boutons avec leur code caché', async () => {
+      access.canSendLeaseConfirmation = jest.fn().mockResolvedValue(granted);
+
+      await expect(service.send(request)).resolves.toMatchObject({ outcome: 'SENT' });
+
+      expect(access.canSendLeaseConfirmation).toHaveBeenCalledWith('tenant-1', 'prop-9', true);
+      expect(access.canUseWhatsapp).not.toHaveBeenCalled();
+      expect(templateArgs().components).toEqual([
+        { type: 'body', parameters: request.template.bodyParams.map((text) => ({ type: 'text', text })) },
+        { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'LC_ACCEPT:conf-1' }] },
+        { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'LC_REFUSE:conf-1' }] },
+      ]);
+    });
+
+    it('modèle pas encore approuvé : aucun appel à Meta, aucune ligne', async () => {
+      access.canSendLeaseConfirmation = jest.fn().mockResolvedValue({ allowed: false, reason: 'TEMPLATE_NOT_ENABLED' });
+
+      await expect(service.send(request)).resolves.toEqual({ outcome: 'REFUSED', reason: 'TEMPLATE_NOT_ENABLED' });
+      expect(client.sendTemplate).not.toHaveBeenCalled();
+      expect(prisma.whatsappMessage.create).not.toHaveBeenCalled();
+    });
+
+    it('réponse du robot à un bouton : texte libre, contrôlé sans exiger le modèle, dans la fenêtre de 24 h', async () => {
+      access.canSendLeaseConfirmation = jest.fn().mockResolvedValue(granted);
+
+      await service.replyLeaseConfirmation({
+        userId: 'tenant-1',
+        source: 'lease-confirmation-reply',
+        propertyId: 'prop-9',
+        text: 'C’est noté',
+        inboundReceivedAt: justNow(),
+      });
+      expect(access.canSendLeaseConfirmation).toHaveBeenCalledWith('tenant-1', 'prop-9', false);
+      expect(client.sendText).toHaveBeenCalled();
+
+      await expect(
+        service.replyLeaseConfirmation({
+          userId: 'tenant-1',
+          source: 'lease-confirmation-reply',
+          propertyId: 'prop-9',
+          text: 'trop tard',
+          inboundReceivedAt: yesterday(),
+        }),
+      ).resolves.toEqual({ outcome: 'REFUSED', reason: 'REPLY_WINDOW_CLOSED' });
+    });
   });
 
   describe('send', () => {

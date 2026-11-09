@@ -9,8 +9,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { addMonths, format } from 'date-fns';
-import { Lease, PayoutOperator, Prisma, User } from '@prisma/client';
+import { addDays, addMonths, format } from 'date-fns';
+import { Lease, PayoutOperator, Prisma, Property, User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { canActOnProperty } from '../../common/permissions/property-access';
@@ -25,8 +25,11 @@ import { EmailService } from '../email/email.service';
 import { NotifyService } from '../notify/notify.service';
 import { ROLLING_WINDOW_MONTHS, buildScheduleEntries } from '../leases/schedule-builder';
 import { ListingsService } from '../listings/listings.service';
+import { leaseConfirmationRequestNotification } from '../lease-confirmations/lease-confirmation-notifications';
 import {
   BETA_FREE_MONTHS,
+  LEASE_CONFIRMATION_MAX_REFUSALS,
+  LEASE_CONFIRMATION_TTL_DAYS,
   PASSWORD_RESET_MAX_ATTEMPTS,
   PASSWORD_RESET_CODES_DAY_WINDOW_MS,
   PASSWORD_RESET_CODES_HOUR_WINDOW_MS,
@@ -86,8 +89,19 @@ export type SignupManagerResponse = {
   user: User;
 };
 
+// Coordonnées telles que tapées par l'inviteur. Renvoyées à la place du
+// compte quand le locataire existe déjà et doit confirmer : le propriétaire
+// ne voit jamais le nom ni l'email enregistrés dans le compte (contrat
+// d'API du 09/11/2026).
+export type TypedTenantContact = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+};
+
 export type InviteTenantResponse = {
-  user: User;
+  user: User | TypedTenantContact;
   lease: Lease;
   // null quand le locataire existait déjà sur la plateforme (bail
   // précédent résilié, nouveau bail sur un autre bien) — pas de nouvelle
@@ -97,7 +111,20 @@ export type InviteTenantResponse = {
   // au locataire avec son invitation — null si WhatsApp est éteint ou le
   // numéro non configuré.
   whatsappBotNumber: string | null;
+  // Accord du locataire déjà inscrit (09/11/2026) : true quand le bail
+  // attend le « Oui » du locataire (lease.status = PENDING_TENANT).
+  confirmationRequired: boolean;
+  // Présent seulement si confirmationRequired.
+  confirmationId?: string;
+  // Présent seulement si confirmationRequired : par où la demande est
+  // partie. EMAIL et IN_APP toujours ; WHATSAPP si Meta l'a accepté.
+  channels?: ('EMAIL' | 'IN_APP' | 'WHATSAPP')[];
 };
+
+// Erreurs à code stable, lues par l'écran (contrat d'API du 09/11/2026).
+function conflictWithCode(code: string, message: string): ConflictException {
+  return new ConflictException({ statusCode: 409, error: 'Conflict', code, message });
+}
 
 export type LoginResponse = {
   accessToken: string;
@@ -420,6 +447,16 @@ export class AuthService {
       );
     }
 
+    // Un bien loué, ou réservé par une demande de confirmation en cours
+    // (09/11/2026), ne peut pas être associé à un autre locataire. L'écran
+    // ne propose déjà que les biens libres ou en travaux.
+    if (property.status === 'OCCUPIED') {
+      throw conflictWithCode(
+        'PROPERTY_NOT_AVAILABLE',
+        "Ce bien est déjà loué ou attend la confirmation d'un locataire",
+      );
+    }
+
     // `email`/`phone` sont uniques globalement sur `User` (tous rôles
     // confondus, voir schema.prisma) — la recherche doit donc porter sur
     // n'importe quel rôle, pas seulement TENANT. Sinon un email déjà utilisé
@@ -460,6 +497,19 @@ export class AuthService {
     // changement ultérieur du prix affiché sur le bien).
     const effectiveMonthlyRent = dto.monthlyRent ?? property.monthlyRent;
     const effectiveMonthlyCharges = dto.monthlyCharges ?? property.monthlyCharges;
+
+    // Accord du locataire déjà inscrit (registre des décisions, 09/11/2026) :
+    // un compte déjà activé n'est jamais rattaché à un bail sans son « Oui ».
+    // Un compte créé par invitation mais jamais activé suit le parcours
+    // d'avant (bail actif tout de suite), comme un nouveau locataire.
+    if (existingTenant && (await this.hasActivatedAccount(existingTenant.id))) {
+      return this.inviteActivatedTenant(inviter, dto, property, existingTenant, {
+        startDate,
+        endDate,
+        monthlyRent: effectiveMonthlyRent,
+        monthlyCharges: effectiveMonthlyCharges,
+      });
+    }
 
     let user: User;
     let lease: Lease;
@@ -560,7 +610,138 @@ export class AuthService {
       this.logger.error(`[lease-created] notification échouée pour tenant=${user.id}`, notifyError);
     }
 
-    return { user, lease, invitationUrl, whatsappBotNumber };
+    return { user, lease, invitationUrl, whatsappBotNumber, confirmationRequired: false };
+  }
+
+  // « Compte activé » = le locataire s'est déjà connecté au moins une fois.
+  // Les sessions ne sont jamais supprimées (seulement révoquées) : c'est le
+  // même signal que completeTenantSignup() pour les anciens liens. Un
+  // compte dont le mot de passe a été posé sans connexion suit donc encore
+  // le parcours d'avant — c'est le côté prudent : il n'a jamais rien vu.
+  private async hasActivatedAccount(userId: string): Promise<boolean> {
+    return (await this.prisma.session.count({ where: { userId } })) > 0;
+  }
+
+  // Locataire déjà inscrit : bail PENDING_TENANT sans échéancier, bien
+  // réservé (OCCUPIED), annonce retirée, demande de confirmation valable 7
+  // jours — le tout dans une transaction. Le bien est réservé par une
+  // écriture conditionnelle sur le statut lu plus haut : deux invitations
+  // simultanées sur le même bien n'en réservent qu'une (l'index
+  // leases_property_pending_unique le garantit aussi en base).
+  private async inviteActivatedTenant(
+    inviter: AuthenticatedUser,
+    dto: InviteTenantDto,
+    property: Property,
+    tenant: User,
+    terms: { startDate: Date; endDate: Date | null; monthlyRent: number; monthlyCharges: number },
+  ): Promise<InviteTenantResponse> {
+    const refusals = await this.prisma.leaseConfirmation.count({
+      where: { inviterUserId: inviter.id, tenantUserId: tenant.id, status: 'REFUSED' },
+    });
+    if (refusals >= LEASE_CONFIRMATION_MAX_REFUSALS) {
+      throw conflictWithCode(
+        'CONFIRMATION_BLOCKED',
+        "Cette personne a refusé 3 fois : la demande ne peut plus être renvoyée. Si c'est une erreur, contactez le support WARAH.",
+      );
+    }
+
+    const now = new Date();
+    const expiresAt = addDays(now, LEASE_CONFIRMATION_TTL_DAYS);
+    let lease: Lease;
+    let confirmationId: string;
+    try {
+      ({ lease, confirmationId } = await this.prisma.$transaction(async (tx) => {
+        const reserved = await tx.property.updateMany({
+          where: { id: property.id, status: property.status },
+          data: { status: 'OCCUPIED' },
+        });
+        if (reserved.count === 0) {
+          throw conflictWithCode(
+            'PROPERTY_NOT_AVAILABLE',
+            "Ce bien est déjà loué ou attend la confirmation d'un locataire",
+          );
+        }
+        const listingWasActive =
+          (await tx.listing.count({ where: { propertyId: property.id, status: 'ACTIVE' } })) > 0;
+        await this.listings.deactivateForProperty(tx, property.id);
+
+        const createdLease = await tx.lease.create({
+          data: {
+            propertyId: property.id,
+            ownerId: property.ownerId,
+            tenantUserId: tenant.id,
+            monthlyRent: terms.monthlyRent,
+            monthlyCharges: terms.monthlyCharges,
+            paymentFrequency: dto.paymentFrequency,
+            startDate: terms.startDate,
+            endDate: terms.endDate,
+            securityDeposit: dto.securityDeposit,
+            depositReturnConditions: dto.depositReturnConditions,
+            reminderDaysBefore: dto.reminderDaysBefore,
+            overdueAlertWindowDays: dto.overdueAlertWindowDays,
+            status: 'PENDING_TENANT',
+          },
+        });
+        const confirmation = await tx.leaseConfirmation.create({
+          data: {
+            leaseId: createdLease.id,
+            propertyId: property.id,
+            tenantUserId: tenant.id,
+            inviterUserId: inviter.id,
+            typedFirstName: dto.firstName,
+            typedLastName: dto.lastName,
+            typedPhone: dto.phone,
+            typedEmail: dto.email,
+            sentAt: now,
+            expiresAt,
+            previousPropertyStatus: property.status,
+            listingWasActive,
+          },
+          select: { id: true },
+        });
+        return { lease: createdLease, confirmationId: confirmation.id };
+      }));
+    } catch (dbError) {
+      throw this.mapDuplicateError(dbError);
+    }
+
+    let whatsappSent = false;
+    try {
+      ({ whatsappSent } = await this.notify.notifyUserWithOutcome(
+        leaseConfirmationRequestNotification({
+          confirmationId,
+          tenantUserId: tenant.id,
+          tenantFirstName: tenant.firstName,
+          inviterName: `${inviter.firstName} ${inviter.lastName}`,
+          property,
+          monthlyRent: terms.monthlyRent,
+          startDate: terms.startDate,
+          expiresAt,
+          frontendUrl: this.config.getOrThrow<string>('FRONTEND_URL'),
+          isReminder: false,
+        }),
+      ));
+      if (whatsappSent) {
+        await this.prisma.leaseConfirmation.update({
+          where: { id: confirmationId },
+          data: { whatsappSentAt: new Date() },
+        });
+      }
+    } catch (notifyError) {
+      // La demande reste visible dans l'espace du locataire (bandeau) et
+      // les rappels à 2 et 5 jours la renverront.
+      this.logger.error(`[lease-confirmation] demande non envoyée pour tenant=${tenant.id}`, notifyError);
+    }
+
+    return {
+      user: { firstName: dto.firstName, lastName: dto.lastName, email: dto.email, phone: dto.phone },
+      lease,
+      invitationUrl: null,
+      whatsappBotNumber: this.whatsappBotNumber(),
+      confirmationRequired: true,
+      confirmationId,
+      channels: whatsappSent ? ['EMAIL', 'IN_APP', 'WHATSAPP'] : ['EMAIL', 'IN_APP'],
+    };
   }
 
   // Le numéro vient de la config backend (comme le lien « Écrire à WARAH »),
@@ -732,6 +913,14 @@ export class AuthService {
       if (dbError.message.includes('leases_tenant_active_unique')) {
         return new ConflictException(
           "Ce locataire a déjà un bail actif — un locataire ne peut avoir qu'un seul bail actif à la fois",
+        );
+      }
+      // Un seul bail en attente par bien (09/11/2026) : deux invitations
+      // simultanées sur le même bien.
+      if (dbError.message.includes('leases_property_pending_unique')) {
+        return conflictWithCode(
+          'PROPERTY_NOT_AVAILABLE',
+          "Ce bien est déjà loué ou attend la confirmation d'un locataire",
         );
       }
       const rawTarget = dbError.meta?.['target'];

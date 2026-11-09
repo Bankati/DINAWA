@@ -1,5 +1,5 @@
 import { WhatsappBotService, BotInbound } from './whatsapp-bot.service';
-import { BOT_TEXTS, MENU_ROWS } from './bot-messages';
+import { BOT_TEXTS, LEASE_CONFIRMATION_TEXTS, MENU_ROWS, parseLeaseConfirmationReply } from './bot-messages';
 import { BOT_CONVERSATION_TIMEOUT_MS } from '../../common/constants';
 
 const RECEIVED = new Date(Date.now() - 5_000);
@@ -45,11 +45,13 @@ describe('WhatsappBotService (unité 47)', () => {
     replyList: jest.Mock;
     replyDocument: jest.Mock;
     sendInvitation: jest.Mock;
+    replyLeaseConfirmation: jest.Mock;
   };
   let payLinks: { payLinkFor: jest.Mock };
   let receiptPdf: { generate: jest.Mock };
   let identity: { isVerified: jest.Mock; check: jest.Mock };
   let threads: { openExchange: jest.Mock; closeExchange: jest.Mock; relay: jest.Mock };
+  let leaseConfirmations: { respondFromWhatsapp: jest.Mock };
   let service: WhatsappBotService;
   let user: FakeUser;
 
@@ -98,6 +100,7 @@ describe('WhatsappBotService (unité 47)', () => {
       replyList: jest.fn().mockResolvedValue(sent),
       replyDocument: jest.fn().mockResolvedValue(sent),
       sendInvitation: jest.fn().mockResolvedValue(sent),
+      replyLeaseConfirmation: jest.fn().mockResolvedValue(sent),
     };
     payLinks = {
       payLinkFor: jest
@@ -114,6 +117,7 @@ describe('WhatsappBotService (unité 47)', () => {
       closeExchange: jest.fn().mockResolvedValue(true),
       relay: jest.fn().mockResolvedValue({ mediaNotice: false }),
     };
+    leaseConfirmations = { respondFromWhatsapp: jest.fn().mockResolvedValue({ outcome: 'UNKNOWN' }) };
     service = new WhatsappBotService(
       prisma as never,
       whatsapp as never,
@@ -121,7 +125,91 @@ describe('WhatsappBotService (unité 47)', () => {
       receiptPdf as never,
       identity as never,
       threads as never,
+      leaseConfirmations as never,
     );
+  });
+
+  // Accord du locataire déjà inscrit (contrat d'API du 09/11/2026).
+  describe('boutons de la demande de confirmation de bail', () => {
+    const decided = {
+      propertyId: 'prop-9',
+      tenantFirstName: 'Awa',
+      inviterName: 'Jean Dupont',
+      propertyLabel: { address: 'Villa rue 12', neighborhood: 'Adidogomé', city: 'Lomé' },
+      monthlyRent: 50000,
+      firstDueDate: new Date('2026-12-01T00:00:00Z'),
+    };
+    const button = (replyId: string): BotInbound =>
+      inbound({ messageType: 'INTERACTIVE', text: null, payload: { replyId, title: 'x' } });
+
+    it('lit seulement les codes LC_ACCEPT:<id> et LC_REFUSE:<id>', () => {
+      expect(parseLeaseConfirmationReply('LC_ACCEPT:abc123')).toEqual({ decision: 'ACCEPT', confirmationId: 'abc123' });
+      expect(parseLeaseConfirmationReply('LC_REFUSE:abc123')).toEqual({ decision: 'REFUSE', confirmationId: 'abc123' });
+      expect(parseLeaseConfirmationReply('LC_ACCEPT:')).toBeNull();
+      expect(parseLeaseConfirmationReply('LC_OUI:abc')).toBeNull();
+      expect(parseLeaseConfirmationReply('PAY')).toBeNull();
+      expect(parseLeaseConfirmationReply(null)).toBeNull();
+    });
+
+    it('« Oui » : applique la décision, même sans bail actif, et répond « bail actif »', async () => {
+      user.leasesAsTenant = [];
+      leaseConfirmations.respondFromWhatsapp.mockResolvedValueOnce({ outcome: 'ACCEPTED', ...decided });
+
+      await service.handle(button('LC_ACCEPT:conf-1'));
+
+      expect(leaseConfirmations.respondFromWhatsapp).toHaveBeenCalledWith('tenant-1', 'conf-1', 'ACCEPT');
+      const [args] = whatsapp.replyLeaseConfirmation.mock.calls[0] as [{ propertyId: string; text: string }];
+      expect(args.propertyId).toBe('prop-9');
+      expect(args.text).toContain('Votre bail est actif');
+      expect(args.text).toContain('Nous avons prévenu Jean Dupont');
+      expect(args.text).toContain('01/12/2026');
+      // Le menu habituel n'est jamais envoyé pour un bouton de demande.
+      expect(whatsapp.replyList).not.toHaveBeenCalled();
+    });
+
+    it('« Ce n’est pas moi » : réponse rassurante', async () => {
+      leaseConfirmations.respondFromWhatsapp.mockResolvedValueOnce({ outcome: 'REFUSED', ...decided });
+
+      await service.handle(button('LC_REFUSE:conf-1'));
+
+      expect(leaseConfirmations.respondFromWhatsapp).toHaveBeenCalledWith('tenant-1', 'conf-1', 'REFUSE');
+      const [args] = whatsapp.replyLeaseConfirmation.mock.calls[0] as [{ text: string }];
+      expect(args.text).toBe(LEASE_CONFIRMATION_TEXTS.refused('Awa', 'Jean Dupont'));
+    });
+
+    it('bail actif ailleurs : le message validé par le boss', async () => {
+      leaseConfirmations.respondFromWhatsapp.mockResolvedValueOnce({ outcome: 'ACTIVE_LEASE_EXISTS', ...decided });
+
+      await service.handle(button('LC_ACCEPT:conf-1'));
+
+      const [args] = whatsapp.replyLeaseConfirmation.mock.calls[0] as [{ text: string }];
+      expect(args.text).toBe('Votre bail actuel doit d’abord être terminé par votre propriétaire.');
+    });
+
+    it('second appui ou demande close : « n’est plus en cours », jamais d’erreur technique', async () => {
+      leaseConfirmations.respondFromWhatsapp.mockResolvedValueOnce({ outcome: 'CLOSED', ...decided });
+
+      await service.handle(button('LC_ACCEPT:conf-1'));
+
+      const [args] = whatsapp.replyLeaseConfirmation.mock.calls[0] as [{ text: string }];
+      expect(args.text).toBe(LEASE_CONFIRMATION_TEXTS.closed);
+    });
+
+    it('demande inconnue ou d’un autre locataire : silence', async () => {
+      await service.handle(button('LC_ACCEPT:conf-autre'));
+
+      expect(whatsapp.replyLeaseConfirmation).not.toHaveBeenCalled();
+      expect(prisma.whatsappMessage.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('message déjà traité (reprise) : aucune seconde réponse', async () => {
+      leaseConfirmations.respondFromWhatsapp.mockResolvedValueOnce({ outcome: 'CLOSED', ...decided });
+      prisma.whatsappMessage.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await service.handle(button('LC_ACCEPT:conf-1'));
+
+      expect(whatsapp.replyLeaseConfirmation).not.toHaveBeenCalled();
+    });
   });
 
   const lastText = (): string => (whatsapp.reply.mock.calls.at(-1) as [{ text: string }])[0].text;

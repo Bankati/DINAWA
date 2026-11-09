@@ -117,6 +117,28 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{tenantName} vous a écrit sur WhatsApp ({propertyAddress}). Répondez depuis WARAH.',
     url: '/messages',
   },
+  // Accord du locataire déjà inscrit (09/11/2026). La demande part toujours
+  // par email (forceEmail) : ce texte ne sert que si un jour elle partait en push.
+  'lease-confirmation-request': {
+    title: 'Confirmez votre logement',
+    body: '{inviterName} vous ajoute comme locataire. Est-ce bien votre logement ?',
+    url: '/locataire',
+  },
+  'lease-confirmation-accepted': {
+    title: 'Bail confirmé',
+    body: '{tenantName} a confirmé. Le bail de {propertyAddress} est actif.',
+    url: '/dashboard/locataires',
+  },
+  'lease-confirmation-refused': {
+    title: 'Demande non confirmée',
+    body: "{tenantFirstName} n'a pas confirmé, vérifiez le numéro.",
+    url: '/dashboard/locataires',
+  },
+  'lease-confirmation-expired': {
+    title: 'Demande expirée',
+    body: "{tenantFirstName} n'a pas répondu en 7 jours. Vous pouvez renvoyer la demande.",
+    url: '/dashboard/locataires',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {

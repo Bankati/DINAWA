@@ -34,6 +34,10 @@ const EVENT_LABELS: Record<string, string> = {
   'lease-created': 'Nouveau bail',
   'mandate-created': 'Proposition de mandat',
   'whatsapp-message': 'Nouveau message WhatsApp',
+  'lease-confirmation-request': 'Confirmez votre logement',
+  'lease-confirmation-accepted': 'Bail confirmé',
+  'lease-confirmation-refused': 'Demande non confirmée',
+  'lease-confirmation-expired': 'Demande expirée',
 };
 
 @ApiTags('Notifications')

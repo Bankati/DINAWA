@@ -835,6 +835,178 @@ describe('AuthService', () => {
         'Ce locataire a déjà un bail actif',
       );
     });
+
+    // Accord du locataire déjà inscrit (registre des décisions et contrat
+    // d'API du 09/11/2026). Les tests ci-dessus (nouveau locataire, compte
+    // jamais activé) restent inchangés : ce parcours ne change pas.
+    describe('locataire avec un compte déjà activé (09/11/2026)', () => {
+      const activatedTenant = {
+        id: 'existing-tenant-1',
+        role: 'TENANT',
+        // Nom du compte : ne doit jamais revenir au propriétaire.
+        firstName: 'Compte',
+        lastName: 'Secret',
+        email: 'vrai-email@compte.tg',
+        phone: inviteDto.phone,
+      };
+      let pending: {
+        refusalCount: jest.Mock;
+        reserve: jest.Mock;
+        listingCount: jest.Mock;
+        confirmationCreate: jest.Mock;
+        confirmationUpdate: jest.Mock;
+        notifyWithOutcome: jest.Mock;
+      };
+
+      beforeEach(() => {
+        prisma.user.findFirst.mockResolvedValueOnce(activatedTenant);
+        prisma.session.count.mockResolvedValue(2);
+        prisma.property.findUnique.mockResolvedValue({ ...property, status: 'VACANT', neighborhood: 'Adidogomé', city: 'Lomé' });
+        pending = {
+          refusalCount: jest.fn().mockResolvedValue(0),
+          reserve: jest.fn().mockResolvedValue({ count: 1 }),
+          listingCount: jest.fn().mockResolvedValue(1),
+          confirmationCreate: jest.fn().mockResolvedValue({ id: 'conf-1' }),
+          confirmationUpdate: jest.fn().mockResolvedValue({}),
+          notifyWithOutcome: jest.fn().mockResolvedValue({ whatsappSent: false }),
+        };
+        Object.assign(prisma, {
+          leaseConfirmation: { count: pending.refusalCount, update: pending.confirmationUpdate },
+        });
+        Object.assign(tx, {
+          property: { update: tx.property.update, updateMany: pending.reserve },
+          listing: { count: pending.listingCount },
+          leaseConfirmation: { create: pending.confirmationCreate },
+        });
+        Object.assign(notify, { notifyUserWithOutcome: pending.notifyWithOutcome });
+        tx.lease.create.mockResolvedValue({ id: 'lease-9', status: 'PENDING_TENANT' });
+      });
+
+      it('crée un bail PENDING_TENANT sans échéancier, réserve le bien, retire l’annonce et ouvre une demande de 7 jours', async () => {
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        const [leaseArgs] = tx.lease.create.mock.calls[0] as [{ data: { status: string; tenantUserId: string } }];
+        expect(leaseArgs.data.status).toBe('PENDING_TENANT');
+        expect(leaseArgs.data.tenantUserId).toBe('existing-tenant-1');
+        // Pas d'échéancier pendant l'attente : aucun rappel, lien de paiement ni retard possible.
+        expect(tx.paymentScheduleEntry.createMany).not.toHaveBeenCalled();
+        // Réservation par écriture conditionnelle sur le statut lu.
+        expect(pending.reserve).toHaveBeenCalledWith({
+          where: { id: 'property-1', status: 'VACANT' },
+          data: { status: 'OCCUPIED' },
+        });
+        expect(listings.deactivateForProperty).toHaveBeenCalledWith(tx, 'property-1');
+
+        const [{ data: confirmation }] = pending.confirmationCreate.mock.calls[0] as [
+          { data: { sentAt: Date; expiresAt: Date; typedFirstName: string; previousPropertyStatus: string; listingWasActive: boolean } },
+        ];
+        expect(confirmation.expiresAt.getTime() - confirmation.sentAt.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+        expect(confirmation.typedFirstName).toBe('Ama');
+        expect(confirmation.previousPropertyStatus).toBe('VACANT');
+        expect(confirmation.listingWasActive).toBe(true);
+
+        expect(result).toEqual(
+          expect.objectContaining({
+            confirmationRequired: true,
+            confirmationId: 'conf-1',
+            invitationUrl: null,
+            channels: ['EMAIL', 'IN_APP'],
+          }),
+        );
+        // Jamais le nom ni l'email du compte : seulement ce que l'inviteur a tapé.
+        expect(result.user).toEqual({
+          firstName: 'Ama',
+          lastName: 'Kodjo',
+          email: inviteDto.email,
+          phone: inviteDto.phone,
+        });
+        expect(JSON.stringify(result)).not.toContain('Secret');
+      });
+
+      it('envoie la demande par email forcé + application, WhatsApp contrôlé sur le bien, sans lien qui valide seul', async () => {
+        pending.notifyWithOutcome.mockResolvedValueOnce({ whatsappSent: true });
+
+        const result = await service.inviteTenant(owner as never, inviteDto);
+
+        expect(notify.notifyUser).not.toHaveBeenCalled();
+        const [params] = pending.notifyWithOutcome.mock.calls[0] as [
+          { userId: string; event: string; forceEmail: boolean; relatedTo: { propertyId: string }; variables: Record<string, unknown> },
+        ];
+        expect(params.userId).toBe('existing-tenant-1');
+        expect(params.event).toBe('lease-confirmation-request');
+        expect(params.forceEmail).toBe(true);
+        expect(params.relatedTo).toEqual({ propertyId: 'property-1' });
+        expect(params.variables['actionUrl']).toBe('http://localhost:4300/locataire');
+        expect(params.variables['inviterName']).toBe('Jean Dupont');
+        expect(params.variables['acceptPayload']).toBe('LC_ACCEPT:conf-1');
+        expect(params.variables['refusePayload']).toBe('LC_REFUSE:conf-1');
+        expect(result.channels).toEqual(['EMAIL', 'IN_APP', 'WHATSAPP']);
+        expect(pending.confirmationUpdate).toHaveBeenCalledWith({
+          where: { id: 'conf-1' },
+          data: { whatsappSentAt: expect.any(Date) as Date },
+        });
+      });
+
+      it('une notification en échec ne fait pas échouer l’invitation', async () => {
+        pending.notifyWithOutcome.mockRejectedValueOnce(new Error('Resend en panne'));
+        await expect(service.inviteTenant(owner as never, inviteDto)).resolves.toEqual(
+          expect.objectContaining({ confirmationRequired: true }),
+        );
+      });
+
+      it('après 3 refus du même couple (inviteur, locataire) : 409 CONFIRMATION_BLOCKED', async () => {
+        pending.refusalCount.mockResolvedValueOnce(3);
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'CONFIRMATION_BLOCKED' }) as unknown,
+        });
+        expect(pending.refusalCount).toHaveBeenCalledWith({
+          where: { inviterUserId: 'owner-1', tenantUserId: 'existing-tenant-1', status: 'REFUSED' },
+        });
+        expect(tx.lease.create).not.toHaveBeenCalled();
+      });
+
+      it('deux invitations simultanées sur le même bien : la seconde ne réserve rien (409)', async () => {
+        pending.reserve.mockResolvedValueOnce({ count: 0 });
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'PROPERTY_NOT_AVAILABLE' }) as unknown,
+        });
+        expect(tx.lease.create).not.toHaveBeenCalled();
+      });
+
+      it('index unique « un bail en attente par bien » remappé en 409', async () => {
+        prisma.$transaction.mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError(
+            'Unique constraint failed on the constraint: `leases_property_pending_unique`',
+            { code: 'P2002', clientVersion: '5.22.0' },
+          ),
+        );
+        await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'PROPERTY_NOT_AVAILABLE' }) as unknown,
+        });
+      });
+    });
+
+    it('refuse un bien déjà loué ou réservé (409 PROPERTY_NOT_AVAILABLE), sans rien créer', async () => {
+      prisma.property.findUnique.mockResolvedValue({ ...property, status: 'OCCUPIED' });
+      await expect(service.inviteTenant(owner as never, inviteDto)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'PROPERTY_NOT_AVAILABLE' }) as unknown,
+      });
+      expect(tx.user.create).not.toHaveBeenCalled();
+      expect(tx.lease.create).not.toHaveBeenCalled();
+    });
+
+    it('compte créé par invitation mais jamais activé (aucune session) : parcours d’avant, bail actif', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'existing-tenant-1', role: 'TENANT' });
+      prisma.session.count.mockResolvedValue(0);
+
+      const result = await service.inviteTenant(owner as never, inviteDto);
+
+      expect(prisma.session.count).toHaveBeenCalledWith({ where: { userId: 'existing-tenant-1' } });
+      expect(result.confirmationRequired).toBe(false);
+      expect(tx.paymentScheduleEntry.createMany).toHaveBeenCalled();
+      const [leaseArgs] = tx.lease.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(leaseArgs.data).not.toHaveProperty('status');
+    });
   });
 
   describe('completeTenantSignup', () => {

@@ -287,3 +287,92 @@ describe('WhatsappAccessService.canSendStopConfirmation (unité 44)', () => {
     await expect(service.canSendStopConfirmation('tenant-1')).resolves.toMatchObject({ reason: 'NUMBER_NOT_VERIFIED' });
   });
 });
+
+// Accord du locataire déjà inscrit (09/11/2026) : exception limitée à la
+// demande d'accord et aux réponses du robot à ses boutons.
+describe('WhatsappAccessService.canSendLeaseConfirmation', () => {
+  let prisma: {
+    user: { findUnique: jest.Mock };
+    property: { findUnique: jest.Mock };
+    lease: { findFirst: jest.Mock };
+    mandate: { findFirst: jest.Mock };
+    subscription: { findUnique: jest.Mock };
+  };
+  let flags: Record<string, boolean>;
+  let service: WhatsappAccessService;
+
+  beforeEach(() => {
+    prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          role: 'TENANT',
+          phone: '90112233',
+          whatsappPhone: null,
+          whatsappConsent: 'ACCEPTED',
+          whatsappVerifiedPhone: '90112233',
+        }),
+      },
+      property: { findUnique: jest.fn().mockResolvedValue({ id: 'prop-9', ownerId: 'owner-9' }) },
+      lease: { findFirst: jest.fn().mockResolvedValue(null) },
+      mandate: { findFirst: jest.fn().mockResolvedValue(null) },
+      subscription: { findUnique: jest.fn().mockResolvedValue({ tier: 'PRO' }) },
+    };
+    flags = { WHATSAPP_ENABLED: true, WHATSAPP_LEASE_CONFIRMATION_ENABLED: true };
+    const config = { get: jest.fn((key: string) => flags[key]) };
+    const platformSettings = { whatsappEnabledTiers: jest.fn().mockResolvedValue(['STARTER', 'PRO']) };
+    service = new WhatsappAccessService(prisma as never, config as never, platformSettings as never);
+  });
+
+  it('autorise sans bail actif, avec le forfait du responsable du bien de la demande', async () => {
+    await expect(service.canSendLeaseConfirmation('tenant-1', 'prop-9', true)).resolves.toEqual({
+      allowed: true,
+      recipientPhone: '90112233',
+      metaNumber: '22890112233',
+    });
+    expect(prisma.lease.findFirst).not.toHaveBeenCalled();
+    expect(prisma.subscription.findUnique).toHaveBeenCalledWith({ where: { userId: 'owner-9' }, select: { tier: true } });
+  });
+
+  it('modèle pas encore approuvé chez Meta : la demande est sautée (l’email part seul)', async () => {
+    flags['WHATSAPP_LEASE_CONFIRMATION_ENABLED'] = false;
+    await expect(service.canSendLeaseConfirmation('tenant-1', 'prop-9', true)).resolves.toEqual({
+      allowed: false,
+      reason: 'TEMPLATE_NOT_ENABLED',
+    });
+    // Les réponses libres du robot ne dépendent pas du modèle.
+    await expect(service.canSendLeaseConfirmation('tenant-1', 'prop-9', false)).resolves.toMatchObject({ allowed: true });
+  });
+
+  it('jamais sans l’accord du locataire ni vers un numéro non vérifié', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce({
+      role: 'TENANT',
+      phone: '90112233',
+      whatsappPhone: null,
+      whatsappConsent: 'PENDING',
+      whatsappVerifiedPhone: '90112233',
+    });
+    await expect(service.canSendLeaseConfirmation('tenant-1', 'prop-9', true)).resolves.toEqual({
+      allowed: false,
+      reason: 'NO_CONSENT',
+    });
+    prisma.user.findUnique.mockResolvedValueOnce({
+      role: 'TENANT',
+      phone: '90112233',
+      whatsappPhone: null,
+      whatsappConsent: 'ACCEPTED',
+      whatsappVerifiedPhone: null,
+    });
+    await expect(service.canSendLeaseConfirmation('tenant-1', 'prop-9', true)).resolves.toEqual({
+      allowed: false,
+      reason: 'NUMBER_NOT_VERIFIED',
+    });
+  });
+
+  it('interrupteur général éteint : refusé', async () => {
+    flags['WHATSAPP_ENABLED'] = false;
+    await expect(service.canSendLeaseConfirmation('tenant-1', 'prop-9', false)).resolves.toEqual({
+      allowed: false,
+      reason: 'CHANNEL_DISABLED',
+    });
+  });
+});
