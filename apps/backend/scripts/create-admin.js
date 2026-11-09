@@ -1,6 +1,6 @@
 /**
  * Crée un compte administrateur WARAH.
- * Usage : node scripts/create-admin.js
+ * Usage : ADMIN_PASSWORD="..." node scripts/create-admin.js
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -8,7 +8,12 @@ const { PrismaClient }  = require('@prisma/client');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 const ADMIN_EMAIL    = 'admin@warah.tg';
-const ADMIN_PASSWORD = 'Admin@warah2026!';
+// Jamais de mot de passe dans le code : le dépôt a été public.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 12) {
+  console.error('❌ Définissez ADMIN_PASSWORD (12 caractères minimum) avant de lancer ce script.');
+  process.exit(1);
+}
 const ADMIN_PRENOM   = 'Admin';
 const ADMIN_NOM      = 'WARAH';
 
@@ -67,7 +72,6 @@ async function main() {
 
     console.log('\n✅ Compte admin créé avec succès !');
     console.log(`   Email    : ${ADMIN_EMAIL}`);
-    console.log(`   Mot de passe : ${ADMIN_PASSWORD}`);
     console.log('   Connexion : http://localhost:4200/auth/login\n');
 
   } catch (err) {
