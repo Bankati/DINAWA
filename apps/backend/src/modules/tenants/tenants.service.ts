@@ -76,6 +76,19 @@ export type TenantSummary = {
   whatsapp: { consent: WhatsappConsent; phoneVerified: boolean };
 };
 
+// Baux qu'un propriétaire ou gestionnaire a le droit de voir : les siens, ou
+// ceux d'un bien sous mandat ACTIVE. Un locataire qui déménage chez un autre
+// bailleur ne doit pas exposer sa nouvelle adresse ni son loyer à l'ancien
+// (audit de sécurité du 2026-10-20, M4).
+function leasesVisibleTo(userId: string): Prisma.LeaseWhereInput {
+  return {
+    OR: [
+      { ownerId: userId },
+      { property: { mandates: { some: { managerId: userId, status: 'ACTIVE' } } } },
+    ],
+  };
+}
+
 @Injectable()
 export class TenantsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -168,7 +181,7 @@ export class TenantsService {
         whatsappConsent: true,
         whatsappVerifiedPhone: true,
         leasesAsTenant: {
-          where: { status: 'ACTIVE' },
+          where: { status: 'ACTIVE', ...leasesVisibleTo(user.id) },
           select: {
             id: true,
             monthlyRent: true,
@@ -259,7 +272,7 @@ export class TenantsService {
         whatsappConsent: true,
         whatsappVerifiedPhone: true,
         leasesAsTenant: {
-          where: { status: 'ACTIVE' },
+          where: { status: 'ACTIVE', ...leasesVisibleTo(user.id) },
           select: {
             id: true,
             monthlyRent: true,
@@ -318,12 +331,7 @@ export class TenantsService {
     const isAdmin = user.role === 'ADMIN';
     const isSelf = user.id === tenantUserId;
 
-    const relationFilter: Prisma.LeaseWhereInput = {
-      OR: [
-        { ownerId: user.id },
-        { property: { mandates: { some: { managerId: user.id, status: 'ACTIVE' } } } },
-      ],
-    };
+    const relationFilter = leasesVisibleTo(user.id);
 
     if (!isAdmin && !isSelf) {
       const hasRelation = await this.prisma.lease.findFirst({
