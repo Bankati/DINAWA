@@ -356,6 +356,25 @@ describe('TenantsService', () => {
       const result = await service.getTenantById(owner, 'tenant-1');
       expect(result.activeLease).toBeNull();
     });
+
+    // Audit de sécurité M4 : le locataire a déménagé chez un autre bailleur,
+    // l'ancien ne doit voir ni la nouvelle adresse ni le nouveau loyer.
+    it("ne charge que le bail actif de l'appelant ou d'un bien sous son mandat (M4)", async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.getTenantById(owner, 'tenant-1')).rejects.toThrow(NotFoundException);
+
+      const [findFirstArgs] = prisma.user.findFirst.mock.calls[0] as [
+        { select: { leasesAsTenant: { where: unknown } } },
+      ];
+      expect(findFirstArgs.select.leasesAsTenant.where).toEqual({
+        status: 'ACTIVE',
+        OR: [
+          { ownerId: 'owner-1' },
+          { property: { mandates: { some: { managerId: 'owner-1', status: 'ACTIVE' } } } },
+        ],
+      });
+    });
   });
 
   describe('listInvitedTenants', () => {
@@ -387,6 +406,23 @@ describe('TenantsService', () => {
         monthlyRent: 80000,
         startDate,
         property: { id: 'prop-2', address: 'Rue 2', neighborhood: 'Adidogomé', city: 'Lomé' },
+      });
+    });
+
+    it("ne charge que les baux actifs de l'appelant ou des biens sous son mandat (M4)", async () => {
+      prisma.user.findMany.mockResolvedValueOnce([]);
+
+      await service.listInvitedTenants(manager);
+
+      const [findManyArgs] = prisma.user.findMany.mock.calls[0] as [
+        { select: { leasesAsTenant: { where: unknown } } },
+      ];
+      expect(findManyArgs.select.leasesAsTenant.where).toEqual({
+        status: 'ACTIVE',
+        OR: [
+          { ownerId: 'manager-1' },
+          { property: { mandates: { some: { managerId: 'manager-1', status: 'ACTIVE' } } } },
+        ],
       });
     });
 
