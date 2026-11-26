@@ -77,7 +77,27 @@
   border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
 }
 
+/* ── Tutoriels vidéo (en tête de page et dans les cartes) ── */
+.guide-videos h2 { font-size: 16px; font-weight: 800; color: var(--foreground); margin: 0 0 4px; }
+.guide-videos > p { font-size: 12.5px; color: var(--muted-foreground); margin: 0 0 14px; }
+.guide-videos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+
+/* Vidéos verticales (720×1280, format téléphone) : largeur limitée pour ne pas
+   occuper tout l'écran en hauteur sur ordinateur. */
+.guide-video { margin: 0; max-width: 260px; }
+.guide-card-body .guide-video { margin-top: 14px; }
+.guide-video video {
+  display: block; width: 100%; aspect-ratio: 9 / 16; border-radius: 10px;
+  background: var(--color-primary-900); border: 1px solid var(--border);
+}
+.guide-video figcaption {
+  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  font-size: 12.5px; font-weight: 600; color: var(--color-primary-dark);
+}
+
 @media (max-width: 640px) {
   .guide-hero { padding: 28px 20px; }
+  /* Deux vidéos par ligne sur téléphone : sinon 7 vidéos verticales repoussent le guide très bas. */
+  .guide-videos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .guide-card-body { padding-left: 18px; }
 }
