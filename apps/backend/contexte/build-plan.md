@@ -644,6 +644,47 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ---
 
+## Phase 13 — Artisans et pannes (proposition, à valider)
+
+Proposée le 2026-11-27, **rien n'est construit**. Architecture détaillée dans `artisans-pannes.md` (décisions du boss, parcours, données, accès, endpoints, notifications). Chaque unité passe par `/architect` avant tout code ; le plan validé remplace la section **Logique** ci-dessous.
+
+### 51 Carnet d'artisans
+
+**Logique :**
+
+- Modèles `Artisan` (numéro unique, métiers, quartiers, `directoryStatus`, `userId` nullable pour un futur compte) et `ArtisanContact` (carnet du propriétaire ou du gestionnaire, note privée), enum `ArtisanTrade` — migration additive
+- `GET/POST /api/artisans`, `PATCH /api/artisans/:id`, `DELETE /api/artisans/:id` (retire du carnet seulement) — pagination ≤ 100
+- Même numéro ajouté par un autre propriétaire → fiche existante ajoutée au carnet, jamais de doublon
+- Frontend : pages « Mes artisans » (propriétaire et gestionnaire)
+
+### 52 Accord et annuaire public
+
+**Logique :**
+
+- `ArtisanInvitation` (code à usage unique, empreinte HMAC, 7 jours) et `ArtisanConsentEvent` (preuve, texte versionné `artisan-annuaire-v1`)
+- `POST /api/artisans/:id/invitation` → lien wa.me « ARTISAN <code> » à transférer par le propriétaire
+- Robot : seule exception au silence pour un numéro inconnu, le message `ARTISAN <code>` ; accord OUI / NON, `STOP ARTISAN` ; 5 codes faux par heure
+- `GET /api/public/artisans` et `/api/public/artisans/:id` (`@Public()`, limite de débit stricte) — page publique `/artisans`
+- Console : badge vérifié, suspension avec motif
+
+### 53 Pannes (unité 39 construite avec les artisans)
+
+**Logique :**
+
+- `SupportRequest` de l'unité 39 avec en plus : `channel`, `trade`, `urgency`, statuts `OPEN → ASSIGNED → IN_PROGRESS → RESOLVED / CANCELLED`, artisan choisi, coût et qui le paie ; `SupportRequestPhoto` (bucket `support-photos`, 5 photos au plus)
+- Signalement par le robot (« Signaler un problème ») et par l'espace locataire web
+- `POST /api/support-requests/:id/assign`, `PATCH .../status` — `canActOnProperty()` ; artisan prévenu par le robot si sa fenêtre de 24 h est ouverte, sinon lien wa.me prérempli pour le propriétaire
+- Événements `support-request-created`, `support-request-assigned`, `support-request-resolved` ; 2 modèles Meta à déposer dès le début de l'unité
+
+### 54 Avis sur les artisans
+
+**Logique :**
+
+- `ArtisanReview` : un avis par panne `RESOLVED` (`supportRequestId` unique), note 1 à 5, commentaire facultatif
+- Note moyenne recalculée dans la même transaction ; avis masquable par l'admin
+
+---
+
 ## Récapitulatif des fonctionnalités
 
 | Phase                                                | Fonctionnalités |
@@ -660,4 +701,5 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 | Phase 10 — Administration                            | 3               |
 | Phase 11 — Sécurité, conformité et observabilité     | 2               |
 | Phase 12 — WhatsApp et chatbot locataire             | 8 (+ 39 réactivée) |
-| **Total**                                            | **49**          |
+| Phase 13 — Artisans et pannes (proposition)         | 4               |
+| **Total**                                            | **53**          |
