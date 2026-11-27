@@ -28,6 +28,7 @@ export default function PublicNavbar() {
         <ul className="nav-links">
           <li><Link href="/" className={linkClass(pathname === '/')}>Accueil</Link></li>
           <li><Link href="/annonces" className={linkClass(pathname.startsWith('/annonces'))}>Annonces</Link></li>
+          <li><Link href="/artisans" className={linkClass(pathname.startsWith('/artisans'))}>Artisans</Link></li>
           <li><Link href="/a-propos" className={linkClass(pathname.startsWith('/a-propos'))}>À propos</Link></li>
           <li><Link href="/#tarifs" className="nl">Tarifs</Link></li>
           <li><Link href="/contact" className={linkClass(pathname.startsWith('/contact'))}>Contact</Link></li>
@@ -47,6 +48,7 @@ export default function PublicNavbar() {
         <div className="m-menu" onClick={() => setMenuOpen(false)}>
           <Link href="/" className="mm-link">Accueil</Link>
           <Link href="/annonces" className="mm-link">Annonces</Link>
+          <Link href="/artisans" className="mm-link">Artisans</Link>
           <Link href="/a-propos" className="mm-link">À propos</Link>
           <Link href="/#tarifs" className="mm-link">Tarifs</Link>
           <Link href="/contact" className="mm-link">Contact</Link>
