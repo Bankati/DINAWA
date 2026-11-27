@@ -298,7 +298,7 @@ export class ReceiptPdfService {
       .fillColor('#FFFFFF', 0.45)
       .fontSize(5.5)
       .font('Helvetica')
-      .text(`warah.tg/verif/${refNum}`, QX, QY + 56, { width: 80, align: 'center' });
+      .text(`warahcontact.com/verif/${refNum}`, QX, QY + 56, { width: 110, align: 'left', lineBreak: false });
     doc.fillOpacity(1); // voir le reset équivalent plus haut — même bug PDFKit
 
     // Center: date + authenticité

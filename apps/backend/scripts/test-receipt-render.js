@@ -161,7 +161,7 @@ for (let r = 0; r < 5; r++) {
     }
   }
 }
-doc.fillColor('#FFFFFF', 0.45).fontSize(5.5).font('Helvetica').text(`warah.tg/verif/${refNum}`, QX, QY + 56, { width: 80, align: 'center' });
+doc.fillColor('#FFFFFF', 0.45).fontSize(5.5).font('Helvetica').text(`warahcontact.com/verif/${refNum}`, QX, QY + 56, { width: 110, align: 'left', lineBreak: false });
 doc.fillColor('#FFFFFF', 0.75).fontSize(8).font('Helvetica').text(`Émis le ${format(new Date(), 'dd MMMM yyyy', { locale: fr })}`, 0, FY + 24, { align: 'center', width: W });
 doc.fillColor(GOLD).fontSize(7).font('Helvetica').text('Document officiel · Plateforme WARAH', 0, FY + 40, { align: 'center', width: W });
 const SX = W - M - 140;
