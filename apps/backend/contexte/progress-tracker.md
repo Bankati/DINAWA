@@ -487,6 +487,14 @@ Vérifié : `tsc`/`eslint` propres, **113 tests** sur les 6 suites concernées (
 - [ ] 39 Signalements locataire (réactivée) — prévu mar. 20 ; photo reportable en semaine 3 si retard constaté le 19
 - [ ] 49 Recette et documentation WhatsApp — jeu. 22 et ven. 23
 
+### Phase 13 — Artisans et pannes (construite le 2026-11-27, feu vert du boss jusqu'au déploiement)
+
+- [x] 51 Carnet d'artisans — `modules/artisans` : un artisan = un numéro (fiche partagée entre propriétaires, note privée par carnet), fiche modifiable par son créateur tant qu'elle n'est pas publique.
+- [x] 52 Accord et annuaire public — **écart** : accord par page web `/artisans/accord/<jeton>` (jeton signé, 7 jours, usage unique), pas par le robot ; annuaire `GET /api/public/artisans` (60 req/min/IP, 20 par page, seulement `PUBLIC`) ; console `/admin/artisans` (badge vérifié, retrait avec motif, remise dans l'état d'avant).
+- [x] 53 Pannes — unité 39 construite côté **web** (`/locataire/pannes`, multipart 5 photos dans `property-photos/support-requests/`) ; choix de l'artisan (carnet ou annuaire, jamais retiré), statuts par écriture conditionnelle, 3 événements push/email (`support-request-created|assigned|resolved`, sans modèle Meta) ; lien wa.me prérempli pour prévenir l'artisan. Reste pour l'unité 39 « robot » : « Signaler un problème » dans le menu et photos reçues chez Meta.
+- [x] 54 Avis sur les artisans — un avis par panne `RESOLVED` (unique), note moyenne recalculée dans la transaction, masquage admin `POST /api/admin/artisan-reviews/:id/hide|unhide`.
+- Tests : 29 nouveaux (`artisans.service.spec.ts`, `support-requests.service.spec.ts`, `artisan-utils.spec.ts`). Détails et risques résiduels : `artisans-pannes.md`.
+
 ### Performance — signalement client (2026-08-13, hors numérotation build-plan)
 
 Le développeur a transmis 3 problèmes signalés par son client (lenteur, liens d'activation en `localhost` en prod, absence de responsive). Traité dans cette passe : le volet lenteur backend.

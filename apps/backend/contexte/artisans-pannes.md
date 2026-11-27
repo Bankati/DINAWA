@@ -1,7 +1,23 @@
 # Artisans et pannes — proposition d'architecture
 
-> **Statut : proposition, à valider par le client avant tout code.** Rien n'est construit.
-> Rédigée le 2026-11-27. Elle deviendra une section de `architecture.md` au fur et à mesure de la construction (unités 51 à 54, voir `build-plan.md`, Phase 13). Chaque unité passe par `/architect` avant le code ; le plan validé remplace la section correspondante ci-dessous.
+> **Statut : V1 construite le 2026-11-27** (unités 51 à 54, feu vert du boss jusqu'au déploiement). Voir « Ce qui est construit » juste en dessous : deux écarts avec la proposition initiale, choisis pour que tout marche sans dépendre du compte Meta.
+
+## Ce qui est construit (V1) — écarts avec la proposition
+
+| Sujet | Proposition | Construit en V1 | Pourquoi |
+| --- | --- | --- | --- |
+| Accord de l'artisan | Message « ARTISAN <code> » envoyé au robot, puis « OUI » | **Page web d'accord** `/artisans/accord/<jeton>` ouverte depuis le lien que le propriétaire transfère sur WhatsApp. Jeton signé HMAC (`signed-token.ts`, usage `artisan-consent`, clé `INVITATION_TOKEN_SECRET`), 7 jours, **usage unique** (`ArtisanInvitation.usedAt`, écriture conditionnelle). | Fonctionne même si WhatsApp Cloud n'est pas actif en production ; ne touche pas au webhook ni au robot. |
+| Signalement par le robot | « Signaler un problème » dans le menu du robot | **Espace locataire web seulement** (`/locataire/pannes`). `SupportRequest.channel` prévoit déjà `WHATSAPP` pour plus tard. | Même raison ; le téléchargement des photos chez Meta reste à faire avec l'unité 39 « robot ». |
+| Photos des pannes | Bucket `support-photos` | Bucket existant `property-photos`, dossier `support-requests/<id>/` | Aucun bucket à créer côté Supabase avant le déploiement. |
+| Notifications WhatsApp | 2 modèles Meta | `null` dans `whatsapp-templates.ts` : push ou email seulement | Les modèles doivent d'abord être validés chez Meta. |
+
+**Risque résiduel assumé (accord par lien)** : le lien prouve qu'on l'a reçu, pas que le numéro appartient à celui qui clique — un propriétaire pourrait ouvrir lui-même le lien. Garde-fous : numéro masqué sur la page, texte d'accord versionné et preuve gardée (`ArtisanConsentEvent`), retrait à tout moment par l'admin (`/admin/artisans`, motif obligatoire), badge « vérifié » réservé à l'admin. Passer à la vérification par le robot (proposition initiale) quand WhatsApp sera actif.
+
+Modules : `src/modules/artisans/` (carnet, invitation, accord, annuaire, admin) et `src/modules/support-requests/` (pannes, avis, masquage admin). Migration additive `20261127120000_add_artisans_support_requests` (7 tables, 6 enums, aucune table existante modifiée). Pages : `/dashboard|gestionnaire/artisans`, `/dashboard|gestionnaire/pannes`, `/locataire/pannes`, `/artisans` (public), `/artisans/accord/[jeton]`, `/admin/artisans`, `/pannes` (redirection selon le rôle).
+
+---
+
+La proposition initiale suit, pour référence.
 
 ## Besoin
 
