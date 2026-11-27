@@ -1,5 +1,6 @@
 import { BookOpen, Home, Users, CreditCard, Megaphone, Handshake, UserSearch, Briefcase, Wallet } from 'lucide-react';
 import { GuidePage, type GuideSection } from '@/components/guide/guide-page';
+import { TUTORIELS as T } from '@/components/guide/tutoriels';
 
 const SECTIONS: GuideSection[] = [
   {
@@ -14,6 +15,7 @@ const SECTIONS: GuideSection[] = [
       "Un bien vacant est automatiquement publié en annonce ; il repasse indisponible dès qu'un bail actif lui est associé.",
     ],
     tip: 'Le nombre de biens facturables que vous pouvez créer dépend de votre palier d’abonnement (Starter, Pro, Premium, Agence) — visible dans votre profil.',
+    videos: [T.biens],
   },
   {
     icon: Users,
@@ -23,6 +25,7 @@ const SECTIONS: GuideSection[] = [
       "Consultez la liste des locataires actifs et leur bail associé.",
       "Ouvrez la fiche d'un locataire pour voir son historique de paiements et son profil.",
     ],
+    videos: [T.bail],
   },
   {
     icon: Wallet,
@@ -35,6 +38,7 @@ const SECTIONS: GuideSection[] = [
       "Si le bien est sous mandat actif, le loyer est envoyé au gestionnaire : c'est entre vous et lui que se règle ensuite sa commission.",
     ],
     tip: "Chaque changement de numéro vous envoie un email d'alerte. Si vous n'en êtes pas à l'origine, changez immédiatement votre mot de passe.",
+    videos: [T.loyers],
   },
   {
     icon: CreditCard,
@@ -46,6 +50,7 @@ const SECTIONS: GuideSection[] = [
       'La signature de la quittance porte le nom du gestionnaire si le bien est sous mandat actif, sinon le vôtre.',
       'Le statut du reversement (en attente, reversé, en échec) est affiché pour chaque paiement en ligne. Pour un bien sous mandat, vous voyez les paiements en lecture seule : seul le gestionnaire peut les valider.',
     ],
+    videos: [T.paiements],
   },
   {
     icon: Megaphone,
@@ -65,6 +70,7 @@ const SECTIONS: GuideSection[] = [
       "Une fois le mandat actif, le gestionnaire gère ces biens à votre place (édition, paiements, locataires) et reçoit les loyers. Vous gardez un accès en lecture seule : vous voyez tout, mais vous ne pouvez plus rien modifier tant que le mandat est actif.",
       'Vous pouvez mettre fin au mandat à tout moment depuis la même page.',
     ],
+    videos: [T.delegation],
   },
   {
     icon: UserSearch,
@@ -84,6 +90,7 @@ const SECTIONS: GuideSection[] = [
       'Un bien facturable est un bien loué, en travaux, ou publié en annonce active — jamais un bien archivé.',
       'Changez de palier à tout moment depuis votre profil si votre quota est atteint.',
     ],
+    videos: [T.compte],
   },
 ];
 
@@ -94,6 +101,7 @@ export default function DashboardGuidePage() {
       title="Guide du Propriétaire"
       subtitle="Tout ce qu'il faut savoir pour gérer vos biens, vos locataires et vos paiements sur WARAH."
       sections={SECTIONS}
+      videos={[T.compte, T.biens, T.bail, T.paiements, T.loyers, T.delegation, T.whatsapp]}
     />
   );
 }

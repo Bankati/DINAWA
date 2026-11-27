@@ -1,5 +1,6 @@
 import { BookOpen, Wallet, FileText, History, User } from 'lucide-react';
 import { GuidePage, type GuideSection } from '@/components/guide/guide-page';
+import { TUTORIELS as T } from '@/components/guide/tutoriels';
 
 const SECTIONS: GuideSection[] = [
   {
@@ -15,6 +16,7 @@ const SECTIONS: GuideSection[] = [
       'Une quittance PDF est générée et vous est envoyée par email dès le paiement confirmé.',
     ],
     tip: "Recommencez cette même démarche chaque mois, à chaque nouvelle échéance affichée. Si le paiement en ligne n'est pas disponible pour votre bien, prévenez votre propriétaire depuis la même page ou déclarez un paiement effectué autrement.",
+    videos: [T.payerEnLigne],
   },
   {
     icon: FileText,
@@ -26,6 +28,7 @@ const SECTIONS: GuideSection[] = [
       "Votre propriétaire ou gestionnaire examine la déclaration avant de la valider.",
       "Une quittance est générée automatiquement une fois la déclaration validée.",
     ],
+    videos: [T.especes],
   },
   {
     icon: History,
@@ -42,7 +45,9 @@ const SECTIONS: GuideSection[] = [
     summary: 'Vos informations personnelles',
     steps: [
       'Mettez à jour vos coordonnées et votre photo de profil.',
+      "Depuis « Messages WhatsApp », créez le code à 6 chiffres qui permet de payer et de recevoir vos quittances sur l'assistant WhatsApp de WARAH.",
     ],
+    videos: [T.whatsapp],
   },
 ];
 
@@ -53,6 +58,7 @@ export default function LocataireGuidePage() {
       title="Guide du Locataire"
       subtitle="Payez votre loyer chaque mois, suivez vos quittances et gérez votre bail en toute simplicité."
       sections={SECTIONS}
+      videos={[T.payerEnLigne, T.especes, T.whatsapp]}
     />
   );
 }
