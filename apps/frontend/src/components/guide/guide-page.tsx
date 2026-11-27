@@ -1,6 +1,12 @@
 import type { LucideIcon } from 'lucide-react';
-import { ChevronDown, Lightbulb } from 'lucide-react';
+import { ChevronDown, Lightbulb, PlayCircle } from 'lucide-react';
 import './guide-page.css';
+
+/** Tutoriel vidéo rangé dans public/videos/tutoriels/ (fichier .mp4 + image .jpg du même nom). */
+export interface GuideVideo {
+  fichier: string;
+  titre: string;
+}
 
 export interface GuideSection {
   icon: LucideIcon;
@@ -8,6 +14,7 @@ export interface GuideSection {
   summary: string;
   steps: string[];
   tip?: string;
+  videos?: GuideVideo[];
 }
 
 export interface GuidePageProps {
@@ -15,6 +22,26 @@ export interface GuidePageProps {
   title: string;
   subtitle: string;
   sections: GuideSection[];
+  videos?: GuideVideo[];
+}
+
+// preload="none" : rien n'est téléchargé avant que la personne appuie sur lecture
+// (forfaits mobiles). Seule la petite image d'aperçu est chargée.
+function GuideVideoPlayer({ video }: { video: GuideVideo }) {
+  const base = `/videos/tutoriels/${video.fichier}`;
+  return (
+    <figure className="guide-video">
+      <video controls preload="none" playsInline poster={`${base}.jpg`} aria-label={`Tutoriel vidéo : ${video.titre}`}>
+        <source src={`${base}.mp4`} type="video/mp4" />
+        Votre navigateur ne peut pas lire cette vidéo.{' '}
+        <a href={`${base}.mp4`}>Télécharger la vidéo</a>
+      </video>
+      <figcaption>
+        <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+        {video.titre}
+      </figcaption>
+    </figure>
+  );
 }
 
 function slug(s: string): string {
@@ -30,7 +57,7 @@ function slug(s: string): string {
 // lecteurs d'écran gérés gratuitement par le navigateur, zéro JS côté client
 // (voir la note perf sur PageHeader : éviter d'ajouter du poids à des pages
 // montées sur tout un rôle).
-export function GuidePage({ icon: HeroIcon, title, subtitle, sections }: GuidePageProps) {
+export function GuidePage({ icon: HeroIcon, title, subtitle, sections, videos }: GuidePageProps) {
   return (
     <div className="guide-page">
       <div className="guide-hero">
@@ -40,6 +67,18 @@ export function GuidePage({ icon: HeroIcon, title, subtitle, sections }: GuidePa
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
+
+      {videos && videos.length > 0 && (
+        <section className="guide-videos" aria-labelledby="guide-videos-titre">
+          <h2 id="guide-videos-titre">Les tutoriels en vidéo</h2>
+          <p>Environ 3 minutes chacun, dans l&apos;ordre où vous en aurez besoin.</p>
+          <div className="guide-videos-grid">
+            {videos.map((v) => (
+              <GuideVideoPlayer key={v.fichier} video={v} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="guide-toc">
         {sections.map((s) => (
@@ -75,6 +114,9 @@ export function GuidePage({ icon: HeroIcon, title, subtitle, sections }: GuidePa
                   <span>{s.tip}</span>
                 </div>
               )}
+              {s.videos?.map((v) => (
+                <GuideVideoPlayer key={v.fichier} video={v} />
+              ))}
             </div>
           </details>
         ))}
