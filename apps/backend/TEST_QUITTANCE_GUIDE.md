@@ -25,7 +25,7 @@ Les tests dans `receipt-pdf.service.spec.ts` vérifient :
 6. ✅ **Numéro de quittance** - Format ABC12345
 7. ✅ **Montant en FCFA** - Format "55 000 FCFA"
 8. ✅ **Mention légale** - Texte légal complet
-9. ✅ **URL de vérification** - www.warah.tg/verif/
+9. ✅ **URL de vérification** - www.warahcontact.com/verif/
 10. ✅ **Gestion des données manquantes** - Pas d'erreur avec null/undefined
 11. ✅ **Méthodes de paiement** - T-Money, Flooz, Espèces, Virement
 
@@ -139,7 +139,7 @@ node test-receipt-manual.js
 
 - [ ] Placeholder QR code présent
 - [ ] Texte "Vérification d'authenticité" présent
-- [ ] URL www.warah.tg/verif/ présente
+- [ ] URL www.warahcontact.com/verif/ présente
 - [ ] Date et lieu "Fait à Lomé" présents
 - [ ] Signature "Le bailleur" présente
 - [ ] Ligne de signature présente

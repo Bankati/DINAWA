@@ -138,7 +138,7 @@ export default function LandingPage() {
             animateCounter(setStatAnnonces, 800, 1600);
             animateCounter(setStatProprio, 50, 1400);
             animateCounter(setStatSatisfaction, 98, 1200);
-            animateCounter(setStatVilles, 6, 900);
+            animateCounter(setStatVilles, 5, 900);
           }
         },
         { threshold: 0.35 },
@@ -271,7 +271,7 @@ export default function LandingPage() {
           <div className="hsb-sep" />
           <div className="hsb-stat"><span className="hsb-n">98%</span><span className="hsb-l">Satisfaction</span></div>
           <div className="hsb-sep" />
-          <div className="hsb-stat"><span className="hsb-n">50+</span><span className="hsb-l">Villes</span></div>
+          <div className="hsb-stat"><span className="hsb-n">5</span><span className="hsb-l">Villes</span></div>
         </div>
       </section>
 
