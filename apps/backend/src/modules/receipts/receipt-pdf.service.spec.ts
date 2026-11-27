@@ -145,7 +145,7 @@ describe('ReceiptPdfService - Format WARAH', () => {
   it('contient lURL de vérification', async () => {
     const buffer = await service.generate(makePayment());
     const pdfText = extractPdfText(buffer);
-    expect(pdfText).toContain('warah.tg/verif/');
+    expect(pdfText).toContain('warahcontact.com/verif/');
   });
 
   it('gère les données manquantes sans erreur', async () => {
