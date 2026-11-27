@@ -1,5 +1,6 @@
 import { BookOpen, Briefcase, Home, Users, CreditCard, Megaphone, UserCircle2, Wallet } from 'lucide-react';
 import { GuidePage, type GuideSection } from '@/components/guide/guide-page';
+import { TUTORIELS as T } from '@/components/guide/tutoriels';
 
 const SECTIONS: GuideSection[] = [
   {
@@ -10,6 +11,7 @@ const SECTIONS: GuideSection[] = [
       'Le portefeuille regroupe vos biens propres et les biens confiés par mandat actif.',
       "Chaque bien indique clairement s'il vous appartient ou s'il vous est délégué.",
     ],
+    videos: [T.gestionnaires],
   },
   {
     icon: Home,
@@ -21,6 +23,7 @@ const SECTIONS: GuideSection[] = [
       "Sur un bien sous mandat actif, vous avez les mêmes droits que le propriétaire : modification, photos, statut.",
       'Utilisez le filtre « Immeuble » en haut de la liste pour retrouver un groupe de biens.',
     ],
+    videos: [T.biens],
   },
   {
     icon: Users,
@@ -29,6 +32,7 @@ const SECTIONS: GuideSection[] = [
     steps: [
       'Consultez les locataires actifs, quel que soit le bien (propre ou sous mandat).',
     ],
+    videos: [T.bail],
   },
   {
     icon: Wallet,
@@ -50,6 +54,7 @@ const SECTIONS: GuideSection[] = [
       "Chaque paiement confirmé génère une quittance PDF envoyée au propriétaire et au locataire — et à vous aussi sur un bien sous mandat.",
       'Sur un bien sous mandat, la quittance porte votre nom dans la zone de signature.',
     ],
+    videos: [T.paiements],
   },
   {
     icon: Megaphone,
@@ -77,6 +82,7 @@ export default function GestionnaireGuidePage() {
       title="Guide du Gestionnaire"
       subtitle="Gérez votre portefeuille, vos mandats et les paiements des biens qui vous sont confiés."
       sections={SECTIONS}
+      videos={[T.gestionnaires, T.biens, T.bail, T.paiements, T.especes, T.whatsapp]}
     />
   );
 }
