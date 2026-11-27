@@ -243,3 +243,26 @@ export const PAYDUNYA_MIN_INVOICE_FCFA = 200;
 // changer phone/payoutOperator d'un OWNER/MANAGER, voir ProfileService) —
 // limité pour ne jamais servir d'oracle de mot de passe.
 export const THROTTLE_PROFILE_UPDATE = { default: { limit: 10, ttl: 3_600_000 } };
+
+// ─── Artisans et pannes (Phase 13, contexte/artisans-pannes.md) ───
+// Lien d'accord envoyé à l'artisan : 7 jours, une seule utilisation.
+export const ARTISAN_INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Texte d'accord de l'annuaire public : seule source, renvoyée par l'API avec
+// sa version (le frontend ne le recopie jamais). Toute modification du texte
+// impose d'incrémenter la version.
+export const ARTISAN_DIRECTORY_NOTICE_VERSION = 'artisan-annuaire-v1';
+export const ARTISAN_DIRECTORY_NOTICE_TEXT =
+  "J'accepte que WARAH affiche dans son annuaire public mon nom, mes métiers, " +
+  'les quartiers où je travaille, mon numéro de téléphone et les avis laissés ' +
+  "après mes interventions. Je peux retirer ma fiche à tout moment en écrivant " +
+  "à WARAH (page Contact) ; elle disparaît alors de l'annuaire.";
+// Annuaire public : volume normal d'un visiteur, bien en dessous des
+// annonces — il expose des numéros de téléphone (anti-aspiration).
+export const THROTTLE_PUBLIC_ARTISANS = { default: { limit: 60, ttl: 60_000 } };
+export const PUBLIC_ARTISANS_MAX_PAGE_SIZE = 20;
+// Page d'accord : quelques essais par minute et par adresse IP.
+export const THROTTLE_ARTISAN_CONSENT = { default: { limit: 10, ttl: 60_000 } };
+export const MAX_PHOTOS_PER_SUPPORT_REQUEST = 5;
+// Pannes encore ouvertes par locataire : au-delà, il doit attendre que le
+// responsable en traite (évite les doublons et les abus).
+export const MAX_OPEN_SUPPORT_REQUESTS_PER_TENANT = 10;

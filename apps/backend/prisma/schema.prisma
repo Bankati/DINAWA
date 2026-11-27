@@ -420,6 +420,13 @@ model User {
   whatsappConversation   WhatsappConversation?
   whatsappThreads        WhatsappThread[]       @relation("WhatsappThreadTenant")
 
+  artisanAccount      Artisan?            @relation("ArtisanAccount")
+  artisansCreated     Artisan[]           @relation("ArtisanCreatedBy")
+  artisanContacts     ArtisanContact[]    @relation("ArtisanContactOwner")
+  artisanInvitations  ArtisanInvitation[] @relation("ArtisanInvitationAuthor")
+  supportRequests     SupportRequest[]    @relation("SupportRequestTenant")
+  artisanReviewsGiven ArtisanReview[]     @relation("ArtisanReviewAuthor")
+
   @@map("users")
 }
 
@@ -566,6 +573,8 @@ model Property {
   tenantBlocks    TenantPropertyBlock[]
   whatsappThreads WhatsappThread[]
 
+  supportRequests SupportRequest[]
+
   @@index([ownerId])
   @@index([status])
   @@index([type])
@@ -653,6 +662,8 @@ model Lease {
 
   scheduleEntries PaymentScheduleEntry[]
   payments        Payment[]
+
+  supportRequests SupportRequest[]
 
   @@index([propertyId])
   @@index([ownerId])
@@ -1220,4 +1231,219 @@ model WhatsappThread {
   @@unique([tenantUserId, propertyId])
   @@index([propertyId, lastMessageAt])
   @@map("whatsapp_threads")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Artisans et pannes (Phase 13, unités 51 à 54 — voir contexte/artisans-pannes.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ArtisanTrade {
+  PLUMBER
+  ELECTRICIAN
+  MASON
+  CARPENTER
+  PAINTER
+  AIR_CONDITIONING
+  LOCKSMITH
+  GLAZIER
+  WELDER
+  TILER
+  OTHER
+}
+
+// PRIVATE : seulement dans les carnets des propriétaires qui l'ont ajouté.
+// PUBLIC : l'artisan a lui-même accepté l'annuaire (preuve dans
+// ArtisanConsentEvent). REFUSED : il a refusé — jamais republié sans une
+// nouvelle invitation acceptée. SUSPENDED : retiré par un admin.
+enum ArtisanDirectoryStatus {
+  PRIVATE
+  PUBLIC
+  REFUSED
+  SUSPENDED
+}
+
+enum SupportRequestStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+enum SupportRequestUrgency {
+  NORMAL
+  URGENT
+}
+
+enum SupportRequestChannel {
+  WEB
+  WHATSAPP
+}
+
+enum InterventionCostPayer {
+  OWNER
+  TENANT
+}
+
+// Un artisan = un numéro (8 chiffres, forme locale) : plusieurs propriétaires
+// qui ajoutent le même plombier partagent la même fiche et ses avis, chacun
+// avec sa note privée (ArtisanContact). Pas de compte en V1 : `userId` reste
+// vide jusqu'au jour où l'artisan pourra s'inscrire et récupérer sa fiche.
+model Artisan {
+  id                   String                 @id @default(cuid())
+  phone                String                 @unique
+  displayName          String
+  trades               ArtisanTrade[]
+  zones                String[]               @default([])
+  directoryStatus      ArtisanDirectoryStatus @default(PRIVATE)
+  // Heure et version du texte du dernier changement d'accord (annuaire).
+  consentChangedAt     DateTime?              @db.Timestamptz(6)
+  consentNoticeVersion String?
+  // Badge « vérifié », posé par un admin après contrôle.
+  verifiedAt           DateTime?              @db.Timestamptz(6)
+  verifiedById         String?
+  suspensionReason     String?
+  ratingAverage        Float                  @default(0)
+  ratingCount          Int                    @default(0)
+  userId               String?                @unique
+  user                 User?                  @relation("ArtisanAccount", fields: [userId], references: [id], onDelete: SetNull)
+  createdById          String
+  createdBy            User                   @relation("ArtisanCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime               @updatedAt @db.Timestamptz(6)
+
+  contacts        ArtisanContact[]
+  invitations     ArtisanInvitation[]
+  consentEvents   ArtisanConsentEvent[]
+  supportRequests SupportRequest[]
+  reviews         ArtisanReview[]
+
+  @@index([directoryStatus])
+  @@map("artisans")
+}
+
+// Carnet d'un propriétaire ou d'un gestionnaire. La note privée n'est
+// jamais montrée à l'artisan ni aux autres propriétaires.
+model ArtisanContact {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("ArtisanContactOwner", fields: [userId], references: [id], onDelete: Cascade)
+  artisanId   String
+  artisan     Artisan  @relation(fields: [artisanId], references: [id], onDelete: Cascade)
+  privateNote String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, artisanId])
+  @@index([artisanId])
+  @@map("artisan_contacts")
+}
+
+// Lien d'accord envoyé à l'artisan (par le propriétaire, depuis son propre
+// WhatsApp). Le jeton lui-même n'est jamais stocké : il est signé (HMAC) et
+// porte l'id de cette ligne ; usedAt rend le lien utilisable une seule fois.
+model ArtisanInvitation {
+  id          String    @id @default(cuid())
+  artisanId   String
+  artisan     Artisan   @relation(fields: [artisanId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime  @db.Timestamptz(6)
+  usedAt      DateTime? @db.Timestamptz(6)
+  createdById String
+  createdBy   User      @relation("ArtisanInvitationAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([artisanId, createdAt])
+  @@map("artisan_invitations")
+}
+
+// Preuve de chaque changement d'accord (annuaire), comme WhatsappConsentEvent.
+// source : INVITATION_LINK (l'artisan) ou ADMIN (suspension, réactivation).
+model ArtisanConsentEvent {
+  id             String                 @id @default(cuid())
+  artisanId      String
+  artisan        Artisan                @relation(fields: [artisanId], references: [id], onDelete: Cascade)
+  previousStatus ArtisanDirectoryStatus
+  newStatus      ArtisanDirectoryStatus
+  source         String
+  noticeVersion  String?
+  invitationId   String?
+  actorUserId    String?
+  phoneLast2     String?
+  createdAt      DateTime               @default(now()) @db.Timestamptz(6)
+
+  @@index([artisanId, createdAt])
+  @@map("artisan_consent_events")
+}
+
+// Panne signalée par un locataire (unité 39 « signalements », construite
+// avec les artisans — unité 53). Le responsable du bien (canActOnProperty)
+// choisit un artisan et suit l'intervention.
+model SupportRequest {
+  id             String                 @id @default(cuid())
+  // Référence courte lisible au téléphone (SR-XXXXXX).
+  reference      String                 @unique
+  propertyId     String
+  property       Property               @relation(fields: [propertyId], references: [id])
+  leaseId        String?
+  lease          Lease?                 @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  tenantUserId   String
+  tenant         User                   @relation("SupportRequestTenant", fields: [tenantUserId], references: [id])
+  channel        SupportRequestChannel  @default(WEB)
+  description    String
+  trade          ArtisanTrade?
+  urgency        SupportRequestUrgency  @default(NORMAL)
+  status         SupportRequestStatus   @default(OPEN)
+  artisanId      String?
+  artisan        Artisan?               @relation(fields: [artisanId], references: [id], onDelete: SetNull)
+  assignedAt     DateTime?              @db.Timestamptz(6)
+  assignedById   String?
+  startedAt      DateTime?              @db.Timestamptz(6)
+  resolvedAt     DateTime?              @db.Timestamptz(6)
+  cancelledAt    DateTime?              @db.Timestamptz(6)
+  // Coût de l'intervention (FCFA, entier) et qui le paie — renseignés à la
+  // clôture, pour l'historique du bien.
+  costAmount     Int?
+  costPaidBy     InterventionCostPayer?
+  resolutionNote String?
+  createdAt      DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime               @updatedAt @db.Timestamptz(6)
+
+  photos SupportRequestPhoto[]
+  review ArtisanReview?
+
+  @@index([propertyId, status])
+  @@index([tenantUserId, createdAt])
+  @@index([artisanId])
+  @@map("support_requests")
+}
+
+model SupportRequestPhoto {
+  id               String         @id @default(cuid())
+  supportRequestId String
+  supportRequest   SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  storagePath      String
+  position         Int            @default(0)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([supportRequestId])
+  @@map("support_request_photos")
+}
+
+// Un avis par panne terminée (supportRequestId unique) : on ne note un
+// artisan qu'après une vraie intervention.
+model ArtisanReview {
+  id               String         @id @default(cuid())
+  artisanId        String
+  artisan          Artisan        @relation(fields: [artisanId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User           @relation("ArtisanReviewAuthor", fields: [authorId], references: [id])
+  supportRequestId String         @unique
+  supportRequest   SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  rating           Int
+  comment          String?
+  isHidden         Boolean        @default(false)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(6)
+
+  @@index([artisanId])
+  @@map("artisan_reviews")
 }

@@ -11,7 +11,7 @@ import { initiales } from '@/lib/format';
 import {
   Search, LayoutDashboard, Home, Users, CreditCard, Megaphone, User, UserCircle2,
   IdCard, Bell, Download, Handshake, Briefcase, BarChart3, LogOut, X, Menu,
-  AlertTriangle, UserSearch, History, BookOpen, Send, Wallet, Settings, MessageSquare, type LucideIcon,
+  AlertTriangle, UserSearch, History, BookOpen, Send, Wallet, Settings, MessageSquare, Wrench, Hammer, type LucideIcon,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui';
 import { CommandPalette, ThemeToggle, type CommandPaletteItem } from '@/components/ds';
@@ -21,7 +21,8 @@ import './app-shell.css';
 type NavIcon =
   | 'dashboard' | 'biens' | 'locataires' | 'paiements' | 'annonces'
   | 'profil' | 'notifications' | 'export' | 'identite' | 'delegation'
-  | 'portefeuille' | 'rapports' | 'profil-public' | 'gestionnaires' | 'audit-logs' | 'guide' | 'reversements' | 'parametres' | 'messages';
+  | 'portefeuille' | 'rapports' | 'profil-public' | 'gestionnaires' | 'audit-logs' | 'guide' | 'reversements' | 'parametres' | 'messages'
+  | 'artisans' | 'pannes';
 
 // messages : compteur des conversations WhatsApp non lues (unité 48).
 interface NavItem { icon: NavIcon; label: string; route: string; exact?: boolean; notif?: boolean; messages?: boolean; }
@@ -36,6 +37,8 @@ const OWNER_NAV: NavSection[] = [
       { icon: 'locataires', label: 'Locataires', route: '/dashboard/locataires' },
       { icon: 'paiements', label: 'Paiements', route: '/dashboard/paiements' },
       { icon: 'messages', label: 'Messages', route: '/dashboard/messages', messages: true },
+      { icon: 'pannes', label: 'Pannes', route: '/dashboard/pannes' },
+      { icon: 'artisans', label: 'Mes artisans', route: '/dashboard/artisans' },
       { icon: 'annonces', label: 'Annonces', route: '/dashboard/annonces' },
     ],
   },
@@ -61,6 +64,8 @@ const MANAGER_NAV: NavSection[] = [
       { icon: 'locataires', label: 'Locataires', route: '/gestionnaire/locataires' },
       { icon: 'paiements', label: 'Paiements', route: '/gestionnaire/paiements' },
       { icon: 'messages', label: 'Messages', route: '/gestionnaire/messages', messages: true },
+      { icon: 'pannes', label: 'Pannes', route: '/gestionnaire/pannes' },
+      { icon: 'artisans', label: 'Mes artisans', route: '/gestionnaire/artisans' },
       { icon: 'annonces', label: 'Annonces', route: '/gestionnaire/annonces' },
     ],
   },
@@ -85,6 +90,7 @@ const ADMIN_NAV: NavSection[] = [
       { icon: 'paiements', label: 'Transactions', route: '/admin/transactions' },
       { icon: 'reversements', label: 'Reversements', route: '/admin/reversements' },
       { icon: 'messages', label: 'Messages', route: '/admin/messages' },
+      { icon: 'artisans', label: 'Artisans', route: '/admin/artisans' },
       { icon: 'audit-logs', label: "Journal d'audit", route: '/admin/audit-logs' },
       { icon: 'parametres', label: 'Paramètres', route: '/admin/parametres' },
       { icon: 'guide', label: "Guide d'utilisation", route: '/admin/guide' },
@@ -97,6 +103,7 @@ const TENANT_NAV: NavSection[] = [
     label: 'Aperçu',
     items: [
       { icon: 'dashboard', label: 'Tableau de bord', route: '/locataire', exact: true },
+      { icon: 'pannes', label: 'Mes pannes', route: '/locataire/pannes' },
     ],
   },
   {
@@ -141,6 +148,8 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   reversements: Send,
   parametres: Settings,
   messages: MessageSquare,
+  artisans: Wrench,
+  pannes: Hammer,
 };
 
 interface AccountStatusResponse {

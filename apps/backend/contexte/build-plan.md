@@ -644,9 +644,9 @@ Planifiée le 2026-10-07, du 2026-10-12 au 2026-10-23 (10 jours ouvrés, 2 déve
 
 ---
 
-## Phase 13 — Artisans et pannes (proposition, à valider)
+## Phase 13 — Artisans et pannes
 
-Proposée le 2026-11-27, **rien n'est construit**. Architecture détaillée dans `artisans-pannes.md` (décisions du boss, parcours, données, accès, endpoints, notifications). Chaque unité passe par `/architect` avant tout code ; le plan validé remplace la section **Logique** ci-dessous.
+Proposée puis **construite le 2026-11-27 (V1)** — écarts avec la proposition (accord par page web, signalement web seulement) détaillés en tête de `artisans-pannes.md`, qui décrit aussi les décisions du boss, les parcours, les données, les accès et les notifications.
 
 ### 51 Carnet d'artisans
 
@@ -701,5 +701,5 @@ Proposée le 2026-11-27, **rien n'est construit**. Architecture détaillée dans
 | Phase 10 — Administration                            | 3               |
 | Phase 11 — Sécurité, conformité et observabilité     | 2               |
 | Phase 12 — WhatsApp et chatbot locataire             | 8 (+ 39 réactivée) |
-| Phase 13 — Artisans et pannes (proposition)         | 4               |
+| Phase 13 — Artisans et pannes                       | 4               |
 | **Total**                                            | **53**          |

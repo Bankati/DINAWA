@@ -24,6 +24,9 @@ export default function robots(): MetadataRoute.Robots {
         // Lien de paiement public (unité 43) : une URL par loyer, propre à
         // un locataire — jamais à indexer.
         "/payer/",
+        // Lien d'accord d'un artisan (Phase 13) : personnel, usage unique.
+        "/artisans/accord/",
+        "/pannes",
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

@@ -40,6 +40,8 @@ import { PayLinksModule } from './modules/pay-links/pay-links.module';
 import { WhatsappWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
 import { WhatsappInboxModule } from './modules/whatsapp-inbox/whatsapp-inbox.module';
 import { WhatsappConsentModule } from './modules/whatsapp-consent/whatsapp-consent.module';
+import { ArtisansModule } from './modules/artisans/artisans.module';
+import { SupportRequestsModule } from './modules/support-requests/support-requests.module';
 import { PAY_LINK_THROTTLERS } from './common/throttle/pay-link-throttlers';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -194,6 +196,10 @@ import { CacheInterceptor } from './common/interceptors/cache.interceptor';
     // Messagerie avec le locataire (phase 12, unité 48) —
     // /api/whatsapp/conversations* (propriétaire et gestionnaire).
     WhatsappInboxModule,
+
+    // Artisans et pannes (Phase 13, contexte/artisans-pannes.md)
+    ArtisansModule,
+    SupportRequestsModule,
   ],
   providers: [
     // Capture toute exception non gérée vers Sentry — doit être avant tout
