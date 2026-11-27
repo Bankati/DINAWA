@@ -78,6 +78,11 @@ export const WHATSAPP_TEMPLATES: Record<NotificationEvent, WhatsappTemplateSpec 
   'tenant-overdue': TENANT_OVERDUE,
   // Destiné au responsable du bien, jamais à un locataire.
   'whatsapp-message': null,
+  // Pannes (unité 53) : pas de modèle Meta en V1 (à déposer chez Meta avant
+  // de les brancher), push ou email seulement.
+  'support-request-created': null,
+  'support-request-assigned': null,
+  'support-request-resolved': null,
   'overdue-alert': null,
   'payment-declaration-pending': null,
   'payment-rejected': null,

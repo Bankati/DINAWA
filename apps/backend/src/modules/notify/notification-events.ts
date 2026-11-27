@@ -117,6 +117,22 @@ const PUSH_CONTENT: Record<NotificationEvent, PushContentTemplate> = {
     body: '{tenantName} vous a écrit sur WhatsApp ({propertyAddress}). Répondez depuis WARAH.',
     url: '/messages',
   },
+  // Pannes (unité 53). /pannes redirige vers la page du rôle connecté.
+  'support-request-created': {
+    title: 'Panne signalée',
+    body: '{tenantName} signale une panne ({tradeLabel}) : {propertyAddress}.',
+    url: '/pannes',
+  },
+  'support-request-assigned': {
+    title: 'Artisan choisi',
+    body: '{artisanName} va intervenir pour votre panne {reference}.',
+    url: '/locataire/pannes',
+  },
+  'support-request-resolved': {
+    title: 'Panne réparée',
+    body: 'Votre panne {reference} est indiquée comme réparée.',
+    url: '/locataire/pannes',
+  },
 };
 
 function interpolate(template: string, variables: TemplateVariables): string {
