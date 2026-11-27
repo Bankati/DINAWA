@@ -202,14 +202,13 @@ describe('ArtisansService', () => {
       });
 
       expect(result.directoryStatus).toBe('PUBLIC');
-      expect(prisma.artisanConsentEvent.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          previousStatus: 'PRIVATE',
-          newStatus: 'PUBLIC',
-          source: 'INVITATION_LINK',
-          invitationId: 'inv-1',
-          phoneLast2: '56',
-        }),
+      const [eventArgs] = prisma.artisanConsentEvent.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+      expect(eventArgs.data).toMatchObject({
+        previousStatus: 'PRIVATE',
+        newStatus: 'PUBLIC',
+        source: 'INVITATION_LINK',
+        invitationId: 'inv-1',
+        phoneLast2: '56',
       });
     });
 
