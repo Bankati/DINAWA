@@ -201,7 +201,7 @@ Quelques endpoints sont volontairement non authentifiés et marqués `@Public()`
 - `GET /api/public/listings` et `/api/public/listings/:slug` — annonces publiques
 - `POST /api/public/listings/:id/contact` — formulaire de contact candidat (rate limité strictement)
 - `GET /api/public/managers` et `/api/public/managers/:id` — annuaire des gestionnaires
-- `GET /api/public/artisans` et `/api/public/artisans/:id` — annuaire des artisans (Phase 13) : seulement les fiches `PUBLIC` (accord de l'artisan), 20 par page, 60 requêtes/min/IP (les fiches contiennent des numéros)
+- `GET /api/public/artisans` et `/api/public/artisans/:id` — annuaire des artisans (Phase 13) : seulement les fiches `PUBLIC` (accord de l'artisan), 20 par page, 60 requêtes/min/IP, **sans les numéros** (réservés aux comptes connectés via `GET /api/artisans/annuaire`, décision du 2026-11-28)
 - `GET` et `POST /api/public/artisan-consent/:token` — accord de l'artisan pour l'annuaire : le jeton signé (`artisan-consent`, 7 jours) est la seule autorisation, usage unique en base, 10 requêtes/min/IP. Voir `artisans-pannes.md`
 - `GET /health/live` et `/health/ready` — sondes Railway
 

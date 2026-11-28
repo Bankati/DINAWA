@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, MessageCircle, Phone, Search, Wrench } from 'lucide-react';
+import { Lock, MapPin, MessageCircle, Phone, Search, Wrench } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 import PublicNavbar from '@/components/public-navbar';
 import PublicFooter from '@/components/public-footer';
 import {
@@ -12,15 +14,20 @@ import {
 import { Stars, TradeChips, TradeSelect, VerifiedMark, formatDay } from '@/components/artisans/artisan-ui';
 import {
   TRADE_LABELS, type ArtisanTrade,
-  formatPhone, getPublicArtisan, getPublicArtisans, whatsappLink,
+  formatPhone, getDirectoryArtisan, getDirectoryArtisans, getPublicArtisan, getPublicArtisans, whatsappLink,
 } from '@/lib/artisans';
 
 const LIMIT = 20;
 const CONTACT_TEXT = "Bonjour, j'ai trouvé votre numéro dans l'annuaire des artisans WARAH.";
 
+const LOGIN_URL = `/auth/login?returnUrl=${encodeURIComponent('/artisans')}`;
+
 // Annuaire public des artisans (unité 52) : seulement ceux qui ont eux-mêmes
-// accepté d'y figurer.
+// accepté d'y figurer. Le numéro n'est affiché qu'aux propriétaires,
+// gestionnaires et à l'admin connectés (décision du boss, 2026-11-28).
 export default function PublicArtisansPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const connected = !!user && user.role !== 'TENANT';
   const [trade, setTrade] = useState<ArtisanTrade | ''>('');
   const [zone, setZone] = useState('');
   const [search, setSearch] = useState('');
@@ -28,12 +35,16 @@ export default function PublicArtisansPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['public-artisans', trade, zone, search, page],
-    queryFn: () => getPublicArtisans({ trade, zone: zone || undefined, search: search || undefined, page, limit: LIMIT }),
+    queryKey: ['public-artisans', connected, trade, zone, search, page],
+    queryFn: () => {
+      const filters = { trade, zone: zone || undefined, search: search || undefined, page, limit: LIMIT };
+      return connected ? getDirectoryArtisans(filters) : getPublicArtisans(filters);
+    },
+    enabled: !authLoading,
   });
   const { data: detail } = useQuery({
-    queryKey: ['public-artisan', selectedId],
-    queryFn: () => getPublicArtisan(selectedId as string),
+    queryKey: ['public-artisan', connected, selectedId],
+    queryFn: () => (connected ? getDirectoryArtisan(selectedId as string) : getPublicArtisan(selectedId as string)),
     enabled: selectedId !== null,
   });
   const artisans = data?.data ?? [];
@@ -48,6 +59,13 @@ export default function PublicArtisansPage() {
           Plombiers, électriciens, maçons… ajoutés par des propriétaires WARAH et notés après leurs interventions.
           Chaque artisan a accepté lui-même d&apos;apparaître ici.
         </p>
+        {!connected && !authLoading && (
+          <p className="text-sm mb-6 -mt-3 flex items-center gap-2 text-muted-foreground">
+            <Lock className="w-4 h-4" />
+            Les numéros sont réservés aux propriétaires et gestionnaires inscrits.
+            <Link href={LOGIN_URL} className="underline text-primary">Se connecter</Link>
+          </p>
+        )}
 
         <div className="flex gap-3 mb-6 flex-wrap">
           <TradeSelect value={trade} onChange={(v) => { setTrade(v); setPage(1); }} />
@@ -93,12 +111,20 @@ export default function PublicArtisansPage() {
                       {a.ratingCount > 0 ? `${a.ratingAverage.toFixed(1)} (${a.ratingCount} avis)` : 'Pas encore d’avis'}
                     </div>
                     <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                      <Button size="sm" asChild>
-                        <a href={whatsappLink(a.phone, CONTACT_TEXT)} target="_blank" rel="noopener noreferrer"><MessageCircle className="w-4 h-4" />WhatsApp</a>
-                      </Button>
-                      <Button size="sm" variant="outline" asChild>
-                        <a href={`tel:+228${a.phone}`}><Phone className="w-4 h-4" />{formatPhone(a.phone)}</a>
-                      </Button>
+                      {a.phone ? (
+                        <>
+                          <Button size="sm" asChild>
+                            <a href={whatsappLink(a.phone, CONTACT_TEXT)} target="_blank" rel="noopener noreferrer"><MessageCircle className="w-4 h-4" />WhatsApp</a>
+                          </Button>
+                          <Button size="sm" variant="outline" asChild>
+                            <a href={`tel:+228${a.phone}`}><Phone className="w-4 h-4" />{formatPhone(a.phone)}</a>
+                          </Button>
+                        </>
+                      ) : (
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={LOGIN_URL}><Lock className="w-4 h-4" />Se connecter pour voir le numéro</Link>
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setSelectedId(a.id)}>Voir les avis</Button>
                     </div>
                   </div>
