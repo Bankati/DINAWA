@@ -76,8 +76,34 @@ export function formatPayLinkPeriod(view: Pick<PayLinkView, "periodStart" | "per
   return `Loyer du ${formatPayLinkDate(view.periodStart)} au ${formatPayLinkDate(view.periodEnd)}`;
 }
 
+// Délai au-delà duquel on prévient d'une connexion lente (réseaux mobiles
+// faibles) sans abandonner la requête en cours.
+export const PAY_LINK_SLOW_MS = 15_000;
+
+// expired : définitif, « Réessayer » ne servirait à rien ;
+// invalid : lien abîmé ou inconnu, définitif aussi ;
+// retryable : réseau coupé, trop de tentatives (429) ou panne serveur (5xx).
+export type PayLinkErrorKind = "expired" | "invalid" | "retryable";
+
+export const PAY_LINK_EXPIRED_MESSAGE =
+  "Le paiement en ligne n'est plus possible pour ce loyer. Contactez votre agence pour le régler.";
+export const PAY_LINK_INVALID_MESSAGE =
+  "Ce lien de paiement n'est pas valide. Vérifiez que vous avez ouvert le lien complet reçu par WhatsApp ou SMS.";
+
+export function payLinkErrorKind(error: unknown): PayLinkErrorKind {
+  if (!(error instanceof ApiError)) return "retryable";
+  // Le serveur renvoie aujourd'hui 400 « Lien expiré… » ; 410 est accepté
+  // d'avance pour le jour où il passera au code dédié.
+  if (error.status === 410 || (error.status === 400 && /expir/i.test(error.message))) return "expired";
+  if (error.status === 408 || error.status === 429 || error.status >= 500) return "retryable";
+  return "invalid";
+}
+
 // Message lisible pour chaque échec possible — jamais un échec avalé.
 export function payLinkErrorMessage(error: unknown): string {
+  // Pas le message du serveur (« demandez-en un nouveau ») : le robot refuse
+  // d'en renvoyer un pour un loyer dont le lien a expiré.
+  if (payLinkErrorKind(error) === "expired") return `Ce lien a expiré. ${PAY_LINK_EXPIRED_MESSAGE}`;
   if (error instanceof ApiError) {
     if (error.status === 429) return "Trop de tentatives. Réessayez dans une minute.";
     if (error.status === 404) return "Ce lien de paiement n'est pas valide.";

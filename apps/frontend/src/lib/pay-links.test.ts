@@ -1,6 +1,42 @@
 import { describe, it, expect } from "vitest";
 import { ApiError } from "./api";
-import { formatPayLinkPeriod, payLinkErrorMessage } from "./pay-links";
+import { PAY_LINK_EXPIRED_MESSAGE, formatPayLinkPeriod, payLinkErrorKind, payLinkErrorMessage } from "./pay-links";
+
+describe("payLinkErrorKind", () => {
+  it("classe un 410 comme expiré (futur code serveur)", () => {
+    expect(payLinkErrorKind(new ApiError(410, { message: "Lien expiré" }))).toBe("expired");
+    expect(payLinkErrorKind(new ApiError(410, null))).toBe("expired");
+  });
+
+  it("classe un 400 dont le message parle d'expiration comme expiré (code serveur actuel)", () => {
+    expect(payLinkErrorKind(new ApiError(400, { message: "Lien expiré, demandez-en un nouveau" }))).toBe("expired");
+    expect(payLinkErrorKind(new ApiError(400, { message: "LIEN EXPIRÉ" }))).toBe("expired");
+    expect(payLinkErrorKind(new ApiError(400, { message: "This link has expired" }))).toBe("expired");
+  });
+
+  it("classe un lien abîmé ou inconnu comme non valide (aucun Réessayer)", () => {
+    expect(payLinkErrorKind(new ApiError(400, { message: "Lien invalide" }))).toBe("invalid");
+    expect(payLinkErrorKind(new ApiError(400, null))).toBe("invalid");
+    expect(payLinkErrorKind(new ApiError(404, { message: "Lien invalide" }))).toBe("invalid");
+    expect(payLinkErrorKind(new ApiError(403, {}))).toBe("invalid");
+  });
+
+  it("ne confond pas un message « expir » sur un autre code avec un lien expiré", () => {
+    expect(payLinkErrorKind(new ApiError(404, { message: "Lien expiré" }))).toBe("invalid");
+    expect(payLinkErrorKind(new ApiError(500, { message: "Session expirée" }))).toBe("retryable");
+  });
+
+  it("propose de réessayer pour une coupure réseau, un 408, un 429 ou une erreur serveur", () => {
+    expect(payLinkErrorKind(new TypeError("Failed to fetch"))).toBe("retryable");
+    expect(payLinkErrorKind(new Error("inconnue"))).toBe("retryable");
+    expect(payLinkErrorKind(undefined)).toBe("retryable");
+    expect(payLinkErrorKind(new ApiError(408, {}))).toBe("retryable");
+    expect(payLinkErrorKind(new ApiError(429, {}))).toBe("retryable");
+    expect(payLinkErrorKind(new ApiError(500, {}))).toBe("retryable");
+    expect(payLinkErrorKind(new ApiError(502, null))).toBe("retryable");
+    expect(payLinkErrorKind(new ApiError(503, { message: "PayDunya indisponible" }))).toBe("retryable");
+  });
+});
 
 describe("formatPayLinkPeriod", () => {
   it("affiche le mois pour un loyer mensuel", () => {
@@ -36,10 +72,13 @@ describe("payLinkErrorMessage", () => {
     );
   });
 
-  it("reprend le message du serveur pour un lien expiré ou un paiement refusé", () => {
-    expect(payLinkErrorMessage(new ApiError(400, { message: "Lien expiré, demandez-en un nouveau" }))).toBe(
-      "Lien expiré, demandez-en un nouveau",
-    );
+  it("remplace le message du serveur pour un lien expiré (pas de « demandez-en un nouveau »)", () => {
+    const expected = `Ce lien a expiré. ${PAY_LINK_EXPIRED_MESSAGE}`;
+    expect(payLinkErrorMessage(new ApiError(400, { message: "Lien expiré, demandez-en un nouveau" }))).toBe(expected);
+    expect(payLinkErrorMessage(new ApiError(410, { message: "Gone" }))).toBe(expected);
+  });
+
+  it("reprend le message du serveur pour un paiement refusé", () => {
     expect(payLinkErrorMessage(new ApiError(409, { message: "Un paiement est déjà en cours" }))).toBe(
       "Un paiement est déjà en cours",
     );
