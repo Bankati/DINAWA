@@ -9,6 +9,11 @@ import { whatsappBadge, type WhatsappConsent } from '@/lib/whatsapp';
 import { TenantWhatsappDialog } from '@/components/whatsapp/tenant-whatsapp-dialog';
 import { formatWhatsappNumber, tenantInvitationWhatsappLink, whatsappBotLink } from '@/lib/tenant-invitation';
 import type { InviteTenantResult, MandateWithParties } from '@/lib/api-types';
+import { LEASE_CONFIRMATIONS_QUERY_KEY } from '@/lib/lease-confirmations';
+import { ConfirmationRequestsSection } from '@/components/lease-confirmation/confirmation-requests-section';
+import {
+  ConfirmationSentDialog, InviteConfirmationNote, INVITE_CONFIRMATION_NOTE_ID, type ConfirmationSentInfo,
+} from '@/components/lease-confirmation/confirmation-sent-dialog';
 import {
   PageHeader, Button, Card, Badge, EmptyState, Skeleton, StatCard,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -100,6 +105,8 @@ export default function LocatairesPage() {
     invitationUrl: string; phone: string; firstName: string; whatsappBotNumber: string | null;
   } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Personne invitée qui a déjà un compte : le bail attend son accord (A2).
+  const [confirmationSent, setConfirmationSent] = useState<ConfirmationSentInfo | null>(null);
 
   function copyInvitationLink() {
     if (!inviteResult) return;
@@ -210,8 +217,18 @@ export default function LocatairesPage() {
         ...(linkForm.overdueAlertWindowDays ? { overdueAlertWindowDays: parseInt(linkForm.overdueAlertWindowDays) } : {}),
       });
       invalidateTenants();
+      void queryClient.invalidateQueries({ queryKey: LEASE_CONFIRMATIONS_QUERY_KEY });
       setManaging(null);
-      if (result.invitationUrl) {
+      if (result.confirmationRequired && result.confirmationId) {
+        const property = properties.find((p) => p.id === linkForm.propertyId) ?? null;
+        setConfirmationSent({
+          confirmationId: result.confirmationId,
+          tenantDisplayName: `${identity.firstName} ${identity.lastName}`.trim(),
+          property,
+          monthlyRent: property?.monthlyRent ?? null,
+          startDate: linkForm.startDate,
+        });
+      } else if (result.invitationUrl) {
         setInviteResult({
           invitationUrl: result.invitationUrl,
           phone: identity.phone,
@@ -250,6 +267,11 @@ export default function LocatairesPage() {
         <StatCard index={2} label="Sans bail actif" value={isLoading ? '—' : sansBail} tone="warning" icon={<UserX className="w-[18px] h-[18px]" />} />
         <StatCard index={3} label="Revenu locatif total" value={isLoading ? '—' : formatFcfa(revenuLocatifTotal)} sub="Cumul des baux actifs" tone="error" icon={<Wallet className="w-[18px] h-[18px]" />} />
       </div>
+
+      <ConfirmationRequestsSection
+        isReadOnly={(c) => delegatedPropertyIds.has(c.lease.property.id)}
+        onInvitationFallback={setInviteResult}
+      />
 
       <Card>
         {isLoading ? (
@@ -458,15 +480,23 @@ export default function LocatairesPage() {
                 {linkErr && <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 text-sm text-red-600">{linkErr}</div>}
                 <div className="flex gap-2.5 justify-end">
                   <Button type="button" variant="secondary" onClick={() => setManaging(null)}>Annuler</Button>
-                  <Button type="submit" loading={linkSaving} disabled={identityLocked && (!managing.email || !managing.phone)}>
+                  <Button
+                    type="submit"
+                    loading={linkSaving}
+                    disabled={identityLocked && (!managing.email || !managing.phone)}
+                    aria-describedby={INVITE_CONFIRMATION_NOTE_ID}
+                  >
                     {managing === 'new' ? 'Inviter' : 'Associer'}
                   </Button>
                 </div>
+                <InviteConfirmationNote />
               </form>
             </div>
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <ConfirmationSentDialog sent={confirmationSent} onClose={() => setConfirmationSent(null)} />
 
       {/* Modale lien d'invitation — uniquement pour un tout nouveau locataire */}
       <Dialog open={!!inviteResult} onOpenChange={(open) => !open && setInviteResult(null)}>

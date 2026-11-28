@@ -225,6 +225,14 @@ body {
   border-radius: 4px;
 }
 
+/* ── Coche qui se trace (écran « C'est confirmé ! » du locataire) ──
+   Utilisée seulement via `motion-safe:` : avec « réduire les animations »,
+   la coche est affichée d'emblée, entière. */
+@keyframes warah-check-draw {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+
 .btn-accent {
   background-color: var(--color-accent);
   color: var(--color-text);
