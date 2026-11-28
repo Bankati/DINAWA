@@ -30,6 +30,12 @@ describe('classifyMetaError', () => {
     expect(classifyMetaError(err(401, 190))).toEqual({ status: 'FAILED', retryable: false, alert: true });
   });
 
+  it('classe FAILED non réessayable avec alerte un modèle absent, en pause ou désactivé chez Meta', () => {
+    for (const code of [132001, 132015, 132016]) {
+      expect(classifyMetaError(err(400, code))).toEqual({ status: 'FAILED', retryable: false, alert: true });
+    }
+  });
+
   it('couvre la plage des permissions 200-299', () => {
     expect(classifyMetaError(err(403, 230))).toMatchObject({ status: 'FAILED', alert: true });
   });
