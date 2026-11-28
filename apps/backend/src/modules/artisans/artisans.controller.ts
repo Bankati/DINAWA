@@ -7,8 +7,14 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { ArtisansService } from './artisans.service';
 import { CreateArtisanDto } from './dto/create-artisan.dto';
 import { UpdateArtisanDto } from './dto/update-artisan.dto';
-import { ListArtisansQueryDto } from './dto/list-artisans-query.dto';
-import { ArtisanContactView, ArtisanInvitationView, PaginatedArtisanContacts } from './artisans.types';
+import { ListArtisansQueryDto, ListPublicArtisansQueryDto } from './dto/list-artisans-query.dto';
+import {
+  ArtisanContactView,
+  ArtisanInvitationView,
+  PaginatedArtisanContacts,
+  PaginatedPublicArtisans,
+  PublicArtisanDetail,
+} from './artisans.types';
 
 // Carnet d'artisans du propriétaire ou du gestionnaire (unité 51).
 @ApiTags('Artisans')
@@ -25,6 +31,22 @@ export class ArtisansController {
     @Query() query: ListArtisansQueryDto,
   ): Promise<PaginatedArtisanContacts> {
     return this.artisans.listContacts(user, query);
+  }
+
+  // Annuaire AVEC les numéros : réservé aux comptes connectés (le public ne
+  // voit pas les numéros, voir PublicArtisansController).
+  @Get('annuaire')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Annuaire des artisans avec leur numéro (connecté)' })
+  directory(@Query() query: ListPublicArtisansQueryDto): Promise<PaginatedPublicArtisans> {
+    return this.artisans.findAllPublic(query, true);
+  }
+
+  @Get('annuaire/:id')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN)
+  @ApiOperation({ summary: "Fiche d'annuaire avec le numéro et les avis (connecté)" })
+  directoryEntry(@Param('id') id: string): Promise<PublicArtisanDetail> {
+    return this.artisans.findOnePublic(id, true);
   }
 
   @Post()

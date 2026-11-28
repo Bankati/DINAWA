@@ -293,7 +293,9 @@ export class ArtisansService {
 
   // ── Annuaire public ──────────────────────────────────────────────────
 
-  async findAllPublic(query: ListPublicArtisansQueryDto): Promise<PaginatedPublicArtisans> {
+  // withPhone : seulement pour un propriétaire, un gestionnaire ou l'admin
+  // connecté (ArtisansController) — jamais depuis la route publique.
+  async findAllPublic(query: ListPublicArtisansQueryDto, withPhone = false): Promise<PaginatedPublicArtisans> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where: Prisma.ArtisanWhereInput = { ...this.artisanFilter(query), directoryStatus: 'PUBLIC' };
@@ -306,10 +308,10 @@ export class ArtisansService {
       }),
       this.prisma.artisan.count({ where }),
     ]);
-    return { data: artisans.map(toPublicSummary), page, limit, total };
+    return { data: artisans.map((a) => toPublicSummary(a, withPhone)), page, limit, total };
   }
 
-  async findOnePublic(id: string): Promise<PublicArtisanDetail> {
+  async findOnePublic(id: string, withPhone = false): Promise<PublicArtisanDetail> {
     const artisan = await this.prisma.artisan.findFirst({
       where: { id, directoryStatus: 'PUBLIC' },
       include: {
@@ -330,7 +332,7 @@ export class ArtisansService {
     });
     if (!artisan) throw new NotFoundException('Artisan introuvable');
     return {
-      ...toPublicSummary(artisan),
+      ...toPublicSummary(artisan, withPhone),
       reviews: artisan.reviews.map((r) => ({
         id: r.id,
         rating: r.rating,
@@ -365,7 +367,8 @@ export class ArtisansService {
       this.prisma.artisan.count({ where }),
     ]);
     const data: AdminArtisanView[] = artisans.map((a) => ({
-      ...toPublicSummary(a),
+      ...toPublicSummary(a, true),
+      phone: a.phone,
       directoryStatus: a.directoryStatus,
       suspensionReason: a.suspensionReason,
       consentChangedAt: a.consentChangedAt,
@@ -536,11 +539,11 @@ function emptyToNull(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function toPublicSummary(a: Artisan): PublicArtisanSummary {
+function toPublicSummary(a: Artisan, withPhone: boolean): PublicArtisanSummary {
   return {
     id: a.id,
     displayName: a.displayName,
-    phone: a.phone,
+    phone: withPhone ? a.phone : null,
     trades: a.trades,
     zones: a.zones,
     verified: a.verifiedAt !== null,
