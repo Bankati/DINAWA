@@ -13,6 +13,8 @@
 
 **Risque résiduel assumé (accord par lien)** : le lien prouve qu'on l'a reçu, pas que le numéro appartient à celui qui clique — un propriétaire pourrait ouvrir lui-même le lien. Garde-fous : numéro masqué sur la page, texte d'accord versionné et preuve gardée (`ArtisanConsentEvent`), retrait à tout moment par l'admin (`/admin/artisans`, motif obligatoire), badge « vérifié » réservé à l'admin. Passer à la vérification par le robot (proposition initiale) quand WhatsApp sera actif.
 
+**Numéro caché au public (décision du boss, 2026-11-28)** : l'annuaire public (`/api/public/artisans`) ne renvoie plus le numéro (`phone: null`). Il n'est visible que des propriétaires, gestionnaires et de l'admin connectés, par `GET /api/artisans/annuaire` et `/api/artisans/annuaire/:id`. Ainsi, même si un propriétaire acceptait à la place de l'artisan, le numéro ne serait pas exposé à tout internet. Texte d'accord passé en `artisan-annuaire-v2` (il le dit à l'artisan). Autres pistes étudiées et non retenues pour l'instant : preuve par message WhatsApp de l'artisan contrôlée par l'admin, publication seulement après 2 carnets différents.
+
 Modules : `src/modules/artisans/` (carnet, invitation, accord, annuaire, admin) et `src/modules/support-requests/` (pannes, avis, masquage admin). Migration additive `20261127120000_add_artisans_support_requests` (7 tables, 6 enums, aucune table existante modifiée). Pages : `/dashboard|gestionnaire/artisans`, `/dashboard|gestionnaire/pannes`, `/locataire/pannes`, `/artisans` (public), `/artisans/accord/[jeton]`, `/admin/artisans`, `/pannes` (redirection selon le rôle).
 
 ---

@@ -10,8 +10,8 @@ import { ArtisanConsentDecisionDto } from './dto/artisan-decisions.dto';
 import { ArtisanConsentView, PaginatedPublicArtisans, PublicArtisanDetail } from './artisans.types';
 
 // Annuaire public des artisans (unité 52) : seulement les artisans qui ont
-// eux-mêmes accepté (directoryStatus = PUBLIC). Limite de débit stricte : les
-// fiches contiennent des numéros de téléphone.
+// eux-mêmes accepté (directoryStatus = PUBLIC), SANS leur numéro (décision du
+// boss, 2026-11-28) : le numéro passe par GET /artisans/annuaire, connecté.
 @ApiTags('Artisans publics')
 @Controller('public/artisans')
 @Public()

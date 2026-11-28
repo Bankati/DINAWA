@@ -81,7 +81,9 @@ export interface ArtisanInvitation {
 export interface PublicArtisan {
   id: string;
   displayName: string;
-  phone: string;
+  // null sans connexion : le numéro n'est montré qu'aux propriétaires,
+  // gestionnaires et à l'admin connectés.
+  phone: string | null;
   trades: ArtisanTrade[];
   zones: string[];
   verified: boolean;
@@ -112,6 +114,7 @@ export interface ArtisanConsent {
 }
 
 export interface AdminArtisan extends PublicArtisan {
+  phone: string;
   directoryStatus: ArtisanDirectoryStatus;
   suspensionReason: string | null;
   consentChangedAt: string | null;
@@ -164,6 +167,10 @@ async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
 export const getPublicArtisans = (f: ArtisanFilters = {}) =>
   publicRequest<Paginated<PublicArtisan>>(`/public/artisans${qs({ page: f.page, limit: f.limit, trade: f.trade, zone: f.zone, search: f.search })}`);
 export const getPublicArtisan = (id: string) => publicRequest<PublicArtisanDetail>(`/public/artisans/${id}`);
+// Même annuaire, avec les numéros : propriétaire, gestionnaire ou admin connecté.
+export const getDirectoryArtisans = (f: ArtisanFilters = {}) =>
+  api.get<Paginated<PublicArtisan>>(`/artisans/annuaire${qs({ page: f.page, limit: f.limit, trade: f.trade, zone: f.zone, search: f.search })}`);
+export const getDirectoryArtisan = (id: string) => api.get<PublicArtisanDetail>(`/artisans/annuaire/${id}`);
 export const getArtisanConsent = (token: string) =>
   publicRequest<ArtisanConsent>(`/public/artisan-consent/${encodeURIComponent(token)}`);
 export const answerArtisanConsent = (token: string, decision: "ACCEPT" | "REFUSE", noticeVersion: string) =>
