@@ -241,6 +241,24 @@ describe('ArtisansService', () => {
       });
       expect(args.take).toBe(20);
     });
+
+    it('cache le numéro au public, le montre aux comptes connectés', async () => {
+      prisma.artisan.findMany.mockResolvedValue([artisan({ directoryStatus: 'PUBLIC' })]);
+      prisma.artisan.count.mockResolvedValue(1);
+
+      const publique = await service.findAllPublic({ page: 1, limit: 20 });
+      expect(publique.data[0]?.phone).toBeNull();
+
+      const connecte = await service.findAllPublic({ page: 1, limit: 20 }, true);
+      expect(connecte.data[0]?.phone).toBe('90123456');
+    });
+
+    it('la fiche publique ne contient pas le numéro', async () => {
+      prisma.artisan.findFirst.mockResolvedValueOnce({ ...artisan({ directoryStatus: 'PUBLIC' }), reviews: [] });
+      const fiche = await service.findOnePublic('art-1');
+      expect(fiche.phone).toBeNull();
+      expect(JSON.stringify(fiche)).not.toContain('90123456');
+    });
   });
 
   describe('admin', () => {

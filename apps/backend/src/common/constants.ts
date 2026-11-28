@@ -250,14 +250,17 @@ export const ARTISAN_INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Texte d'accord de l'annuaire public : seule source, renvoyée par l'API avec
 // sa version (le frontend ne le recopie jamais). Toute modification du texte
 // impose d'incrémenter la version.
-export const ARTISAN_DIRECTORY_NOTICE_VERSION = 'artisan-annuaire-v1';
+// v2 (2026-11-28) : le numéro n'est plus public, seulement visible des
+// propriétaires et gestionnaires connectés.
+export const ARTISAN_DIRECTORY_NOTICE_VERSION = 'artisan-annuaire-v2';
 export const ARTISAN_DIRECTORY_NOTICE_TEXT =
   "J'accepte que WARAH affiche dans son annuaire public mon nom, mes métiers, " +
-  'les quartiers où je travaille, mon numéro de téléphone et les avis laissés ' +
-  "après mes interventions. Je peux retirer ma fiche à tout moment en écrivant " +
+  'les quartiers où je travaille et les avis laissés après mes interventions. ' +
+  'Mon numéro de téléphone ne sera visible que des propriétaires et gestionnaires ' +
+  "inscrits sur WARAH. Je peux retirer ma fiche à tout moment en écrivant " +
   "à WARAH (page Contact) ; elle disparaît alors de l'annuaire.";
 // Annuaire public : volume normal d'un visiteur, bien en dessous des
-// annonces — il expose des numéros de téléphone (anti-aspiration).
+// annonces (anti-aspiration ; les numéros n'y figurent plus depuis la v2).
 export const THROTTLE_PUBLIC_ARTISANS = { default: { limit: 60, ttl: 60_000 } };
 export const PUBLIC_ARTISANS_MAX_PAGE_SIZE = 20;
 // Page d'accord : quelques essais par minute et par adresse IP.

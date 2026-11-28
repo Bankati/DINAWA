@@ -30,7 +30,9 @@ export interface PaginatedArtisanContacts {
 export interface PublicArtisanSummary {
   id: string;
   displayName: string;
-  phone: string;
+  // null pour un visiteur non connecté : le numéro n'est montré qu'aux
+  // propriétaires et gestionnaires connectés (et à l'admin).
+  phone: string | null;
   trades: ArtisanTrade[];
   zones: string[];
   verified: boolean;
@@ -81,6 +83,7 @@ export interface ArtisanConsentView {
 }
 
 export interface AdminArtisanView extends PublicArtisanSummary {
+  phone: string;
   directoryStatus: ArtisanDirectoryStatus;
   suspensionReason: string | null;
   consentChangedAt: Date | null;
